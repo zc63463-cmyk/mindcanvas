@@ -10,10 +10,12 @@ import {
   expandFrameIslands,
   framePrunedCollapsed,
   layoutForest,
+  layoutMindmap,
   layoutMindmapBranched,
   parseMm,
   projectIslands,
   refKey,
+  satelliteHook,
   type BoundaryLink,
   type CenterSpec,
   type IslandDiagnostic,
@@ -29,7 +31,7 @@ import type {
   CharMeasure,
   MeasureFn,
 } from '@mindcanvas/kernel';
-import { createNodeMeasure } from '../render/domMeasure.js';
+import { createNodeMeasure, type CharMeasureOf } from '../render/domMeasure.js';
 import { estimateCommentAreaHeight, GROW_EXPAND_W } from '../chrome/GrowthCommentPanel.js';
 import {
   DESC_EDIT_MIN_W,
@@ -97,9 +99,10 @@ export function createExpandMeasure(
   extraH: number,
 ): MeasureFn {
   if (expandedId === null) return base;
-  return (node) => {
-    if (node.id !== expandedId) return base(node);
-    const b = base(node);
+  // MEASURE-RANK：depth 必须**逐层透传**（包装层吞掉它 = 视觉档度量退回单档）
+  return (node, depth) => {
+    if (node.id !== expandedId) return base(node, depth);
+    const b = base(node, depth);
     return { w: Math.max(expandW, b.w), h: b.h + extraH };
   };
 }
@@ -111,8 +114,9 @@ export function createFixedNoteMeasure(
   extraH: number,
 ): MeasureFn {
   if (fixedIds.size === 0) return base;
-  return (node) => {
-    const b = base(node);
+  // MEASURE-RANK：depth 逐层透传（见 createExpandMeasure 注释）
+  return (node, depth) => {
+    const b = base(node, depth);
     return fixedIds.has(node.id) ? { w: b.w, h: b.h + extraH } : b;
   };
 }
@@ -155,8 +159,8 @@ export function createDescMeasure(
   char: CharMeasure,
   descEditingId: string | null = null,
 ): MeasureFn {
-  return (node) => {
-    const b = base(node);
+  return (node, depth) => {
+    const b = base(node, depth);
     const raw = node.note?.desc;
     const desc = typeof raw === 'string' ? raw : '';
     const isEditing = descEditingId !== null && node.id === descEditingId;
@@ -217,8 +221,14 @@ export function layoutDemo(
    * （F3：编辑局部化）均已接入。
    */
   centers: readonly CenterSpec[] | null = null,
+  /**
+   * MEASURE-RANK：档位字符度量（`createRankedCharMeasure(token.font)` 产出）。
+   * 提供 → 布局按视觉档量（叶卡贴字、整体盒变小、fit k 回升）；缺省 → 单档 `char`（旧行为，
+   * 所有既有调用方零改动）。必须与 `MapView charOf` 同一份，否则度量与渲染字号分叉。
+   */
+  charOf?: CharMeasureOf,
 ): DemoLayout {
-  const base = createNodeMeasure(char, entities);
+  const base = createNodeMeasure(char, entities, charOf);
   const withQa = expandedId
     ? createExpandMeasure(base, expandedId, GROW_EXPAND_W, estimateCommentAreaHeight())
     : base;
@@ -248,21 +258,34 @@ export function layoutDemo(
    */
   const layoutMeasure =
     frameRoots.length === 0 ? measure : createFrameShellMeasure(measure, frameRows);
+  const layoutOpts = cache
+    ? { cache, measureKey: measureKey ?? undefined, satellite: satelliteHook }
+    : { satellite: satelliteHook };
+  /**
+   * S3 摘要卫星：`layoutMindmapBranched`（branching.ts，本批**禁改**）只把
+   * `{cache, measureKey}` 透传给回退布局，**不转发布局选项里的 satellite 字段**——
+   * 与 forest 同一通道问题。修法同 forest：把 satellite **闭包绑定**进 fallback。
+   * 无 `note.dir` 的文档（绝大多数）走该回退 → `layoutMindmap` 拿到钩子。
+   */
+  const fallbackWithSatellite = (
+    r: EditableNode,
+    mm: MeasureFn,
+    c: Set<string>,
+    o?: { cache?: LayoutCache; measureKey?: string },
+  ): LayoutResult =>
+    layoutMindmap(r, mm, c, {
+      ...(o?.cache !== undefined ? { cache: o.cache } : {}),
+      ...(o?.measureKey !== undefined ? { measureKey: o.measureKey } : {}),
+      satellite: satelliteHook,
+    });
   const baseLayout = useForest
-    ? layoutForest(
-        centers!,
-        layoutMeasure,
-        pruned,
-        cache ? { cache, measureKey: measureKey ?? undefined } : undefined,
-      )
+    ? layoutForest(centers!, layoutMeasure, pruned, layoutOpts)
     // D2′ 接线：无 note.dir 声明时内部逐像素回退 layoutMindmap（旧文件零变更），
     // 有声明则按子节点各自 dir 分组挂不同侧（思想分叉）。
-    : layoutMindmapBranched(
-        editable,
-        layoutMeasure,
-        pruned,
-        cache ? { cache, measureKey: measureKey ?? undefined } : undefined,
-      );
+    : layoutMindmapBranched(editable, layoutMeasure, pruned, {
+        ...layoutOpts,
+        fallback: fallbackWithSatellite,
+      });
   return {
     // 折叠语义：框根被用户折叠 → 整岛隐藏（expandFrameIslands 以 collapsedIds 判定，
     // 不能用剪枝集——框根恒在剪枝集里，那是「岛接管」而非「用户折叠」）。

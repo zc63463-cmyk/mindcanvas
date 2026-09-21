@@ -15,6 +15,14 @@ import viteConfig from './vite.config';
 export default mergeConfig(
   viteConfig,
   defineConfig({
+    /**
+     * 测试构建开关（S2 收口）：`vite.config.ts` 为生产固定注入 `'false'`，
+     * 这里覆盖为 `'true'`，使测试专用观测口（`window.__mindcanvasSummaryHost`）
+     * 只在测试构建中存在。mergeConfig 以后者为准，故本值生效。
+     */
+    define: {
+      __MINDCANVAS_TEST_BUILD__: 'true',
+    },
     test: {
       include: ['tests/**/*.test.{ts,tsx}'],
       environment: 'jsdom',

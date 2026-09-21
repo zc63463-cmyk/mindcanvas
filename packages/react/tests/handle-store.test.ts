@@ -12,87 +12,42 @@
  * 但 JS 测试替身上的**方法无法被克隆**（fake-indexeddb 会抛 DataCloneError）。
  * 因此往返用例用**按引用存储**的内存 IDB 替身（验证本模块的键/校验/容错逻辑），
  * 垃圾数据用例仍走 fake-indexeddb（验证真实读取路径的窄化谓词）。
+ *
+ * P0-0 起：内存替身升级为 **v3**（暂存 / 失败中止 / 提交发布 / abort 丢弃 / 互斥结算），
+ * 并抽取到 `tests/helpers/memoryIdb.ts` 供 handle-store / directory-host / counterexamples
+ * 三个入口共用（G0 勘误：「抽到反例文件可导入的位置或等价复制均可」）。
+ * **原有 15 个用例的断言不得改动**，只改它们引用的 helper 名字。
  */
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  WORKSPACE_REGISTRY_KEY,
+  deleteDirectoryHandle,
   deleteFileHandle,
+  getDirectoryHandle,
   getFileHandle,
+  readWorkspaceRegistry,
+  setDirectoryHandle,
   setFileHandle,
   verifyPermission,
+  writeWorkspaceRegistry,
 } from '../src/edit/handleStore.js';
+import type { RegistryMutate } from '../src/edit/handleStore.js';
+import type { FsDirectoryHandle } from '../src/edit/directoryTypes.js';
 import type { FsFileHandle } from '../src/edit/save.js';
+import type { RegistryReadResult, WorkspaceRegistryRecord } from '../src/edit/workspaceScope.js';
+import {
+  emptyRec,
+  expectThreeUpdates,
+  legalAppend,
+  loadTwoInstances,
+  makeBarrier,
+} from './helpers/registryConcurrency.js';
+import { fail, installMemoryIndexedDB, memStore, resetFixture, st } from './helpers/memoryIdb.js';
 
 const DB_NAME = 'mindcanvas-handles';
 const STORE = 'handles';
-
-/** 按引用存储的内存 IDB 替身（不克隆，故方法能保留） */
-const memStore = new Map<string, unknown>();
-
-type FakeRequest = {
-  result: unknown;
-  error: unknown;
-  onsuccess: null | (() => void);
-  onerror: null | (() => void);
-  onupgradeneeded: null | (() => void);
-};
-
-/** 值请求（get/put 返回）：result = 命中值，随后触发 onsuccess */
-function valueReq(value: unknown): FakeRequest {
-  const r: FakeRequest = {
-    result: value,
-    error: null,
-    onsuccess: null,
-    onerror: null,
-    onupgradeneeded: null,
-  };
-  queueMicrotask(() => r.onsuccess?.());
-  return r;
-}
-
-/** 打开库请求：result = 假 DB，随后触发 onupgradeneeded + onsuccess */
-function openReq(): FakeRequest {
-  const r: FakeRequest = {
-    result: undefined,
-    error: null,
-    onsuccess: null,
-    onerror: null,
-    onupgradeneeded: null,
-  };
-  queueMicrotask(() => {
-    const db = {
-      objectStoreNames: { contains: (n: string) => n === STORE },
-      createObjectStore: () => undefined,
-      transaction: () => ({
-        objectStore: () => ({
-          put: (v: unknown, k: string) => {
-            memStore.set(k, v);
-            return valueReq(undefined);
-          },
-          get: (k: string) => valueReq(memStore.get(k)),
-          delete: (k: string) => valueReq(memStore.delete(k)),
-        }),
-        set oncomplete(fn: () => void) {
-          queueMicrotask(fn);
-        },
-        set onerror(_fn: () => void) {
-          /* 内存实现不会失败 */
-        },
-      }),
-    } as unknown as IDBDatabase;
-    r.result = db;
-    r.onupgradeneeded?.();
-    r.onsuccess?.();
-  });
-  return r;
-}
-
-function installMemoryIndexedDB(): void {
-  (globalThis as { indexedDB: IDBFactory }).indexedDB = {
-    open: () => openReq(),
-  } as unknown as IDBFactory;
-}
 
 /** 真实（可解析）的 fake-indexeddb，用于需要真实读路径的用例 */
 function installFakeIndexedDB(): void {
@@ -100,8 +55,8 @@ function installFakeIndexedDB(): void {
 }
 
 beforeEach(() => {
-  memStore.clear();
   installMemoryIndexedDB();
+  resetFixture();
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -128,6 +83,11 @@ function handleWithPermission(state: PermissionState) {
     queryPermission: typeof queryPermission;
     requestPermission: typeof requestPermission;
   };
+}
+
+/** 目录句柄替身：带 `getDirectoryHandle` 以满足 `isDirectoryHandle` 谓词 */
+function dirHandle(name: string): FsDirectoryHandle {
+  return { name, kind: 'directory', getDirectoryHandle: async () => dirHandle(name) } as FsDirectoryHandle;
 }
 
 describe('handleStore：往返与容错', () => {
@@ -233,5 +193,233 @@ describe('verifyPermission：权限策略', () => {
     const h = handleWithPermission('granted');
     await verifyPermission(h, false);
     expect(h.queryPermission).toHaveBeenCalledWith({ mode: 'read' });
+  });
+});
+
+describe('handleStore：工作区注册表（单事务 RMW）', () => {
+  /** 构造一个合法注册表记录（便于断言） */
+  const rec = (ids: readonly string[]): WorkspaceRegistryRecord => ({
+    v: 1,
+    activeScopeId: ids[ids.length - 1] ?? null,
+    entries: ids.map((s, i) => ({
+      scopeId: s,
+      handle: dirHandle(s),
+      label: s,
+      lastSeenAt: i + 1,
+      state: i === ids.length - 1 ? ('active' as const) : ('dormant' as const),
+      associations: [{ at: 1, via: 'isSameEntry' as const }],
+    })),
+  });
+
+  it('R3：RMW 往返 —— mutate 在事务内基于**事务读到的**旧记录计算', async () => {
+    await writeWorkspaceRegistry(() => rec(['ws:1']), { kind: 'write', handle: dirHandle('A') });
+    let seen: RegistryReadResult | null = null;
+    const out = await writeWorkspaceRegistry(
+      (prev) => {
+        seen = prev;
+        return prev.kind === 'ok' ? rec(['ws:1', 'ws:2']) : rec(['ws:2']);
+      },
+      { kind: 'unchanged' },
+    );
+    expect(seen).not.toBeNull();
+    expect((seen as unknown as RegistryReadResult).kind).toBe('ok'); // 事务内读到了上一次的写入
+    expect(out).toMatchObject({ kind: 'ok' });
+    const got = await readWorkspaceRegistry();
+    expect(got.kind === 'ok' && got.record.entries.map((e) => e.scopeId)).toEqual(['ws:1', 'ws:2']);
+  });
+
+  it('R3：并发两次 RMW 不丢更新（事务串行 + 事务内读）', async () => {
+    await writeWorkspaceRegistry(() => rec(['ws:a']), { kind: 'unchanged' });
+    const append = (id: string) => (prev: RegistryReadResult): WorkspaceRegistryRecord => {
+      const base = prev.kind === 'ok' ? prev.record : rec([]);
+      // ★G0 勘误：追加必须保持合法——旧条目一律转 dormant 后再追加新 active（与生产 upsertEntry、
+      // §5 legalAppend 同规）。旧版保留旧 active 会形成「两个 active」，被 isRegistryRecord 判 invalid →
+      // 正例在正确实现下必红（与 CR2-4A 同类问题）。
+      return {
+        ...base,
+        entries: [...base.entries.map((e) => ({ ...e, state: 'dormant' as const })), ...rec([id]).entries],
+        activeScopeId: id,
+      };
+    };
+    const [r1, r2] = await Promise.all([
+      writeWorkspaceRegistry(append('ws:b'), { kind: 'unchanged' }),
+      writeWorkspaceRegistry(append('ws:c'), { kind: 'unchanged' }),
+    ]);
+    expect(r1).toMatchObject({ kind: 'ok' }); // ★G0 勘误：两次都必须被接受（不得是 invalid）
+    expect(r2).toMatchObject({ kind: 'ok' });
+    const got = await readWorkspaceRegistry();
+    const ids = got.kind === 'ok' ? got.record.entries.map((e) => e.scopeId).sort() : [];
+    expect(ids).toEqual(['ws:a', 'ws:b', 'ws:c']); // 两次变更都保留
+  });
+
+  it('R1：注册表变更与裸句柄删除在同一事务（detach 原子）', async () => {
+    await writeWorkspaceRegistry(() => rec(['ws:1']), { kind: 'write', handle: dirHandle('A') });
+    expect(await getDirectoryHandle()).not.toBeNull();
+    const out = await writeWorkspaceRegistry(
+      (prev) =>
+        prev.kind === 'ok'
+          ? {
+              ...prev.record,
+              activeScopeId: null,
+              entries: prev.record.entries.map((e) => ({ ...e, state: 'dormant' as const })),
+            }
+          : 'unchanged',
+      { kind: 'delete' },
+    );
+    expect(out).toMatchObject({ kind: 'ok' });
+    expect(await getDirectoryHandle()).toBeNull(); // 裸键已删
+    const got = await readWorkspaceRegistry();
+    expect(got.kind === 'ok' && got.record.activeScopeId).toBeNull(); // 注册表已 dormant
+    expect(got.kind === 'ok' && got.record.entries).toHaveLength(1); // 条目未删
+  });
+
+  it('R1 负向：第 1 条写成功、第 2 条失败 → 两键都保持旧值（原子回滚，CR2-2）', async () => {
+    await writeWorkspaceRegistry(() => rec(['ws:old']), { kind: 'write', handle: dirHandle('OLD') });
+    const commitsBefore = st.commitCount;
+
+    fail.writeAt = 2; // 第 1 个写请求成功（暂存），第 2 个失败 → 中止
+    const out = await writeWorkspaceRegistry(() => rec(['ws:new']), { kind: 'write', handle: dirHandle('NEW') });
+    fail.writeAt = 0;
+
+    expect(out).toEqual({ kind: 'failed', reason: 'aborted' }); // Promise 收束
+    expect(st.commitCount).toBe(commitsBefore); // oncomplete 未触发
+    const got = await readWorkspaceRegistry();
+    expect(got.kind === 'ok' && got.record.entries.map((e) => e.scopeId)).toEqual(['ws:old']); // 注册表回滚
+    expect((await getDirectoryHandle())?.name).toBe('OLD'); // 裸键回滚
+  });
+
+  it('R1 负向：第 1 条写成功、第 2 条是删除且失败 → 两键都保持旧值', async () => {
+    await writeWorkspaceRegistry(() => rec(['ws:old']), { kind: 'write', handle: dirHandle('OLD') });
+    fail.writeAt = 2;
+    const out = await writeWorkspaceRegistry(
+      // ★CR2-4A：必须先构造**合法**记录（条目转 dormant + activeScopeId=null），
+      // 否则会被 isRegistryRecord 判为 invalid 而在到达 delete 请求前就中止，
+      // 命不中「第二次 delete 失败」这个窗口。
+      (prev) =>
+        prev.kind === 'ok'
+          ? {
+              ...prev.record,
+              activeScopeId: null,
+              entries: prev.record.entries.map((e) => ({ ...e, state: 'dormant' as const })),
+            }
+          : 'unchanged',
+      { kind: 'delete' },
+    );
+    fail.writeAt = 0;
+    expect(out).toEqual({ kind: 'failed', reason: 'aborted' });
+    expect(await getDirectoryHandle()).not.toBeNull(); // 删除被回滚
+    const got = await readWorkspaceRegistry();
+    expect(got.kind === 'ok' && got.record.activeScopeId).toBe('ws:old');
+  });
+
+  it('CR2-2：mutate 抛错 → 中止，两键不变', async () => {
+    await writeWorkspaceRegistry(() => rec(['ws:old']), { kind: 'write', handle: dirHandle('OLD') });
+    const out = await writeWorkspaceRegistry(() => {
+      throw new Error('boom');
+    }, { kind: 'delete' });
+    expect(out).toEqual({ kind: 'failed', reason: 'aborted' });
+    expect((await getDirectoryHandle())?.name).toBe('OLD');
+    const got = await readWorkspaceRegistry();
+    expect(got.kind === 'ok' && got.record.entries).toHaveLength(1);
+  });
+
+  it('R2：键不存在 → empty（仅此一种情形；已存 null 是 corrupt，不是 empty）', async () => {
+    expect((await readWorkspaceRegistry()).kind).toBe('empty');
+    // ★G0 勘误：`null` 是「键存在但值非法」，不是「键不存在」——不得折叠成 empty
+    memStore.set(WORKSPACE_REGISTRY_KEY, null);
+    expect((await readWorkspaceRegistry()).kind).toBe('corrupt');
+  });
+
+  it('R2：结构非法 → corrupt，且不删除、不修复', async () => {
+    memStore.set(WORKSPACE_REGISTRY_KEY, { not: 'a registry' });
+    expect((await readWorkspaceRegistry()).kind).toBe('corrupt');
+    expect((await readWorkspaceRegistry()).kind).toBe('corrupt');
+    expect(memStore.has(WORKSPACE_REGISTRY_KEY)).toBe(true);
+  });
+
+  it('R2：IDB 打开失败 → unavailable（**不得**折叠成 empty）', async () => {
+    fail.open = true;
+    expect((await readWorkspaceRegistry()).kind).toBe('unavailable');
+    fail.open = false;
+  });
+
+  it('R2：读取失败 → unavailable', async () => {
+    fail.read = true;
+    expect((await readWorkspaceRegistry()).kind).toBe('unavailable');
+    fail.read = false;
+  });
+
+  it('R2：unavailable 时 mutate 不执行、任何键都不写', async () => {
+    fail.read = true;
+    let called = false;
+    const out = await writeWorkspaceRegistry(
+      (prev) => {
+        called = true;
+        return prev.kind === 'ok' ? prev.record : rec([]);
+      },
+      { kind: 'write', handle: dirHandle('A') },
+    );
+    fail.read = false;
+    expect(out).toEqual({ kind: 'failed', reason: 'unavailable' });
+    expect(called).toBe(false);
+    expect(await getDirectoryHandle()).toBeNull();
+  });
+
+  it('R3：mutate 返回非法记录 → 拒绝写入（failed:invalid），旧记录不被破坏', async () => {
+    await writeWorkspaceRegistry(() => rec(['ws:1']), { kind: 'unchanged' });
+    const out = await writeWorkspaceRegistry(
+      () => ({ v: 1, activeScopeId: 'ws:ghost', entries: [] }) as unknown as WorkspaceRegistryRecord,
+      { kind: 'unchanged' },
+    );
+    expect(out).toEqual({ kind: 'failed', reason: 'invalid' });
+    const got = await readWorkspaceRegistry();
+    expect(got.kind === 'ok' && got.record.entries).toHaveLength(1);
+  });
+
+  it('回归：既有裸句柄接口语义不变（set/get/delete 仍可用）', async () => {
+    await setDirectoryHandle(dirHandle('A'));
+    expect((await getDirectoryHandle())?.name).toBe('A');
+    await deleteDirectoryHandle();
+    expect(await getDirectoryHandle()).toBeNull();
+  });
+
+  it('CR2-4C（NC-7a）：mutate 返回 Promise（非同步记录）→ 拒绝写入，不落任何键', async () => {
+    await writeWorkspaceRegistry(() => rec(['ws:old']), { kind: 'write', handle: dirHandle('OLD') });
+    const out = await writeWorkspaceRegistry(
+      // 故意返回一个 Promise：类型上非法，运行期必须被当作「非法记录」拒绝
+      (() => Promise.resolve(rec(['ws:new']))) as unknown as RegistryMutate,
+      { kind: 'delete' },
+    );
+    expect(out).toEqual({ kind: 'failed', reason: 'invalid' });
+    expect((await getDirectoryHandle())?.name).toBe('OLD'); // 裸键未动
+    const got = await readWorkspaceRegistry();
+    expect(got.kind === 'ok' && got.record.entries.map((e) => e.scopeId)).toEqual(['ws:old']);
+  });
+});
+
+describe('NC-5（入口 1）：并发回归 —— 正式套件的一部分，必须 PASS/退出 0', () => {
+  it('★NC-5 并发回归：两个独立实例并发 RMW → 三条更新全部保留', async () => {
+    const { A, B } = await loadTwoInstances();
+    await A.writeWorkspaceRegistry(() => legalAppend(emptyRec(), 'ws:a', 1), { kind: 'unchanged' });
+
+    const append = (id: string) => (prev: RegistryReadResult): WorkspaceRegistryRecord =>
+      legalAppend(prev.kind === 'ok' ? prev.record : emptyRec(), id, 9);
+
+    // ★G0 勘误：两实例并发也是受控交错（barrier 两侧同时放行）——与入口 3「完全相同调用方」
+    // 和 §6.1「两实例 + 受控交错」口径一致；中性化对照才能保持「只变实现」的单一变量属性。
+    const barrier = makeBarrier(2);
+    const fire = (h: typeof A, id: string) =>
+      (async () => {
+        await barrier();
+        return h.writeWorkspaceRegistry(append(id), { kind: 'unchanged' });
+      })();
+    const [r1, r2] = await Promise.all([fire(A, 'ws:b'), fire(B, 'ws:c')]);
+    expect(r1).toMatchObject({ kind: 'ok' }); // ★ 两次都必须是 ok（不得是 invalid）
+    expect(r2).toMatchObject({ kind: 'ok' });
+
+    const got = await A.readWorkspaceRegistry();
+    expect(got.kind).toBe('ok');
+    if (got.kind !== 'ok') throw new Error('unreachable');
+    expectThreeUpdates(got.record);
   });
 });

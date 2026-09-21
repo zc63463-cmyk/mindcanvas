@@ -5,10 +5,13 @@
  * 用**内存 Fake FS** 替身而非真实磁盘：真实 `showDirectoryPicker` 在 jsdom 里不存在，
  * 且无头浏览器根本无法授权。Fake 实现的接口面与真实句柄一致
  * （values() 异步迭代 / getFileHandle / getDirectoryHandle / removeEntry / createWritable），
- * 于是本文件测的是**本模块的逻辑**（遍历、排序、去重命名、先写后删、资产落盘），
+ * 于是本文件测的是**本模块的逻辑**（遍历、排序、去重命名、先写后删、资产落盘、身份解析），
  * 而不是浏览器的 FS 实现 —— 后者只能人工验证。
+ *
+ * P0-0：内存 IDB 替身升级为 v3（暂存 / 失败中止 / 提交发布 / abort 丢弃 / 互斥结算），
+ * 抽取到 `tests/helpers/memoryIdb.ts` 共用；新增「工作区身份：注册表与同一性」用例组（§4.4）。
  */
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ASSETS_DIR,
   DirectoryWorkspaceHost,
@@ -17,77 +20,24 @@ import {
   flattenFiles,
   isDirectoryPickerSupported,
 } from '../src/edit/directoryHost.js';
+import {
+  WORKSPACE_REGISTRY_KEY,
+  getDirectoryHandle,
+  readWorkspaceRegistry,
+  setDirectoryHandle,
+  writeWorkspaceRegistry,
+} from '../src/edit/handleStore.js';
 import type { FsDirectoryHandle, FsEntryHandle, WorkspaceNode } from '../src/edit/directoryTypes.js';
+import type { RegistryReadResult } from '../src/edit/workspaceScope.js';
+import { fail, installMemoryIndexedDB, memStore, resetFixture } from './helpers/memoryIdb.js';
 
-/**
- * 按引用存储的内存 IDB 替身。
- *
- * 真实 `FileSystemDirectoryHandle` 是浏览器原生对象，可被结构化克隆；
- * 但 JS 替身的**方法无法克隆**（fake-indexeddb 会抛 DataCloneError），
- * 克隆回来只剩数据字段、`getDirectoryHandle` 变成 undefined → 窄化谓词判定为「不是目录句柄」。
- * 故这里用按引用存储，测的是本模块的存取逻辑而非浏览器克隆实现。
- */
-const memStore = new Map<string, unknown>();
-
-type FakeRequest = {
-  result: unknown;
-  error: unknown;
-  onsuccess: null | (() => void);
-  onerror: null | (() => void);
-  onupgradeneeded: null | (() => void);
-};
-
-function valueReq(value: unknown): FakeRequest {
-  const r: FakeRequest = {
-    result: value,
-    error: null,
-    onsuccess: null,
-    onerror: null,
-    onupgradeneeded: null,
-  };
-  queueMicrotask(() => r.onsuccess?.());
-  return r;
-}
-
-function openReq(): FakeRequest {
-  const r: FakeRequest = {
-    result: undefined,
-    error: null,
-    onsuccess: null,
-    onerror: null,
-    onupgradeneeded: null,
-  };
-  queueMicrotask(() => {
-    r.result = {
-      objectStoreNames: { contains: () => true },
-      createObjectStore: () => undefined,
-      transaction: () => ({
-        objectStore: () => ({
-          put: (v: unknown, k: string) => {
-            memStore.set(k, v);
-            return valueReq(undefined);
-          },
-          get: (k: string) => valueReq(memStore.get(k)),
-          delete: (k: string) => valueReq(memStore.delete(k)),
-        }),
-        set oncomplete(fn: () => void) {
-          queueMicrotask(fn);
-        },
-        set onerror(_fn: () => void) {
-          /* 内存实现不会失败 */
-        },
-      }),
-    } as unknown as IDBDatabase;
-    r.onupgradeneeded?.();
-    r.onsuccess?.();
-  });
-  return r;
-}
-
-// 每个用例前重置存储，隔离工作区残留
+// 每个用例前重置共享态（夹具 + 身份脚手架），隔离工作区残留
 beforeEach(() => {
-  memStore.clear();
-  globalThis.indexedDB = { open: () => openReq() } as unknown as IDBFactory;
+  installMemoryIndexedDB();
+  resetFixture();
+  PERM.state = 'granted'; // 权限复位
+  nextPicker = null;
+  reboot();
 });
 
 // ---------------------------------------------------------------- Fake FS
@@ -471,5 +421,295 @@ describe('树工具函数', () => {
   it('filterTree 无命中 → 空；空查询 → 原样返回', () => {
     expect(filterTree(tree, '不存在').length).toBe(0);
     expect(filterTree(tree, '').length).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------- P0-0 身份测试脚手架（计划 §4.4）
+/**
+ * 测试脚手架（CR2-3：给出可落地的 helper 与权限初始化/复位规则，避免依赖未定义 helper）。
+ *
+ * 设计要点：
+ * - `handleOf(name, sameEntry?)` 造目录句柄替身；**是否带 `isSameEntry` 由此决定**
+ *   （这是区分 `different` 与 `unknown` 的唯一手段）。
+ * - `sameByLabel(label)` 是 `isSameEntry` 的语义替身：按「对方句柄的 name」判断（**只用于测试**）。
+ * - `patchPicker(h)` 让下一次 `window.showDirectoryPicker` 返回该句柄。
+ * - 权限：改 `PERM.state` 即可（`handleOf` 的 `queryPermission`/`requestPermission` 实时读它）；
+ *   **`beforeEach` 复位为 `granted`**。
+ * - `reboot()` 丢弃当前 host 实例（保留 IDB），模拟页面刷新。
+ * - 断言对象：**只断言可读目标**（句柄 `name`、注册表的 `activeScopeId` 与 `scopeId` 列表），
+ *   **不对含函数/句柄的对象做 `JSON.stringify` 深比较**（CR2-3）。
+ */
+const PERM = { state: 'granted' as PermissionState };
+
+function handleOf(name: string, sameEntry?: (other: unknown) => Promise<boolean>) {
+  return {
+    name,
+    kind: 'directory' as const,
+    getDirectoryHandle: async () => handleOf(name),
+    queryPermission: async () => PERM.state,
+    requestPermission: async () => PERM.state,
+    ...(sameEntry ? { isSameEntry: sameEntry } : {}),
+  } as unknown as FsDirectoryHandle;
+}
+
+/** `isSameEntry` 的语义替身：按「对方句柄的 name」判断（只用于测试，不代表生产逻辑） */
+const sameByLabel = (label: string) => (other: unknown): Promise<boolean> =>
+  Promise.resolve((other as { name?: string }).name === label);
+
+let nextPicker: FsDirectoryHandle | null = null;
+function patchPicker(h: FsDirectoryHandle | null): void {
+  nextPicker = h;
+  (window as unknown as { showDirectoryPicker?: unknown }).showDirectoryPicker = async () => nextPicker;
+}
+
+let host: DirectoryWorkspaceHost;
+function reboot(): void {
+  host = new DirectoryWorkspaceHost(); // 新实例，IDB 保留
+}
+
+describe('工作区身份：注册表与同一性', () => {
+  /** 经 picker 挂载（多数用例的入口） */
+  const mountByPick = async (h: FsDirectoryHandle): Promise<void> => {
+    patchPicker(h);
+    await host.pick();
+  };
+  /** 读注册表中某个条目的状态 */
+  const stateOf = (got: RegistryReadResult, scopeId: string | null): string | undefined =>
+    got.kind === 'ok' && scopeId !== null
+      ? got.record.entries.find((e) => e.scopeId === scopeId)?.state
+      : undefined;
+
+  it('同目录重新选择（isSameEntry 命中）→ 同一 scopeId', async () => {
+    await mountByPick(handleOf('MyNotes', () => Promise.resolve(false)));
+    const id1 = host.scopeId;
+    reboot(); // 新实例、保留 IDB
+    await mountByPick(handleOf('MyNotes', sameByLabel('MyNotes'))); // 新句柄对象，但声称同一
+    expect(host.scopeId).toBe(id1);
+    expect(host.scopeState.kind).toBe('disk');
+  });
+
+  it('不同目录同名 → 不同 scopeId（名称不构成证据）', async () => {
+    await mountByPick(handleOf('notes', () => Promise.resolve(false)));
+    const id1 = host.scopeId;
+    reboot();
+    await mountByPick(handleOf('notes', () => Promise.resolve(false))); // 同名但明确不同
+    expect(host.scopeId).not.toBe(id1);
+  });
+
+  it('★CR2-1：A 登记后选择可证明不同的 B → **B 被持久登记**；刷新后仍是 B；再选 A 恢复原 ID', async () => {
+    await mountByPick(handleOf('A', () => Promise.resolve(false))); // empty → register
+    const idA = host.scopeId;
+    expect(host.scopeState).toMatchObject({ kind: 'disk', persisted: true });
+
+    reboot();
+    await mountByPick(handleOf('B', () => Promise.resolve(false))); // 与 A 明确不同 → register
+    const idB = host.scopeId;
+    expect(idB).not.toBe(idA);
+    expect(host.scopeState).toMatchObject({ kind: 'disk', persisted: true }); // ★ 不得降级
+
+    const got = await readWorkspaceRegistry();
+    expect(got.kind).toBe('ok');
+    expect(got.kind === 'ok' && got.record.activeScopeId).toBe(idB); // active = B
+    expect(stateOf(got, idA)).toBe('dormant'); // A 转 dormant
+    expect((await getDirectoryHandle())?.name).toBe('B'); // 裸键 = B
+
+    reboot(); // 刷新恢复
+    expect(await host.restore()).toBe(true);
+    expect(host.scopeId).toBe(idB);
+
+    reboot(); // 再选 A
+    await mountByPick(handleOf('A', sameByLabel('A')));
+    expect(host.scopeId).toBe(idA);
+    expect(host.scopeState).toMatchObject({ kind: 'disk' });
+  });
+
+  it('A→B→A：A 条目保持 dormant，回到 A 恢复原 scopeId', async () => {
+    await mountByPick(handleOf('A', () => Promise.resolve(false)));
+    const idA = host.scopeId;
+    reboot();
+    await mountByPick(handleOf('B', () => Promise.resolve(false)));
+    expect(host.scopeId).not.toBe(idA);
+    reboot();
+    await mountByPick(handleOf('A', sameByLabel('A')));
+    expect(host.scopeId).toBe(idA);
+  });
+
+  it('断开再连接 → 不删条目，重连恢复同一 scopeId', async () => {
+    await mountByPick(handleOf('A', () => Promise.resolve(false)));
+    const id = host.scopeId;
+    await host.detach();
+    expect(host.scopeState.kind).toBe('browser');
+    await mountByPick(handleOf('A', sameByLabel('A')));
+    expect(host.scopeId).toBe(id);
+  });
+
+  it('★CR2-3-a：注册表非空 + 无 isSameEntry → disk-session(unassociated)，注册表与**裸键保持原值**', async () => {
+    await mountByPick(handleOf('A', () => Promise.resolve(false)));
+    const idA = host.scopeId;
+    const regBefore = await readWorkspaceRegistry();
+    expect((await getDirectoryHandle())?.name).toBe('A'); // A 的裸键已存在
+
+    reboot();
+    await mountByPick(handleOf('NewFolder')); // 无 isSameEntry → 全部 unknown → degrade
+    expect(host.scopeState).toMatchObject({ kind: 'disk-session', reason: 'unassociated' });
+    expect(host.mounted).toBe(true); // 目录仍可用
+    expect(host.scopeId).not.toBe(idA); // 不声称恢复旧身份
+
+    const regAfter = await readWorkspaceRegistry();
+    expect(regAfter.kind).toBe('ok');
+    if (regBefore.kind !== 'ok' || regAfter.kind !== 'ok') throw new Error('unreachable');
+    expect(regAfter.record.activeScopeId).toBe(regBefore.record.activeScopeId);
+    expect(regAfter.record.entries.map((e) => e.scopeId)).toEqual(
+      regBefore.record.entries.map((e) => e.scopeId),
+    );
+    // ★ 关键修正：断言**可读目标**，而不是对象深比较；旧句柄仍在，不是 null
+    expect((await getDirectoryHandle())?.name).toBe('A');
+  });
+
+  it('I-23：同一工作区经 restore 与 requestPermission 得到同一 scopeId', async () => {
+    await mountByPick(handleOf('A', sameByLabel('A')));
+    const id = host.scopeId;
+
+    reboot(); // 模拟刷新：新实例、root 空
+    PERM.state = 'prompt';
+    expect(await host.restore()).toBe(false); // prompt → 不挂载（既有语义）
+    PERM.state = 'granted'; // 用户点「连接工作区」的手势
+    expect(await host.requestPermission()).toBe(true);
+    expect(host.scopeId).toBe(id); // 与 restore 同一条解析路径
+  });
+
+  it('I-23 负向：requestPermission 在已挂载时不改 scopeId、不变 epoch', async () => {
+    await mountByPick(handleOf('A', () => Promise.resolve(false)));
+    const id = host.scopeId;
+    const ep = host.scopeEpoch;
+    await host.requestPermission();
+    expect(host.scopeId).toBe(id);
+    expect(host.scopeEpoch).toBe(ep);
+  });
+
+  it('★CR2-3-b：只有注册表读取失败 + 裸键仍可读 → 冷启动可挂载但身份降级', async () => {
+    await setDirectoryHandle(handleOf('Legacy'));
+    reboot();
+    fail.readKey = WORKSPACE_REGISTRY_KEY; // 只让注册表键读失败
+    expect(await host.restore()).toBe(true);
+    fail.readKey = null;
+    expect(host.scopeState).toMatchObject({ kind: 'disk-session', reason: 'registry-unavailable' });
+    expect((await readWorkspaceRegistry()).kind).toBe('empty'); // 未留下任何记录
+    expect((await getDirectoryHandle())?.name).toBe('Legacy'); // 裸键未被改写
+  });
+
+  it('★CR2-3-c：整个存储不可读 → 冷启动无法恢复（restore=false，未挂载）', async () => {
+    await setDirectoryHandle(handleOf('Legacy'));
+    reboot();
+    fail.open = true;
+    expect(await host.restore()).toBe(false);
+    fail.open = false;
+    expect(host.mounted).toBe(false);
+    expect(host.scopeState.kind).toBe('browser');
+  });
+
+  it('R2：picker 已给可用句柄 + 注册表读失败 → 会话挂载，不 legacy adoption、不写键', async () => {
+    await setDirectoryHandle(handleOf('Legacy'));
+    fail.readKey = WORKSPACE_REGISTRY_KEY;
+    await mountByPick(handleOf('New'));
+    fail.readKey = null;
+    expect(host.scopeState).toMatchObject({ kind: 'disk-session', reason: 'registry-unavailable' });
+    expect(host.mounted).toBe(true);
+    expect((await readWorkspaceRegistry()).kind).toBe('empty');
+    expect((await getDirectoryHandle())?.name).toBe('Legacy'); // 裸键未被改写
+  });
+
+  it('旧裸句柄（无注册表）→ legacy adoption 生成新 scopeId，旧读路径仍可用', async () => {
+    await setDirectoryHandle(handleOf('Legacy'));
+    expect(await host.restore()).toBe(true);
+    expect(host.scopeId).toMatch(/^ws:/);
+    expect((await readWorkspaceRegistry()).kind).toBe('ok');
+  });
+
+  it('注册表损坏 → disk-session(registry-corrupt)，不删除记录', async () => {
+    memStore.set(WORKSPACE_REGISTRY_KEY, { not: 'a registry' }); // 直接写脏记录
+    await setDirectoryHandle(handleOf('X'));
+    expect(await host.restore()).toBe(true);
+    expect(host.scopeState).toMatchObject({ kind: 'disk-session', reason: 'registry-corrupt' });
+    expect((await readWorkspaceRegistry()).kind).toBe('corrupt'); // 仍在、未被改写
+  });
+
+  it('★G0：损坏库时 pick 与 restore 一致 —— 不覆盖损坏记录，仅本次会话可用', async () => {
+    memStore.set(WORKSPACE_REGISTRY_KEY, { not: 'a registry' }); // 直接写脏记录
+    await mountByPick(handleOf('X'));
+    expect(host.scopeState).toMatchObject({ kind: 'disk-session', reason: 'registry-corrupt' });
+    expect(host.mounted).toBe(true); // 目录仍可用
+    expect((await readWorkspaceRegistry()).kind).toBe('corrupt'); // 损坏记录未被改写
+    expect(await getDirectoryHandle()).toBeNull(); // 裸键也未被写入
+  });
+
+  it('注册表写入失败 → disk-session(registry-write-failed)，但目录仍可用', async () => {
+    fail.writeAt = 1; // 第 1 个写请求即失败
+    await mountByPick(handleOf('A', () => Promise.resolve(false)));
+    fail.writeAt = 0;
+    expect(host.scopeState).toMatchObject({ kind: 'disk-session', reason: 'registry-write-failed' });
+    expect(host.mounted).toBe(true);
+  });
+
+  it('R1：detach 把 active 置 dormant、不删条目，且同事务删除裸键', async () => {
+    await mountByPick(handleOf('A', () => Promise.resolve(false)));
+    expect(await getDirectoryHandle()).not.toBeNull(); // pick 已写裸键
+    await host.detach();
+    const got = await readWorkspaceRegistry();
+    expect(got.kind === 'ok' && got.record.entries).toHaveLength(1);
+    expect(got.kind === 'ok' && got.record.entries[0]?.state).toBe('dormant');
+    expect(got.kind === 'ok' && got.record.activeScopeId).toBeNull();
+    expect(await getDirectoryHandle()).toBeNull(); // 同事务一并删除
+  });
+
+  it('CR2-4：mutate 返回 conflict → 不写任何键，交调用方重解析', async () => {
+    await mountByPick(handleOf('A', () => Promise.resolve(false)));
+    const before = await readWorkspaceRegistry();
+    const out = await writeWorkspaceRegistry(() => 'conflict', { kind: 'delete' });
+    expect(out).toEqual({ kind: 'conflict' });
+    expect((await getDirectoryHandle())?.name).toBe('A'); // 裸键未动
+    const after = await readWorkspaceRegistry();
+    expect(after.kind === 'ok' && after.record.entries.map((e) => e.scopeId)).toEqual(
+      before.kind === 'ok' ? before.record.entries.map((e) => e.scopeId) : [],
+    );
+  });
+
+  it('CR2-4：两调用方从空注册表同时 pick 同一目录 → 不产生重复条目', async () => {
+    // 两个独立的 directory-host 模块实例（各自 handleStore 副本 / 各自 writeChain），
+    // 共用同一个夹具数据库 —— 对应真实世界的两个标签页。
+    vi.resetModules();
+    const M1 = await import('../src/edit/directoryHost.js');
+    vi.resetModules();
+    const M2 = await import('../src/edit/directoryHost.js');
+    const h1 = new M1.DirectoryWorkspaceHost();
+    const h2 = new M2.DirectoryWorkspaceHost();
+    const dir = handleOf('MyNotes', sameByLabel('MyNotes'));
+
+    patchPicker(dir);
+    const pick1 = h1.pick();
+    patchPicker(dir);
+    const pick2 = h2.pick();
+    await Promise.all([pick1, pick2]);
+
+    const got = await readWorkspaceRegistry();
+    expect(got.kind).toBe('ok');
+    expect(got.kind === 'ok' && got.record.entries).toHaveLength(1); // ★ 不重复登记
+    expect(h1.scopeId).toBe(h2.scopeId); // 两方最终同一身份
+  });
+
+  it('G-3：uuid 源抛错时仍生成合法 scopeId（回退源，不依赖 crypto）', async () => {
+    vi.stubGlobal('crypto', {
+      randomUUID: () => {
+        throw new Error('uuid unavailable');
+      },
+    });
+    try {
+      await mountByPick(handleOf('A', () => Promise.resolve(false)));
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(host.scopeId).toMatch(/^ws:/);
+    expect(String(host.scopeId)).not.toContain('undefined');
+    expect(host.scopeState).toMatchObject({ kind: 'disk', persisted: true });
   });
 });

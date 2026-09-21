@@ -111,6 +111,21 @@ export interface FrameMenuActions {
 }
 
 /**
+ * S2 摘要菜单动作（XMind 式概要：同父连续兄弟范围）。
+ *
+ * 摘要是**两跳**交互：菜单只负责「进入第一跳等待态」，第二跳由宿主在节点点击
+ * （`onNodeClick` 首判）里完成——与 E7 Shift 两跳连线同族，**不用** LinkCreator
+ * 候选面板（计划 S-A4）。
+ *
+ * **缺省不注入 → 不出现「创建摘要…」项**（与 `frameActions` / `growDirActions`
+ * 的可选动作袋同款：既有调用方与测试零影响）。
+ */
+export interface SummaryMenuActions {
+  /** 以该节点为范围起点进入两跳等待态（宿主置 `summaryDraft` 并提示点选末成员） */
+  onStartSummary: (id: string) => void;
+}
+
+/**
  * v1.5.0 Section 菜单动作（Phase 1：Section = 带装饰的 Center Island，D1 裁决）。
  * 三态入口：已是 center → 标记；非 center → 升格并标记（合并单条 undo）；已是 Section → 取消。
  */

@@ -129,7 +129,25 @@ export interface Note {
    * 其它 note 字段不动。读写访问器见 `protocol/frame.ts`。
    */
   frame?: FrameSpec;
+  /**
+   * 摘要节点（XMind 式概要）的范围锚：`from` / `to` 是**同一父节点下连续兄弟**的两端。
+   *
+   * 写在**摘要节点自己**的 note 上（单一事实源；成员零写入，除创建时为端点补发 cid），
+   * 形态是一层嵌套对象（块形态 `summary_of:` + 缩进子键，或内联 JSON，均往返保真）。
+   * 写入一律落 `cid:`（身份稳定）；读取兼容 `node:` 路径锚（与 sections 同轨）。
+   *
+   * 结构约束（解析期校验，见 `registry/summary-anchor.ts`）：两端与摘要节点同父、
+   * `from.index ≤ to.index`、且摘要节点自身不在范围内。README/协议文档见
+   * `docs/specs/2026-09-02-mm-md-protocol.md`。读写访问器见 `protocol/summary.ts`。
+   */
+  summary_of?: SummarySpec;
   [key: string]: unknown;
+}
+
+/** 摘要范围锚（连续兄弟区间；两端均为锚文本，写入落 `cid:`，读取兼容 `node:`） */
+export interface SummarySpec {
+  from: string;
+  to: string;
 }
 
 /** Section 配色 token（渲染层映射具体色值；未知 token 透传不丢，渲染回退 slate） */

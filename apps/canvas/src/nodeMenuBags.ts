@@ -26,6 +26,7 @@ import {
   type DescMenuActions,
   type EditorController,
   type NoteMenuActions,
+  type SummaryMenuActions,
 } from '@mindcanvas/react';
 
 /** 宿主回调（形状与 `NodeContextMenu` 的 props 一致） */
@@ -42,11 +43,27 @@ export interface NodeBagHost {
    * 走既有 center_pos 吸附或自动排布）。
    */
   layoutPosOf?: (id: string) => { x: number; y: number } | undefined;
+  /**
+   * S2：以某节点为摘要范围起点，进入**两跳等待态**（第一跳）。
+   * 置 `summaryDraft` 并提示「点选范围末成员（需同一父级；Esc 取消）」——
+   * 第二跳由 `MindmapStage` 的 `onNodeClick` 首判完成（与 E7 Shift 两连跳同族）。
+   */
+  onStartSummary?: (id: string) => void;
 }
 
 /** v1.3.0 幕布描述入口：与 Shift+Enter 同一动作 */
 export function makeDescActions(host: NodeBagHost): DescMenuActions {
   return { onStart: (id) => host.setDescEditingId(id) };
+}
+
+/**
+ * S2 摘要入口（「创建摘要…」）：只做**第一跳**——登记范围起点并进入等待态。
+ *
+ * 第二跳（点选末成员后真正建节点）不在菜单里：那是 `MindmapStage.onNodeClick`
+ * 首判的职责（与 E7 Shift 两连跳同族，计划 S-A4 明确不用 LinkCreator 候选面板）。
+ */
+export function makeSummaryActions(host: NodeBagHost): SummaryMenuActions {
+  return { onStartSummary: (id) => host.onStartSummary?.(id) };
 }
 
 /** note 笔记入口：固定展示并进入编辑（与描述是不同内容） */

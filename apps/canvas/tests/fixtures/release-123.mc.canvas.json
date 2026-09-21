@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "canvasId": "cv_release_123",
+  "title": "发布验收画布",
+  "placements": [
+    {
+      "kind": "native",
+      "placementUuid": "pl_r123_a",
+      "shell": "sticky-classic",
+      "face": "front",
+      "front": {
+        "contentKind": "markdown",
+        "body": "## 验收卡甲\n正面原文（本轮改前）"
+      },
+      "back": {
+        "contentKind": "markdown",
+        "body": "## 甲背面\n背面原文（本轮改前）"
+      },
+      "transform": { "x": 60, "y": 90, "w": 220, "h": 170 },
+      "zIndex": 1,
+      "createdAt": 1757900000000,
+      "updatedAt": 1757900000000
+    },
+    {
+      "kind": "native",
+      "placementUuid": "pl_r123_b",
+      "shell": "card-panel",
+      "face": "front",
+      "front": {
+        "contentKind": "markdown",
+        "body": "## 验收卡乙\n正面原文（本轮改前）"
+      },
+      "back": {
+        "contentKind": "markdown",
+        "body": "## 乙背面\n背面原文（本轮改前）"
+      },
+      "transform": { "x": 420, "y": 260, "w": 280, "h": 200 },
+      "zIndex": 2,
+      "createdAt": 1757900000000,
+      "updatedAt": 1757900000000
+    },
+    {
+      "kind": "native",
+      "placementUuid": "pl_r123_c",
+      "shell": "sticky-classic",
+      "face": "front",
+      "front": {
+        "contentKind": "markdown",
+        "body": "## 验收卡丙\n无背面卡（翻面按钮不得出现）"
+      },
+      "transform": { "x": 780, "y": 120, "w": 200, "h": 150 },
+      "zIndex": 3,
+      "createdAt": 1757900000000,
+      "updatedAt": 1757900000000
+    }
+  ],
+  "edges": [
+    {
+      "edgeUuid": "ed_r123_1",
+      "fromPlacementUuid": "pl_r123_a",
+      "toPlacementUuid": "pl_r123_b",
+      "createdAt": 1757900000000,
+      "updatedAt": 1757900000000
+    },
+    {
+      "edgeUuid": "ed_r123_2",
+      "fromPlacementUuid": "pl_r123_b",
+      "toPlacementUuid": "pl_r123_c",
+      "createdAt": 1757900000000,
+      "updatedAt": 1757900000000
+    }
+  ],
+  "viewport": { "panX": 40, "panY": 40, "scale": 1 },
+  "updatedAt": 1757900000000
+}

@@ -19,6 +19,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
+    "test:counterexamples": "vitest run --config vitest.counterexamples.config.ts",
     "typecheck": "tsc -b tsconfig.json"
   },
   "dependencies": {

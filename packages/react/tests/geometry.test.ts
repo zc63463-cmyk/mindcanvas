@@ -60,13 +60,16 @@ describe('nodeCardStyle：节点卡片样式（全令牌驱动）', () => {
     expect(leaf.stroke).toBe('#639922');
   });
 
-  it('glass 分支卡半透明白；叶卡霓虹（对照 V8 SVG）', () => {
+  it('glass 分支卡半透明白；叶卡再弱一档（DEPTH-VIS-1：霓虹描边/填色降到不抢戏）', () => {
     const card = nodeCardStyle(glass, glass.color.branches[0], 'branch');
     expect(card.fill).toBe('rgba(255,255,255,.05)');
     expect(card.stroke).toBe('rgba(255,255,255,.18)');
     const leaf = nodeCardStyle(glass, glass.color.branches[0], 'leaf');
-    expect(leaf.fill).toBe('rgba(122,233,196,.08)');
-    expect(leaf.stroke).toBe('rgba(122,233,196,.35)');
+    // 父先于子：叶 fill .08→.04、stroke .35→.16（弱化靠卡）；
+    // DEPTH-VIS-1.1：标题 ≥ #d3d7e0，不得掉进幕布注释带 CHROME.textMuted
+    expect(leaf.fill).toBe('rgba(122,233,196,.04)');
+    expect(leaf.stroke).toBe('rgba(122,233,196,.16)');
+    expect(leaf.text).toBe('#d3d7e0');
   });
 
   it('实体节点按 KIND_META 语义色描边（跨主题一致）', () => {

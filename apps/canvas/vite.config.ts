@@ -8,6 +8,11 @@ const pkgSrc = (rel: string): string =>
 
 /**
  * canvas 应用构建配置：Vite + React 组合入口（kernel + react 渲染器的消费方）。
+ *
+ * 注意 `define.__MINDCANVAS_TEST_BUILD__`：这是**构建期**的测试接线开关。
+ * 生产构建在此固定注入 `'false'`（见 `src/testBuild.ts` 的长注释），
+ * 于是 `MindmapStage` 里的测试观测口整块被 Rollup 判死并 tree-shake —— 生产产物中
+ * 既无注册语句也无该全局名。测试侧由 `vitest.config.ts` 覆盖为 `'true'`。
  */
 export default defineConfig({
   plugins: [react()],
@@ -21,6 +26,9 @@ export default defineConfig({
       '@mindcanvas/kernel': pkgSrc('../../packages/kernel/src/index.ts'),
       '@mindcanvas/react': pkgSrc('../../packages/react/src/index.ts'),
     },
+  },
+  define: {
+    __MINDCANVAS_TEST_BUILD__: 'false',
   },
   build: {
     rollupOptions: {

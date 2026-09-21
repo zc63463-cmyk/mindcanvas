@@ -65,6 +65,7 @@ import type {
   GrowDirMenuActions,
   NoteMenuActions,
   SectionMenuActions,
+  SummaryMenuActions,
 } from './menuActionTypes.js';
 export type {
   CenterMenuActions,
@@ -75,6 +76,7 @@ export type {
   GrowDirMenuActions,
   NoteMenuActions,
   SectionMenuActions,
+  SummaryMenuActions,
 } from './menuActionTypes.js';
 
 export function contextMenuItemsFor(
@@ -86,6 +88,7 @@ export function contextMenuItemsFor(
   growDirActions?: GrowDirMenuActions,
   sectionActions?: SectionMenuActions,
   frameActions?: FrameMenuActions,
+  summaryActions?: SummaryMenuActions,
 ): ContextMenuItem[] {
   const isRoot = id === controller.root.id;
   // G6′ 触发一致性：菜单生长与 Tab 生长共用 inferChildDir（兄弟多数 → 父方向 → 继承）
@@ -227,6 +230,18 @@ export function contextMenuItemsFor(
   // E3：连线到…（以该节点为源新建自由边；树形之外的语义连接）
   if (edgeActions) {
     items.push({ label: '连线到…', section: SEC.structure, onSelect: () => edgeActions.onStartLink(id) });
+  }
+  // S2：创建摘要…（XMind 式概要：同父连续兄弟范围）——**两跳**交互的起点。
+  // 菜单只把该节点登记为「范围起点」并进入等待态，第二跳由宿主在 onNodeClick 首判里
+  // 完成（与 E7 Shift 两跳连线同族；不用 LinkCreator 候选面板——计划 S-A4）。
+  // 根节点无兄弟 ⇒ 不可能成为范围成员，入口不给（与「缩进 / 反缩进」同款守卫）。
+  // 缺省不注入 summaryActions → 不出现该项（既有调用方零影响）。
+  if (summaryActions && !isRoot) {
+    items.push({
+      label: '创建摘要…',
+      section: SEC.structure,
+      onSelect: () => summaryActions.onStartSummary(id),
+    });
   }
 
   // ── 生长与连线（D3′ 生长方向 / 出线长度 / 出线枢纽）──

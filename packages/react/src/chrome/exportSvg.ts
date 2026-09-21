@@ -14,13 +14,16 @@ import {
 import {
   buildLinkPath,
   computeBranchIndex,
+  fontOf,
   horizontalBeamMap,
   hubArrowTip,
   nodeCardStyle,
   verticalBeamMap,
+  visualRankOf,
   type LinkGeom,
 } from '../render/geometry.js';
 import { collectDeclaredGrowDir } from '../render/growDir.js';
+import { buildSummaryViews } from '../render/summaryFrames.js';
 import type { TokenSet } from '../theme/index.js';
 
 export interface ExportSvgOptions {
@@ -29,6 +32,15 @@ export interface ExportSvgOptions {
   title?: string;
   /** G6″（A6/T23）：跨岛父子连接——导出补线（虚线；端点盒缺失时跳过，不误连） */
   boundaryLinks?: ReadonlyArray<{ fromId: string; toId: string }>;
+  /**
+   * S4：文档根（事实树）——提供时导出摘要括线。
+   *
+   * **加法字段**：不传 = 行为与 S4 之前**逐字相同**（旧调用方零改动，
+   * 由 `summary-export-svg.test.ts` 的逐字等价用例钉死）。
+   * 括线几何与画布同源（同一 `buildSummaryViews`），差异仅取盒来源
+   * （导出用布局盒，画布用动画帧盒——导出本就不含动画态）。
+   */
+  root?: EditableNode;
 }
 
 export function exportSvg(
@@ -132,12 +144,46 @@ export function exportSvg(
     );
   }
 
+  // S4 摘要括线。**导出实际发射顺序**（自上而下读本文件即可核）：
+  //   背景 rect → 树线 path → 跨岛补线 boundaryLinks(虚线) → **摘要括线** → 节点卡。
+  // 注意两点（S4-R2 更正）：
+  //   ① 导出**不画框边界** —— Section 框是画布侧 chrome，不进 SVG 导出；
+  //   ② 此处括线在**树线之后**，而画布 DOM 层序是 summaries 在 tree-links **之前**（方向相反）。
+  //      两者是不同契约：画布按 z-order 自下而上，导出按「后被覆盖者后写」。
+  // 与画布同源：同一 buildSummaryViews（消费 layout.satellites + buildSatellitePlan）。
+  // 只有传了 root 才计算 → 不传时本段零输出（旧调用方逐字等价）。
+  // 括线用 data-summary-bracket / data-summary-stem 可定位（与画布同一属性名）。
+  if (opts.root) {
+    const summaryViews = buildSummaryViews({
+      root: opts.root,
+      satellites: layout.satellites ?? [],
+      nodes: layout.nodes,
+    });
+    const stroke = token.color.linkStroke;
+    const width = r(token.lineStyle.width * 1.6);
+    for (const v of summaryViews) {
+      parts.push(`<g data-summary-id="${esc(v.summaryId)}" data-summary-side="${v.side === -1 ? 'left' : 'right'}">`);
+      parts.push(
+        `<path data-summary-bracket="${esc(v.summaryId)}" d="${esc(v.bracketPath)}" fill="none" ` +
+          `stroke="${esc(stroke)}" stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round"/>`,
+      );
+      parts.push(
+        `<path data-summary-stem="${esc(v.summaryId)}" ` +
+          `d="M ${r(v.stemX1)} ${r(v.stemY1)} L ${r(v.stemX2)} ${r(v.stemY2)}" ` +
+          `fill="none" stroke="${esc(stroke)}" stroke-width="${width}" stroke-linecap="round"/>`,
+      );
+      parts.push('</g>');
+    }
+  }
+
   // 节点卡（nodeCardStyle 同款主题取值；全量文本——导出不套 LOD 省略）
   for (const n of visibleNodes) {
     const palette =
       token.color.branches[branchIndex.get(n.node.id) ?? 0] ?? token.color.branches[0]!;
     const entityKind = n.node.type === 'entity' ? (n.node.ref?.kind ?? null) : null;
-    const style = nodeCardStyle(token, palette, n.depth >= 2 ? 'leaf' : 'branch', entityKind);
+    // DEPTH-VIS-1：与画布同源（rank 决定卡样式、fontOf 决定字号字重）—— 导出即所见
+    const style = nodeCardStyle(token, palette, visualRankOf(n.depth), entityKind);
+    const { size: fontSize, weight: fontWeight } = fontOf(token, n.depth);
     const bx = n.box;
     parts.push(`<g transform="translate(${r(bx.x)} ${r(bx.y)})">`);
     parts.push(
@@ -146,8 +192,8 @@ export function exportSvg(
     );
     parts.push(
       `<text x="${r(bx.w / 2)}" y="${r(bx.h / 2)}" text-anchor="middle" dominant-baseline="central" ` +
-        `font-family="${esc(token.font.family)}" font-size="${n.depth >= 2 ? token.font.sizeLeaf : token.font.size}" ` +
-        `font-weight="${n.depth === 0 ? token.font.weightRoot : token.font.weight}" fill="${esc(style.text)}">` +
+        `font-family="${esc(token.font.family)}" font-size="${fontSize}" ` +
+        `font-weight="${fontWeight}" fill="${esc(style.text)}">` +
         `${esc(n.node.text ?? '')}</text>`,
     );
     parts.push('</g>');

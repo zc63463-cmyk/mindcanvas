@@ -15,6 +15,7 @@ import {
   isGrowDir,
   layoutMindmap,
   layoutBounds,
+  NO_SATELLITE_HOOK,
   orgBeamLink,
   orgBeamLinkUp,
   placeSubtreeIncremental,
@@ -25,6 +26,7 @@ import {
   type LayoutResult,
   type LinkBuilder,
   type MeasureFn,
+  type SatelliteHook,
 } from './mindmap.js';
 // 仅取型：separate.ts / linkClear.ts 只依赖 mindmap（基座），不会与 layouts 形成循环
 import type { SeparateOptions } from './separate.js';
@@ -47,6 +49,9 @@ export type LayoutFunc = (
 ) => LayoutResult;
 
 export const SUB_GAP = 28;
+
+/** S3 空摘除集（共享常量；不注入钩子时用——保证旧行为逐位等价） */
+const EMPTY_SKIP: ReadonlySet<string> = new Set<string>();
 
 // ---------- org：自顶向下行式（同层同行、子行下沉） ----------
 function subtreeWidth(ln: LayoutNode): number {
@@ -228,6 +233,11 @@ function buildSkeletonCached(
   parentId: string | null,
   /** 是否查/写缓存（根 = false；子树 = true） */
   useCache: boolean,
+  /**
+   * S3 摘要卫星摘除集（缺省空集 = 旧行为逐位等价）。
+   * 与 `layoutMindmap` 的 `skip` 同源同判据——摘除必须一致，否则几何错位。
+   */
+  skip: ReadonlySet<string> = EMPTY_SKIP,
 ): LayoutNode {
   if (useCache && cache) {
     const cached = cache.nodes.get(node);
@@ -235,11 +245,15 @@ function buildSkeletonCached(
       return cached;
     }
   }
-  const m = measure(node);
+  // MEASURE-RANK：depth 已是最终语义（logic/org 不再 annotate 重建），直接交给度量
+  const m = measure(node, depth);
   const children: LayoutNode[] = !collapsedIds.has(node.id)
-    ? node.children.map((c) =>
-        buildSkeletonCached(c, measure, collapsedIds, cache, side, depth + 1, node.id, useCache),
-      )
+    ? node.children
+        // S3：摘除摘要节点（改为成员带外侧卫星，post-pass 放置）
+        .filter((c) => !skip.has(c.id))
+        .map((c) =>
+          buildSkeletonCached(c, measure, collapsedIds, cache, side, depth + 1, node.id, useCache, skip),
+        )
     : [];
   const ln: LayoutNode = {
     node,
@@ -265,11 +279,14 @@ export function layoutLogic(
   measure: MeasureFn,
   collapsedIds: Set<string>,
   direction: 1 | -1,
-  opts: { cache?: LayoutCache; measureKey?: string } = {},
+  opts: { cache?: LayoutCache; measureKey?: string; satellite?: SatelliteHook } = {},
 ): LayoutResult {
   const cache = opts.cache;
+  // S3 摘要卫星钩子（缺省 NO_SATELLITE_HOOK → 旧行为逐位等价）
+  const hook = opts.satellite ?? NO_SATELLITE_HOOK;
+  const skip = hook.skipIds(root);
   // 根：手工构建（side=0、居中定位——与旧路径逐位一致）；不查/不写缓存
-  const rootM = measure(root);
+  const rootM = measure(root, 0);
   const tree: LayoutNode = {
     node: root,
     box: { x: -rootM.w / 2, y: -rootM.h / 2, w: rootM.w, h: rootM.h },
@@ -277,9 +294,22 @@ export function layoutLogic(
     depth: 0,
     parentId: null,
     children: !collapsedIds.has(root.id)
-      ? root.children.map((c) =>
-          buildSkeletonCached(c, measure, collapsedIds, cache, direction, 1, root.id, true),
-        )
+      ? root.children
+          // S3：摘除摘要节点（改为成员带外侧卫星，post-pass 放置）
+          .filter((c) => !skip.has(c.id))
+          .map((c) =>
+            buildSkeletonCached(
+              c,
+              measure,
+              collapsedIds,
+              cache,
+              direction,
+              1,
+              root.id,
+              true,
+              skip,
+            ),
+          )
       : [],
   };
   const total =
@@ -297,7 +327,18 @@ export function layoutLogic(
     cursor += subtreeHeightCached(child) + V_GAP;
   }
   const { nodes, links } = collectCached(tree, cache);
-  return { nodes, links, bounds: layoutBounds(nodes) };
+  // S3 post-pass：成员已落位 → 钩子按成员实际盒算带、放置卫星子树。
+  // 无摘要时钩子原样返回 → 输出与基线逐位等价。
+  return hook.merge({
+    root,
+    layoutRoot: tree,
+    nodes,
+    links,
+    bounds: layoutBounds(nodes),
+    measure,
+    collapsedIds,
+    cache,
+  });
 }
 
 // ---------- 注册表 ----------

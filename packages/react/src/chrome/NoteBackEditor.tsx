@@ -22,6 +22,8 @@
  * textarea 卸载亦不触发 blur（React 卸载不派发 onBlur），编辑态得以停在预览上。
  */
 import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { useCompositionCommitGuard } from '../edit/compositionGuard.js';
+import { useDraftSession } from '../edit/draftSessions.js';
 import { CHROME } from '../theme/tokens.js';
 import type { TokenSet } from '../theme/types.js';
 import { CardBackMarkdown } from './CardBackMarkdown.js';
@@ -56,6 +58,13 @@ export function NoteBackEditor({
   // 切换时从 textarea 摘出的草稿快照（预览渲染 + 切回源文的挂载初值）
   const [draft, setDraft] = useState(md);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
+  const mdRef = useRef(md);
+  mdRef.current = md;
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+
+  /** 当前原文：源文态 = textarea 现值；预览态 = 摘出的草稿快照（textarea 已卸载） */
+  const currentText = (): string => taRef.current?.value ?? draftRef.current;
 
   // 进入 / 切回源文态：聚焦并把光标移到末尾（同 DescBlock 进入编辑纪律；
   // 切到预览态时不聚焦任何东西——预览是阅读面）。
@@ -67,10 +76,27 @@ export function NoteBackEditor({
     ta.setSelectionRange(ta.value.length, ta.value.length);
   }, [mode]);
 
+  // MG-R1-B：组合未结束时不得提交未确认候选串；结束用确认文字补提交（统一组合边界）
+  const { onCompositionStart, onCompositionEnd, allowCommit } = useCompositionCommitGuard(
+    (text) => {
+      onCommit?.(text);
+    },
+  );
+
   /** 提交（失焦 / Shift+Enter）：上抛 textarea 当前原文 */
   const commit = (): void => {
-    onCommit?.(taRef.current?.value ?? draft);
+    if (!allowCommit()) return;
+    onCommit?.(currentText());
   };
+
+  // MG-R4：预览态草稿没有可 blur 的控件（textarea 已卸载），登记编辑会话让
+  // 离开路径（flushActiveDraft）与 beforeunload（hasPendingDraft）都看得见它。
+  useDraftSession(() => ({
+    hasPending: () => currentText() !== mdRef.current,
+    commit: () => {
+      onCommit?.(currentText());
+    },
+  }));
 
   /** 切到预览：先记录当前草稿；切回源文：textarea 以最新草稿重新挂载 */
   const toggleMode = (): void => {
@@ -124,6 +150,8 @@ export function NoteBackEditor({
           data-note-md-input
           defaultValue={draft}
           placeholder="markdown 源文…（Shift+Enter 完成，Enter 换行）"
+          onCompositionStart={onCompositionStart}
+          onCompositionEnd={(e) => onCompositionEnd(e.currentTarget.value)}
           onBlur={commit}
           onKeyDown={(e) => {
             e.stopPropagation();

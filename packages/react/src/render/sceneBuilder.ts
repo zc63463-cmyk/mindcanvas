@@ -7,12 +7,13 @@
  */
 import {
   buildLinkPath,
+  fontOf,
   horizontalBeamMap,
   hubArrowTip,
   nodeCardStyle,
   verticalBeamMap,
+  visualRankOf,
   type BeamAtOf,
-  type CardLevel,
 } from './geometry.js';
 import type { BranchColor, TokenSet } from '../theme/types.js';
 import type { ScenePrimitive } from './backend.js';
@@ -68,8 +69,13 @@ function nodeScene(
   colorOf: (id: string) => BranchColor | undefined,
 ): ScenePrimitive {
   const palette = colorOf(n.id);
-  const level: CardLevel = n.depth >= 2 ? 'leaf' : 'branch';
-  const style = nodeCardStyle(token, palette, level, n.isEntity ? (n.entityKind ?? null) : null);
+  // DEPTH-VIS-1：与 SVG 侧同源 —— rank 与字号都走唯一出口，Canvas/SVG 不得分叉
+  const style = nodeCardStyle(
+    token,
+    palette,
+    visualRankOf(n.depth),
+    n.isEntity ? (n.entityKind ?? null) : null,
+  );
   const selectedStroke = n.selected ? token.color.selection : style.stroke;
   const selectedWidth = n.selected ? style.strokeWidth + 1 : style.strokeWidth;
   const children: ScenePrimitive[] = [
@@ -85,15 +91,15 @@ function nodeScene(
       strokeWidth: selectedWidth,
     },
   ];
-  // 单行文本（骨架保真：省略多行换行；文本缺省占位）
-  const fontSize = n.depth >= 2 ? token.font.sizeLeaf : token.font.size;
+  // 单行文本（骨架保真：省略多行换行；文本缺省占位）——字号/字重按视觉档（fontOf 单一出口）
+  const { size: fontSize, weight: fontWeight } = fontOf(token, n.depth);
   children.push({
     type: 'text',
     x: token.spacing.padX + 2,
     y: n.box.h / 2,
     value: n.text ?? '（实体）',
     fontSize,
-    fontWeight: n.depth === 0 ? token.font.weightRoot : token.font.weight,
+    fontWeight,
     fill: style.text,
     dominantBaseline: 'central',
   });

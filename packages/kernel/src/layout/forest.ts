@@ -13,7 +13,9 @@
  */
 import type { EditableNode } from '../tree/treeOps.js';
 import {
+  bezierLink,
   layoutBounds,
+  NO_SATELLITE_HOOK,
   type ForestIslandEntry,
   type GrowDir,
   type LayoutCache,
@@ -21,6 +23,7 @@ import {
   type LayoutNode,
   type LinkGeometry,
   type MeasureFn,
+  type SatelliteHook,
 } from './mindmap.js';
 import { layoutLogic, layoutOrg, type LayoutKind } from './layouts.js';
 import { layoutMindmapBranched, linkGeometry } from './branching.js';
@@ -44,23 +47,59 @@ export interface CenterSpec {
   pos?: { x: number; y: number };
 }
 
+/** 岛内局部布局的选项（缓存通道 + S3 摘要卫星钩子） */
+interface IslandLayoutOpts {
+  cache?: LayoutCache;
+  measureKey?: string;
+  /** S3 摘要卫星钩子：**只有 right/left 岛**（layoutLogic）会消费它；
+   *  down/up 岛（layoutOrg）不承诺卫星，钩子被忽略 → 摘要留流内可见。 */
+  satellite?: SatelliteHook;
+}
+
 /** 方向 → 局部布局函数（仅取 nodes/bounds；links 平移后由 islandLinks 重建）。
  *  F3：第 4 参透传缓存选项——岛内经典布局（layoutLogic/layoutOrg）接 LayoutCache
- *  增量原语（编辑局部化）；调用方（branching 的 fallback 调用点）负责传参。 */
+ *  增量原语（编辑局部化）；调用方（branching 的 fallback 调用点）负责传参。
+ *
+ *  S3 注意：`branching.ts`（本批禁改）只透传 `{cache, measureKey}`，**不转发布局
+ *  选项里的 satellite 字段**。故卫星钩子不能靠这条通道——改由调用点用
+ *  `layoutByDir(dir, hook)` 预先**闭包绑定**（见下方），函数签名保持两字段不变。 */
 const LAYOUT_BY_DIR: Record<
   GrowDir,
-  (
-    r: EditableNode,
-    m: MeasureFn,
-    c: Set<string>,
-    opts?: { cache?: LayoutCache; measureKey?: string },
-  ) => LayoutResult
+  (r: EditableNode, m: MeasureFn, c: Set<string>, opts?: IslandLayoutOpts) => LayoutResult
 > = {
   right: (r, m, c, o) => layoutLogic(r, m, c, 1, o),
   left: (r, m, c, o) => layoutLogic(r, m, c, -1, o),
   down: (r, m, c, o) => layoutOrg(r, m, c, 1, o),
   up: (r, m, c, o) => layoutOrg(r, m, c, -1, o),
 };
+
+/**
+ * 把卫星钩子**闭包绑定**到方向布局函数上（S3）。
+ *
+ * 为什么必须在这里绑：`branching.ts` 的 fallback 调用点（本批禁改）只透传
+ * `{cache, measureKey}`——直接往 `BranchLayoutOptions` 里塞 satellite 到不了
+ * `layoutLogic`。改为返回一个**已捕获 hook** 的同签名函数：branching 照旧传两个字段，
+ * 钩子在闭包里生效。
+ *
+ * down/up（`layoutOrg`）**不绑定**——该函数签名无 satellite，摘要留流内可见（降级）。
+ */
+function layoutByDir(
+  dir: GrowDir,
+  hook: SatelliteHook,
+): (r: EditableNode, m: MeasureFn, c: Set<string>, opts?: IslandLayoutOpts) => LayoutResult {
+  const base = LAYOUT_BY_DIR[dir];
+  if (dir === 'down' || dir === 'up') return base; // 降级域：不承诺卫星
+  return (r, m, c, o) =>
+    layoutLogic(
+      r,
+      m,
+      c,
+      dir === 'right' ? 1 : -1,
+      o?.cache !== undefined || o?.measureKey !== undefined
+        ? { cache: o.cache, measureKey: o.measureKey, satellite: hook }
+        : { satellite: hook },
+    );
+}
 
 /** 方向 → 文档级布局类型（供 UI 复用同一套映射） */
 export const LAYOUT_KIND_BY_DIR: Record<GrowDir, LayoutKind> = {
@@ -85,17 +124,33 @@ function emptyResult(): LayoutResult {
  *                     collapsedKey / measureKey **身份比较**不匹配 → reset() 全量
  *                     （不用内容深比较替代）。对象归属由宿主单点持有（复用同一实例）。
  * @param opts.measureKey 度量语义键（字体/实体/展开态变化 → 换键强制全量）
+ * @param opts.satellite S3 摘要卫星钩子。**只对 right/left 岛生效**（岛内回退
+ *   `layoutLogic`）；down/up 岛回退 `layoutOrg` 不消费该钩子——摘要留流内可见
+ *   （降级，不消失）。缺省不注入 = 旧行为逐位等价。
  */
 export function layoutForest(
   centers: readonly CenterSpec[],
   measure: MeasureFn,
   collapsedIds: Set<string>,
-  opts: { gap?: number; cache?: LayoutCache; measureKey?: string } = {},
+  opts: {
+    gap?: number;
+    cache?: LayoutCache;
+    measureKey?: string;
+    measureDepthBase?: number;
+    satellite?: SatelliteHook;
+  } = {},
 ): LayoutResult {
   if (centers.length === 0) return emptyResult();
 
   const gap = opts.gap ?? 160;
   const cache = opts.cache;
+  // S3：卫星钩子（缺省 NO_SATELLITE_HOOK → 旧行为逐位等价）
+  const satellite = opts.satellite ?? NO_SATELLITE_HOOK;
+  // MEASURE-RANK：岛内局部深度 + 基准 = 文档绝对深度（视觉档度量用）。
+  // 缺省 0 = 顶层森林（岛根即文档深度 0），逐像素维持旧行为。
+  const depthBase = opts.measureDepthBase ?? 0;
+  const islandMeasure: MeasureFn =
+    depthBase === 0 ? measure : (node, depth) => measure(node, depthBase + (depth ?? 0));
   // 缓存失效契约（与 layoutMindmap 的 mindmap.ts:112-121 逐字同款）：
   // collapsedIds / measureKey 均**身份比较**，不匹配即 reset() + 全量。
   // 本检查先于任何岛内布局执行——分支路径当前忽略缓存命中，但通道的键位在此统一管理，
@@ -121,14 +176,16 @@ export function layoutForest(
   //    只影响提速、不影响正确性。
   const local = centers.map((spec) => {
     const entries = cache?.forestIslands.get(spec.node);
-    const hit = entries?.find((e) => e.dir === spec.dir);
+    // 命中判据含 depthBase（MEASURE-RANK）：同岛根在不同基准下的盒尺寸不同，不得混用
+    const hit = entries?.find((e) => e.dir === spec.dir && (e.depthBase ?? 0) === depthBase);
     if (hit) return { spec, res: hit.local, dirSink: hit.dirSink, entry: hit };
 
     const dirSink = new Map<string, GrowDir>();
-    const res = layoutMindmapBranched(spec.node, measure, collapsedIds, {
+    const res = layoutMindmapBranched(spec.node, islandMeasure, collapsedIds, {
       islandDir: spec.dir,
-      // 回退沿用岛内原四向布局（整棵朝该方向），保证无 note.dir 时零行为变更
-      fallback: LAYOUT_BY_DIR[spec.dir],
+      // 回退沿用岛内原四向布局（整棵朝该方向），保证无 note.dir 时零行为变更。
+      // S3：钩子在此**闭包绑定**（branching 只透传 cache/measureKey，见 layoutByDir）。
+      fallback: layoutByDir(spec.dir, satellite),
       dirSink,
       // 通道：cache / measureKey 透传到岛内布局调用面——无 dir 回退（LAYOUT_BY_DIR
       // 四向经典布局）与分支基准（layoutMindmap）已接增量原语（F3）；分支路径自身的
@@ -136,7 +193,7 @@ export function layoutForest(
       cache,
       measureKey: opts.measureKey,
     });
-    const entry: ForestIslandEntry = { dir: spec.dir, local: res, dirSink, placed: null };
+    const entry: ForestIslandEntry = { dir: spec.dir, depthBase, local: res, dirSink, placed: null };
     if (cache) {
       const list = cache.forestIslands.get(spec.node);
       if (list) list.push(entry);
@@ -174,6 +231,7 @@ export function layoutForest(
   //    否则从 local 重建（纯函数，无累加）。
   const nodes: LayoutNode[] = [];
   const links: LinkGeometry[] = [];
+  const satellites: LayoutNode[] = [];
   local.forEach((item, i) => {
     const origin = origins[i] ?? { x: 0, y: 0 };
     const entry = item.entry;
@@ -181,15 +239,21 @@ export function layoutForest(
     if (placed && placed.at.x === origin.x && placed.at.y === origin.y) {
       nodes.push(...placed.result.nodes);
       links.push(...placed.result.links);
+      // 落点未变 → 卫星随 placed.result 引用复用（与节点/连线同一守卫）
+      if (placed.result.satellites) satellites.push(...placed.result.satellites);
       return;
     }
     const shifted = shiftIsland(item.res, origin, item.spec.dir, item.dirSink);
     entry.placed = { at: { x: origin.x, y: origin.y }, result: shifted };
     nodes.push(...shifted.nodes);
     links.push(...shifted.links);
+    if (shifted.satellites) satellites.push(...shifted.satellites);
   });
 
-  return { nodes, links, bounds: layoutBounds(nodes) };
+  const out: LayoutResult = { nodes, links, bounds: layoutBounds(nodes) };
+  // 加法字段：仅在确有卫星时出现（无摘要岛 → 字段缺失，与基线逐位等价）
+  if (satellites.length > 0) out.satellites = satellites;
+  return out;
 }
 
 /**
@@ -200,6 +264,16 @@ export function layoutForest(
  *
  * 为什么不原地平移：局部产物被岛级缓存跨调用持有；原地累加会让第二次平移基于
  * 已平移的盒再加 delta（几何逐次漂移）。本函数对 local 零写入。
+ *
+ * ## S3 卫星（第二现场）
+ *
+ * 卫星子树根**不在** `root.children` 链上（它挂在成员带外侧，`parentId` = 成员父），
+ * 故 `shiftTree(root, …)` 覆盖不到它——若漏处理，卫星会**留在岛局部坐标**
+ * （岛平移后卫星不跟随 = 视觉漂离）。这里对每棵卫星独立产平移副本，并把它
+ * 并入返回结果的 `nodes` 与 `satellites`；卫星内部链接经 `islandSatelliteLinks` 重建。
+ *
+ * `satellites` 是岛级缓存条目的组成部分：`placed.result` 一并持有平移后的副本，
+ * 落点不变时引用复用（与节点/连线同一守卫）。
  */
 function shiftIsland(
   local: LayoutResult,
@@ -214,7 +288,36 @@ function shiftIsland(
   const dy = origin.y - (root.box.y + root.box.h / 2);
   const entry = shiftTree(root, dx, dy);
   const nodes = entry.preorder;
-  return { nodes, links: islandLinks(entry.shifted, dir, dirSink), bounds: layoutBounds(nodes) };
+  const links = islandLinks(entry.shifted, dir, dirSink);
+  // S3：卫星随岛平移（独立副本——卫星不在 root.children 链上）
+  const shiftedSats: LayoutNode[] = [];
+  for (const sat of local.satellites ?? []) {
+    const s = shiftTree(sat, dx, dy);
+    for (const n of s.preorder) nodes.push(n);
+    const satRoot = s.shifted;
+    shiftedSats.push(satRoot);
+    // 卫星内部链接（S→子）按平移后的世界坐标重建；不含 P→S
+    collectSatelliteLinks(satRoot, links);
+  }
+  const out: LayoutResult = { nodes, links, bounds: layoutBounds(nodes) };
+  if (shiftedSats.length > 0) out.satellites = shiftedSats;
+  return out;
+}
+
+/** 卫星子树内部链接重建（平移后 path 必须重算——字符串内含绝对坐标） */
+function collectSatelliteLinks(
+  ln: LayoutNode,
+  out: LinkGeometry[],
+): void {
+  for (const c of ln.children) {
+    out.push({
+      path: bezierLink(ln, c),
+      depth: ln.depth,
+      fromId: ln.node.id,
+      toId: c.node.id,
+    });
+    collectSatelliteLinks(c, out);
+  }
 }
 
 /**

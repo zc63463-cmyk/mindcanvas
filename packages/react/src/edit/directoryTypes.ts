@@ -22,6 +22,12 @@ export interface FsDirectoryHandle {
   /** 权限（Chromium） */
   queryPermission?: (desc?: { mode?: 'read' | 'readwrite' }) => Promise<PermissionState>;
   requestPermission?: (desc?: { mode?: 'read' | 'readwrite' }) => Promise<PermissionState>;
+  /**
+   * 目录同一性比较（Chromium）。
+   * 缺失或抛错时**必须**按「无法判定」处理（保守降级，不得按名称猜测）——
+   * 见 docs/specs/2026-09-19-file-assets-contract-close/contract-delta.md CD-02。
+   */
+  isSameEntry?: (other: unknown) => Promise<boolean>;
 }
 
 /** 目录项句柄 = 文件或目录 */

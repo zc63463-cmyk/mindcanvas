@@ -20,6 +20,7 @@ import {
   type CenterMenuActions,
   type EditorController,
   type SectionMenuActions,
+  type SummaryMenuActions,
 } from '@mindcanvas/react';
 import { readLensMap } from '@mindcanvas/kernel';
 import { nodeById } from './hooks/useEdgeActions.js';
@@ -62,6 +63,11 @@ export interface NodeContextMenuProps {
   onRequestFrameDepth?: (id: string, x: number, y: number, current: number, max: number) => void;
   /** v1.5.0 Section 三态菜单动作（D1：Section ⇒ center；写入走 controller 事务通道） */
   sectionActions?: SectionMenuActions;
+  /**
+   * S2：摘要菜单动作（「创建摘要…」= 两跳交互的第一跳）。
+   * 未注入 → 不出现该菜单项（与 frameActions / sectionActions 同款可选袋）。
+   */
+  summaryActions?: SummaryMenuActions;
   onClose: () => void;
 }
 
@@ -76,6 +82,7 @@ export function NodeContextMenu({
   onRequestLenCustom,
   onRequestFrameDepth,
   sectionActions,
+  summaryActions,
   onClose,
 }: NodeContextMenuProps) {
   return (
@@ -152,6 +159,9 @@ export function NodeContextMenu({
                 onRequestFrameDepth(id, ctxMenu.x, ctxMenu.y, current, max);
               },
             },
+        // S2：摘要（「创建摘要…」）——与「连线到…」并列于结构区。
+        // 这里只发起第一跳；末成员由用户在画布上点选（onNodeClick 首判）。
+        summaryActions,
       )}
       onClose={onClose}
     />
