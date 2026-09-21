@@ -14,10 +14,12 @@ import {
 import {
   buildLinkPath,
   computeBranchIndex,
+  fontOf,
   horizontalBeamMap,
   hubArrowTip,
   nodeCardStyle,
   verticalBeamMap,
+  visualRankOf,
   type LinkGeom,
 } from '../render/geometry.js';
 import { collectDeclaredGrowDir } from '../render/growDir.js';
@@ -137,7 +139,9 @@ export function exportSvg(
     const palette =
       token.color.branches[branchIndex.get(n.node.id) ?? 0] ?? token.color.branches[0]!;
     const entityKind = n.node.type === 'entity' ? (n.node.ref?.kind ?? null) : null;
-    const style = nodeCardStyle(token, palette, n.depth >= 2 ? 'leaf' : 'branch', entityKind);
+    // DEPTH-VIS-1：与画布同源（rank 决定卡样式、fontOf 决定字号字重）—— 导出即所见
+    const style = nodeCardStyle(token, palette, visualRankOf(n.depth), entityKind);
+    const { size: fontSize, weight: fontWeight } = fontOf(token, n.depth);
     const bx = n.box;
     parts.push(`<g transform="translate(${r(bx.x)} ${r(bx.y)})">`);
     parts.push(
@@ -146,8 +150,8 @@ export function exportSvg(
     );
     parts.push(
       `<text x="${r(bx.w / 2)}" y="${r(bx.h / 2)}" text-anchor="middle" dominant-baseline="central" ` +
-        `font-family="${esc(token.font.family)}" font-size="${n.depth >= 2 ? token.font.sizeLeaf : token.font.size}" ` +
-        `font-weight="${n.depth === 0 ? token.font.weightRoot : token.font.weight}" fill="${esc(style.text)}">` +
+        `font-family="${esc(token.font.family)}" font-size="${fontSize}" ` +
+        `font-weight="${fontWeight}" fill="${esc(style.text)}">` +
         `${esc(n.node.text ?? '')}</text>`,
     );
     parts.push('</g>');

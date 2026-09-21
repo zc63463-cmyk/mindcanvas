@@ -133,12 +133,14 @@ describe('reverseEdge：rel 三态 × dir 三态 × manual 有无（R4-2，12 �
       const visible = [...g.querySelectorAll('path')].find(
         (p) => p.getAttribute('stroke') !== 'transparent',
       );
-      if (visible === null) throw new Error('visible path not found');
+      // `.find()` 返回 `T | undefined` —— 必须按 undefined 收窄（`=== null` 收不掉）
+      if (visible === undefined) throw new Error('visible path not found');
       const nums = (visible.getAttribute('d') ?? '').match(/-?[\d.]+/g) ?? [];
       if (nums.length < 4) throw new Error('bad d');
+      // slice/join 而非按下标取值：noUncheckedIndexedAccess 下下标是 `string | undefined`
       const ends = {
-        start: `${nums[0]} ${nums[1]}`,
-        end: `${nums[nums.length - 2]} ${nums[nums.length - 1]}`,
+        start: nums.slice(0, 2).join(' '),
+        end: nums.slice(-2).join(' '),
       };
       screen.unmount();
       return ends;

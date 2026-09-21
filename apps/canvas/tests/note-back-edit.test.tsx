@@ -203,7 +203,10 @@ async function flipBack(container: HTMLElement): Promise<void> {
 async function enterMdEdit(container: HTMLElement): Promise<HTMLTextAreaElement> {
   fireEvent.click(must(container.querySelector('[data-note-md-edit]'), '编辑背面按钮'));
   await waitFor(() => expect(container.querySelector('[data-note-md-editor]')).not.toBeNull());
-  return must(container.querySelector('[data-note-md-editor] textarea'), '源文 textarea');
+  return must<HTMLTextAreaElement>(
+    container.querySelector('[data-note-md-editor] textarea'),
+    '源文 textarea',
+  );
 }
 
 /** 诊断：节点在当前 DOM 的位置快照（世界 translate + 首个 rect 尺寸） */

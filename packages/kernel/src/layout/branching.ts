@@ -130,7 +130,8 @@ export function layoutMindmapBranched(
 
   // ① 构建可见骨架（盒置于原点，折叠节点不展开子女——与 layoutMindmap 同语义）
   const buildSkeleton = (node: EditableNode, depth: number, parentId: string | null): LayoutNode => {
-    const m = measure(node);
+    // MEASURE-RANK：把即将写进 LayoutNode.depth 的深度交给度量（按视觉档分档）
+    const m = measure(node, depth);
     const children: LayoutNode[] = !collapsedIds.has(node.id)
       ? node.children.map((c) => buildSkeleton(c, depth + 1, node.id))
       : [];

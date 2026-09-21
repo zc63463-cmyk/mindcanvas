@@ -1,0 +1,16 @@
+{
+  // canvas 测试类型检查（DELIVERY-CLOSE Task 2）：
+  // 生产 include 不含 tests/，导致测试文件长期在门禁视野外（靠临时脚本人工探底）。
+  // 这里**只增测试视野**，不改生产 include（测试不得混入发布产物）。
+  //
+  // 为什么不复用 references：`tsc -b` 的引用项目不允许 noEmit，而本配置只需**检查**
+  // 不需产物；被引用的 kernel/react 声明由生产的 `tsc -b tsconfig.json` 先产出。
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // 与生产同一套环境类型（vite/client）：读源码的用例改用 Vite 的 `?raw` glob，
+    // 因此**不需要** @types/node（不新增依赖、不动 lockfile）。
+    "types": ["vite/client"],
+    "noEmit": true
+  },
+  "include": ["src", "tests", "vite.config.ts", "vitest.config.ts"]
+}

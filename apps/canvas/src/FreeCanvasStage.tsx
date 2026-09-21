@@ -1,26 +1,37 @@
 /**
- * FreeCanvasStage —— 自由画布子模式 Stage（C+1 · FC-E）。
+ * FreeCanvasStage —— 自由画布子模式 Stage（C+1 · FC-E；SAVE-LIFECYCLE 抽文档 hook）。
  *
  * 与导图 `MindmapStage` 平行：独立文档宿主（CanvasDocHost，独立 localStorage key）、
  * 独立状态；由 App 模式态分 Stage 挂载/卸载（切换不串导图 doc 状态，D6）。
  * 事实源 `*.mc.canvas.json`；视图 = @mindcanvas/react 的 FreeCanvasView。
+ *
+ * 文档状态与保存已抽至 `hooks/useFreeCanvasDocument`（会话令牌 + 内容归属校验）：
+ * 保存完成只在「写出的快照仍是当前模型」时清脏；文档替换（新建/打开/最近/演示）
+ * 先推进会话令牌。模式切换的离开保护属包 2（App 层）。
  */
 import {
   createEmptyDocument,
   parseCanvasDocument,
-  serializeCanvasDocument,
   type McCanvasDocument,
 } from '@mindcanvas/free-canvas';
-import { CHROME, FreeCanvasView, isEmbeddedFrame, type FsFileHandle } from '@mindcanvas/react';
-import { useRef, useState, type CSSProperties, type ChangeEvent } from 'react';
-import { LocalCanvasDocHost, type CanvasDoc } from './canvasDocHost.js';
+import { CHROME, FreeCanvasView, installBeforeUnload, isEmbeddedFrame } from '@mindcanvas/react';
+import { useEffect, useRef, useState, type CSSProperties, type ChangeEvent } from 'react';
+import { LocalCanvasDocHost } from './canvasDocHost.js';
+import { flushActiveDraft, hasPendingDraft } from './draftFlush.js';
+import type { DocumentLeavePort, RequestLeave } from './documentLifecycle.js';
+import { useLeavePortRegistration } from './hooks/useDocumentLeaveRegistration.js';
+import { useFreeCanvasDocument } from './hooks/useFreeCanvasDocument.js';
 import demoSource from './demo/demo-free.mc.canvas.json?raw';
 
 export interface FreeCanvasStageProps {
-  /** 返回导图模式（App 模式态） */
+  /** 返回导图模式（App 模式态；App 传入的已是经离开决策的回调） */
   onExit: () => void;
   /** 文档变更观察（测试/集成用；不参与产品逻辑） */
   onDocChange?: (doc: McCanvasDocument) => void;
+  /** MODE-GUARD：App 注入的离开决策器（新建/打开/最近/演示与返回导图共用） */
+  requestLeave?: RequestLeave;
+  /** MODE-GUARD：把本 Stage 的 leave port 登记到 App */
+  registerLeavePort?: (port: DocumentLeavePort | null) => () => void;
 }
 
 const EMPTY_NAME = '未命名.mc.canvas.json';
@@ -84,57 +95,56 @@ const noticeStyle: CSSProperties = {
   backdropFilter: 'blur(14px)',
 };
 
-export function FreeCanvasStage({ onExit, onDocChange }: FreeCanvasStageProps) {
+export function FreeCanvasStage({
+  onExit,
+  onDocChange,
+  requestLeave,
+  registerLeavePort,
+}: FreeCanvasStageProps) {
   const hostRef = useRef<LocalCanvasDocHost | null>(null);
   if (hostRef.current === null) hostRef.current = new LocalCanvasDocHost();
   const host = hostRef.current;
 
-  const [name, setName] = useState(EMPTY_NAME);
-  const [model, setModel] = useState<McCanvasDocument>(() => createEmptyDocument('未命名画布'));
-  const [dirty, setDirty] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const { name, model, dirty, notice, setNotice, applyModel, updateModel, save, isDirty, isSaving, waitForIdle } =
+    useFreeCanvasDocument({ host, initialName: EMPTY_NAME, onDocChange });
+
   const [recentOpen, setRecentOpen] = useState(false);
-  const handleRef = useRef<FsFileHandle | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const applyModel = (m: McCanvasDocument, nextName: string, handle?: FsFileHandle) => {
-    setModel(m);
-    onDocChange?.(m);
-    setName(nextName);
-    handleRef.current = handle;
-    setDirty(false);
-  };
+  // MODE-GUARD：登记离开端口（方法读实时状态；本模式无自动保存 → 无 suppressPendingAuto）
+  useLeavePortRegistration(registerLeavePort, () => ({
+    flushEdits: flushActiveDraft,
+    isDirty,
+    isSaving,
+    waitForIdle,
+    save,
+  }));
 
-  const onChange = (m: McCanvasDocument) => {
-    setModel(m);
-    onDocChange?.(m);
-    setDirty(true);
+  // beforeunload：dirty / 未提交草稿 / 写入进行中 时拦截（原生能力，不在 unload 里弹自定义模态）
+  useEffect(
+    () => installBeforeUnload(() => isDirty() || isSaving() || hasPendingDraft()),
+    [isDirty, isSaving],
+  );
+
+  /** 离开保护：有决策器时先判定（保存/放弃/取消）；缺省直接执行（独立用法/旧测试） */
+  const leaveOr = (perform: () => void): void => {
+    if (requestLeave === undefined) {
+      perform();
+      return;
+    }
+    void requestLeave(perform);
   };
 
   const onNew = () => {
-    applyModel(createEmptyDocument('未命名画布'), EMPTY_NAME);
-    setNotice(null);
-    setRecentOpen(false);
+    leaveOr(() => {
+      applyModel(createEmptyDocument('未命名画布'), EMPTY_NAME);
+      setNotice(null);
+      setRecentOpen(false);
+    });
   };
 
-  const onSave = async () => {
-    const doc: CanvasDoc = {
-      id: name,
-      name,
-      source: serializeCanvasDocument(model),
-      handle: handleRef.current,
-      saved: true,
-      ts: Date.now(),
-    };
-    try {
-      const out = await host.save(doc);
-      if (out.handle !== undefined) handleRef.current = out.handle;
-      host.remember(doc);
-      setDirty(false);
-      setNotice(out.result === 'fs' ? '已保存' : '已下载 JSON（当前环境不支持直接写回文件）');
-    } catch {
-      setNotice('保存失败');
-    }
+  const onSave = () => {
+    void save();
   };
 
   const onOpen = async () => {
@@ -146,10 +156,14 @@ export function FreeCanvasStage({ onExit, onDocChange }: FreeCanvasStageProps) {
     }
     try {
       const opened = await host.open();
-      if (opened === null) return; // 用户取消
-      applyModel(parseCanvasDocument(opened.source), opened.name, opened.handle);
-      host.remember(opened);
-      setNotice(null);
+      if (opened === null) return; // 用户取消 → 当前模型不变（也不进入离开决策）
+      // 先解析（失败不破坏当前模型），再走离开决策
+      const next = parseCanvasDocument(opened.source);
+      leaveOr(() => {
+        applyModel(next, opened.name, opened.handle);
+        host.remember(opened);
+        setNotice(null);
+      });
     } catch {
       setNotice('打开失败：文件不是有效的 .mc.canvas.json');
     }
@@ -161,31 +175,39 @@ export function FreeCanvasStage({ onExit, onDocChange }: FreeCanvasStageProps) {
     if (file === undefined) return;
     try {
       const source = await file.text();
-      applyModel(parseCanvasDocument(source), file.name);
-      host.remember({ id: file.name, name: file.name, source, saved: true, ts: Date.now() });
-      setNotice(null);
+      const next = parseCanvasDocument(source); // 先解析：非法文件不影响当前文档
+      leaveOr(() => {
+        applyModel(next, file.name);
+        host.remember({ id: file.name, name: file.name, source, saved: true, ts: Date.now() });
+        setNotice(null);
+      });
     } catch {
       setNotice('打开失败：文件不是有效的 .mc.canvas.json');
     }
   };
 
   const onDemo = () => {
-    applyModel(parseCanvasDocument(demoSource), 'demo-free.mc.canvas.json');
-    host.remember({
-      id: 'demo-free.mc.canvas.json',
-      name: 'demo-free.mc.canvas.json',
-      source: demoSource,
-      saved: true,
-      ts: Date.now(),
+    leaveOr(() => {
+      applyModel(parseCanvasDocument(demoSource), 'demo-free.mc.canvas.json');
+      host.remember({
+        id: 'demo-free.mc.canvas.json',
+        name: 'demo-free.mc.canvas.json',
+        source: demoSource,
+        saved: true,
+        ts: Date.now(),
+      });
+      setRecentOpen(false);
+      setNotice('演示画布：便签可翻面、两卡已连线');
     });
-    setRecentOpen(false);
-    setNotice('演示画布：便签可翻面、两卡已连线');
   };
 
-  const onOpenRecent = (d: CanvasDoc) => {
+  const onOpenRecent = (d: { id: string; name: string; source: string }) => {
     try {
-      applyModel(parseCanvasDocument(d.source), d.name);
-      setNotice('已从最近载入（保存时需重新选择文件关联）');
+      const next = parseCanvasDocument(d.source); // 先解析：损坏记录不影响当前文档
+      leaveOr(() => {
+        applyModel(next, d.name);
+        setNotice('已从最近载入（保存时需重新选择文件关联）');
+      });
     } catch {
       setNotice('最近记录的画布已损坏');
     }
@@ -205,7 +227,7 @@ export function FreeCanvasStage({ onExit, onDocChange }: FreeCanvasStageProps) {
         fontFamily: CHROME.fontFamily,
       }}
     >
-      <FreeCanvasView doc={model} onChange={onChange} style={{ position: 'absolute', inset: 0 }} />
+      <FreeCanvasView doc={model} onChange={updateModel} style={{ position: 'absolute', inset: 0 }} />
 
       <div data-fc-stage-bar style={barStyle}>
         <button type="button" data-fc-exit onClick={onExit} style={btnStyle}>

@@ -16,6 +16,7 @@
  */
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { nativeBackEnabled, type Face, type NativeFrontPayload, type NativePlacement } from '@mindcanvas/free-canvas';
+import { useCompositionCommitGuard } from '../edit/compositionGuard.js';
 import { CHROME } from '../theme/tokens.js';
 import type { CanvasTool } from './toolTypes.js';
 
@@ -125,7 +126,16 @@ function FaceEditor({
     ta.focus();
     ta.setSelectionRange(ta.value.length, ta.value.length);
   }, []);
+  // MG-R1：统一的组合提交边界（失焦被挡 → 组合结束后用已确认文字补提交）
+  const { onCompositionStart, onCompositionEnd, allowCommit } = useCompositionCommitGuard(
+    (text) => {
+      onCommit(text);
+    },
+  );
   const commit = () => {
+    // 组合未结束时框里是**未确认的候选串**，blur（点工具栏 / 模态抢焦点 / 点到别处）
+    // 不得把它当正文提交 —— 提交等于截断正在输入的文字。
+    if (!allowCommit()) return;
     onCommit(taRef.current?.value ?? initial);
   };
   return (
@@ -135,6 +145,8 @@ function FaceEditor({
       defaultValue={initial}
       placeholder="输入内容…（Shift+Enter 完成，Enter 换行）"
       onPointerDown={(e) => e.stopPropagation()}
+      onCompositionStart={onCompositionStart}
+      onCompositionEnd={(e) => onCompositionEnd(e.currentTarget.value)}
       onBlur={commit}
       onKeyDown={(e) => {
         e.stopPropagation();

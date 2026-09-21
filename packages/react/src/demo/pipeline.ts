@@ -29,7 +29,7 @@ import type {
   CharMeasure,
   MeasureFn,
 } from '@mindcanvas/kernel';
-import { createNodeMeasure } from '../render/domMeasure.js';
+import { createNodeMeasure, type CharMeasureOf } from '../render/domMeasure.js';
 import { estimateCommentAreaHeight, GROW_EXPAND_W } from '../chrome/GrowthCommentPanel.js';
 import {
   DESC_EDIT_MIN_W,
@@ -97,9 +97,10 @@ export function createExpandMeasure(
   extraH: number,
 ): MeasureFn {
   if (expandedId === null) return base;
-  return (node) => {
-    if (node.id !== expandedId) return base(node);
-    const b = base(node);
+  // MEASURE-RANK：depth 必须**逐层透传**（包装层吞掉它 = 视觉档度量退回单档）
+  return (node, depth) => {
+    if (node.id !== expandedId) return base(node, depth);
+    const b = base(node, depth);
     return { w: Math.max(expandW, b.w), h: b.h + extraH };
   };
 }
@@ -111,8 +112,9 @@ export function createFixedNoteMeasure(
   extraH: number,
 ): MeasureFn {
   if (fixedIds.size === 0) return base;
-  return (node) => {
-    const b = base(node);
+  // MEASURE-RANK：depth 逐层透传（见 createExpandMeasure 注释）
+  return (node, depth) => {
+    const b = base(node, depth);
     return fixedIds.has(node.id) ? { w: b.w, h: b.h + extraH } : b;
   };
 }
@@ -155,8 +157,8 @@ export function createDescMeasure(
   char: CharMeasure,
   descEditingId: string | null = null,
 ): MeasureFn {
-  return (node) => {
-    const b = base(node);
+  return (node, depth) => {
+    const b = base(node, depth);
     const raw = node.note?.desc;
     const desc = typeof raw === 'string' ? raw : '';
     const isEditing = descEditingId !== null && node.id === descEditingId;
@@ -217,8 +219,14 @@ export function layoutDemo(
    * （F3：编辑局部化）均已接入。
    */
   centers: readonly CenterSpec[] | null = null,
+  /**
+   * MEASURE-RANK：档位字符度量（`createRankedCharMeasure(token.font)` 产出）。
+   * 提供 → 布局按视觉档量（叶卡贴字、整体盒变小、fit k 回升）；缺省 → 单档 `char`（旧行为，
+   * 所有既有调用方零改动）。必须与 `MapView charOf` 同一份，否则度量与渲染字号分叉。
+   */
+  charOf?: CharMeasureOf,
 ): DemoLayout {
-  const base = createNodeMeasure(char, entities);
+  const base = createNodeMeasure(char, entities, charOf);
   const withQa = expandedId
     ? createExpandMeasure(base, expandedId, GROW_EXPAND_W, estimateCommentAreaHeight())
     : base;

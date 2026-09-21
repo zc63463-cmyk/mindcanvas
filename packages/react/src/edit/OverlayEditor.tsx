@@ -5,7 +5,7 @@
  * G10：注入 onTabGrow 后，编辑态 Tab = 提交 + 建子节点（连续录入），不再只是拦截。
  *
  * 视觉口径（K4 后补）：与 NodeG 保持一致
- * - 字号 / 字重：随 depth 走（叶 sizeLeaf / 分支 size；根 weightRoot）
+ * - 字号 / 字重：随 depth 走唯一出口 fontOf（DEPTH-VIS-1：root / branch / leaf 三档）
  * - 垂直居中：lineHeight = 节点盒高
  * - 选中态：selection 描边 + 柔和 inset 阴影 + 节点同底色（与玻璃主题一致）
  * - 全选：setSelectionRange（不再 execCommand 避免遗留高亮）
@@ -20,6 +20,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { FRAME_OUTLINE_ROW_PAD_X, FRAME_OUTLINE_ROW_PAD_Y, LINE_H } from '@mindcanvas/kernel';
 import type { TokenSet } from '../theme/types.js';
+import { fontOf } from '../render/geometry.js';
+import { useCompositionCommitGuard } from './compositionGuard.js';
 
 export interface OverlayEditorProps {
   x: number;
@@ -28,9 +30,9 @@ export interface OverlayEditorProps {
   h: number;
   initial: string;
   token: TokenSet;
-  /** 节点深度（决定字号字重） */
+  /** 节点深度（决定字号字重：fontOf 单一出口 —— DEPTH-VIS-1） */
   depth: number;
-  /** 是否根节点（决定字重） */
+  /** 是否根节点：语义标记（调用方仍传；字号/字重已统一由 depth 经 fontOf 决定） */
   root: boolean;
   /** 视口缩放（k）：所有边框/阴影按 k 缩放保持比例 */
   scale: number;
@@ -63,7 +65,6 @@ export function OverlayEditor({
   initial,
   token,
   depth,
-  root,
   scale,
   wrap = false,
   onCommit,
@@ -77,10 +78,9 @@ export function OverlayEditor({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const wrapRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // 节点本体口径：叶 = sizeLeaf / 分支 = size；根 = weightRoot
-  const isLeaf = depth >= 2;
-  const fontSize = (isLeaf ? token.font.sizeLeaf : token.font.size) * scale;
-  const fontWeight = root ? token.font.weightRoot : token.font.weight;
+  // 节点本体口径：与 NodeG 走同一出口 fontOf（DEPTH-VIS-1）——三档 rank，编辑框与节点卡逐像素同字号
+  const { size: baseFontSize, weight: fontWeight } = fontOf(token, depth);
+  const fontSize = baseFontSize * scale;
   // 行高：节点卡 = 盒高（与 NodeG LINE_H 视觉等价：单行占满盒高）；
   // 换行模式 = LINE_H（与 FrameOutline 正文行同口径 → 展示/编辑逐行对齐）
   const lineHeight = wrap ? LINE_H * scale : h;
@@ -125,6 +125,13 @@ export function OverlayEditor({
     onCommit(text);
   };
 
+  // MG-R1：统一的组合提交边界（失焦/组合结束补提交；Esc 取消时不补）
+  const { onCompositionStart, onCompositionEnd, allowCommit } = useCompositionCommitGuard(
+    (text) => {
+      if (!escapedRef.current) commit(text);
+    },
+  );
+
   const cancel = (): void => {
     if (committedRef.current) return;
     escapedRef.current = true;
@@ -161,6 +168,9 @@ export function OverlayEditor({
   };
 
   const handleBlur = (): void => {
+    // MG-R1：组合未结束时框里是未确认的候选串 —— blur（点工具栏/模态抢焦点/点到别处）
+    // 不得把它当正文提交；组合结束后由组合边界补提交**已确认**的文字。
+    if (!allowCommit()) return;
     if (!escapedRef.current) commit(value);
   };
 
@@ -200,6 +210,8 @@ export function OverlayEditor({
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onKeyDown={handleKeyDown}
+        onCompositionStart={onCompositionStart}
+        onCompositionEnd={(e) => onCompositionEnd(e.currentTarget.value)}
         onBlur={handleBlur}
         spellCheck={false}
         autoComplete="off"
@@ -226,6 +238,8 @@ export function OverlayEditor({
       value={value}
       onChange={(e) => setValue(e.target.value)}
       onKeyDown={handleKeyDown}
+      onCompositionStart={onCompositionStart}
+      onCompositionEnd={(e) => onCompositionEnd(e.currentTarget.value)}
       onBlur={handleBlur}
       spellCheck={false}
       autoComplete="off"

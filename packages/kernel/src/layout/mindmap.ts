@@ -6,6 +6,23 @@
  */
 
 import type { EditableNode } from '../tree/treeOps.js';
+// 连线几何已按职责抽到 linkGeometry（守本文件 600 行线；实现逐字保留）。
+// 这里只 import 组装 `bezierLink` 需要的两个原语，其余符号**原样再导出**——
+// 既有 `from './mindmap.js'` 的引用零改造。
+import { bezierControls, bezierPath } from './linkGeometry.js';
+
+export {
+  bezierControls,
+  bezierPath,
+  compactBezier,
+  orgBeamLink,
+  orgBeamLinkUp,
+  orgBeamPoints,
+  orgBeamPointsUp,
+  orthogonalPath,
+  sampleBezier,
+} from './linkGeometry.js';
+export type { BezierControls, LinkAnchor, Point } from './linkGeometry.js';
 
 export interface Box {
   x: number;
@@ -38,7 +55,20 @@ export interface LayoutResult {
   bounds: { minX: number; minY: number; maxX: number; maxY: number };
 }
 
-export type MeasureFn = (node: EditableNode) => { w: number; h: number };
+/**
+ * 节点度量（node → 盒尺寸）。
+ *
+ * `depth` 为**可选**第二参（MEASURE-RANK，2026-09-18，ADR-0004 minor：只新增可选参数，
+ * 既有 `(node) => …` 实现与调用方零改动）：布局把自己即将写进 `LayoutNode.depth` 的那个
+ * 深度一并交给度量方，使「按视觉档分档的度量」（root/branch/leaf 三档字号）与最终盒尺寸同源。
+ *
+ * 契约：
+ * - 已知深度时**必须**传（renderer 注入的 `createNodeMeasure` 依赖它分档；缺省 = 该实现
+ *   自行回退单档，盒会偏大——叶子白边即由此而来）；
+ * - 传入值 = 该节点在**所属布局域**内的深度（岛/框内布局以岛根/框根为 0，与 LayoutNode.depth 一致）；
+ * - 不传 = 老行为（单档度量），所有旧调用方逐像素不变。
+ */
+export type MeasureFn = (node: EditableNode, depth?: number) => { w: number; h: number };
 
 /** 生长方向（四向）。定义在布局基座：forest（中心森林）与 layouts（结构布局/分支调度）
  *  都依赖它，置此避免上层模块互取类型形成循环依赖。 */
@@ -63,6 +93,12 @@ export const V_GAP = 14;
 export interface ForestIslandEntry {
   /** 岛方向（缓存键的一部分：同岛根换方向 → 重算） */
   dir: GrowDir;
+  /**
+   * 度量深度基准（MEASURE-RANK 新增可选）：岛内局部深度 + 本值 = 文档绝对深度。
+   * 仅「框挂出岛」用得上（挂出子树以文档绝对深度参与视觉档）；顶层森林/岛缺省 0。
+   * 与 `dir` 一同构成缓存键——基准变了就重算（盒尺寸随深度分档）。
+   */
+  depthBase?: number;
   /** 局部布局结果（根中心在局部原点附近；**永不被平移污染**） */
   local: LayoutResult;
   /** 有效方向回填（岛级产物——合并期重建连线要用；漏缓存则线型漂移） */
@@ -80,8 +116,16 @@ export interface ForestIslandEntry {
  * 缓存可跨调用命中 → 仅重算受影响分支。
  */
 export class LayoutCache {
-  /** 子树高度（EditableNode 身份键；折叠节点不入缓存） */
+  /**
+   * 子树高度（EditableNode 身份键；折叠节点不入缓存）。
+   *
+   * ⚠️ MEASURE-RANK 起**内置布局已改用 `heightsByDepth`**：度量可随深度分档后，
+   * 「同一节点对象在不同深度」的子树高度会不同（拖拽改层级 / 框挂出岛以岛根身份复用），
+   * 单键位会命中陈旧高度。本字段保留仅为 v1 兼容（无内置读写），新代码请用 `heightsByDepth`。
+   */
   heights = new WeakMap<EditableNode, number>();
+  /** 子树高度（深度敏感键：EditableNode 身份 → depth → 高度；MEASURE-RANK） */
+  heightsByDepth = new WeakMap<EditableNode, Map<number, number>>();
   /** 上次构建的 LayoutNode（子树复用载体；含盒/子节点） */
   nodes = new WeakMap<EditableNode, LayoutNode>();
   /** 放置戳（LayoutNode → 上次放置参数；相同则跳过重放） */
@@ -98,6 +142,7 @@ export class LayoutCache {
 
   reset(): void {
     this.heights = new WeakMap();
+    this.heightsByDepth = new WeakMap();
     this.nodes = new WeakMap();
     this.stamps = new WeakMap();
     this.collects = new WeakMap();
@@ -139,21 +184,24 @@ export function layoutMindmap(
     cache.collapsedKey = collapsedIds;
     cache.measureKey = opts.measureKey ?? null;
   }
-  const heights = cache ? cache.heights : new WeakMap<EditableNode, number>();
+  // 子树高度（含折叠剪枝；EditableNode 身份 + **depth** 双键缓存——未变子树 O(1) 命中）
+  // MEASURE-RANK：盒尺寸随深度分档 → 键必须含 depth（同一节点对象换深度后不得命中旧高）
+  const heights = cache ? cache.heightsByDepth : new WeakMap<EditableNode, Map<number, number>>();
 
-  // 子树高度（含折叠剪枝；EditableNode 身份缓存——未变子树 O(1) 命中）
-  const subtreeHeightOf = (node: EditableNode): number => {
-    if (collapsedIds.has(node.id)) return measure(node).h;
-    const hit = heights.get(node);
+  const subtreeHeightOf = (node: EditableNode, depth: number): number => {
+    if (collapsedIds.has(node.id)) return measure(node, depth).h;
+    const byDepth = heights.get(node);
+    const hit = byDepth?.get(depth);
     if (hit !== undefined) return hit;
-    const m = measure(node);
+    const m = measure(node, depth);
     let hh = m.h;
     if (node.children.length > 0) {
       let sum = 0;
-      for (const c of node.children) sum += subtreeHeightOf(c) + V_GAP;
+      for (const c of node.children) sum += subtreeHeightOf(c, depth + 1) + V_GAP;
       hh = Math.max(m.h, sum - V_GAP);
     }
-    heights.set(node, hh);
+    if (byDepth) byDepth.set(depth, hh);
+    else heights.set(node, new Map([[depth, hh]]));
     return hh;
   };
 
@@ -176,7 +224,7 @@ export function layoutMindmap(
         return cached;
       }
     }
-    const m = measure(node);
+    const m = measure(node, depth);
     const children: LayoutNode[] = !collapsedIds.has(node.id)
       ? node.children.map((c) => build(c, depth + 1, side, node.id))
       : [];
@@ -197,7 +245,7 @@ export function layoutMindmap(
   let leftH = 0;
   let rightH = 0;
   for (const child of root.children) {
-    const h = subtreeHeightOf(child);
+    const h = subtreeHeightOf(child, 1);
     // 平局归右（首个分支去右侧，符合思维导图惯例）
     const side: -1 | 1 = leftH + h / 2 < rightH + h / 2 ? -1 : 1;
     if (side === -1) leftH += h + V_GAP;
@@ -206,7 +254,7 @@ export function layoutMindmap(
   }
 
   // 4. 根盒居中于原点 + 直接以正确 side 构建（side 翻转的子树自动重算）
-  const rootMeasure = measure(root);
+  const rootMeasure = measure(root, 0);
   const rootNode: LayoutNode = {
     node: root,
     box: { x: -rootMeasure.w / 2, y: -rootMeasure.h / 2, w: rootMeasure.w, h: rootMeasure.h },
@@ -221,7 +269,7 @@ export function layoutMindmap(
     const sideChildren = rootNode.children.filter((c) => c.side === side);
     if (sideChildren.length === 0) continue;
     let total = 0;
-    for (const c of sideChildren) total += subtreeHeightOf(c.node);
+    for (const c of sideChildren) total += subtreeHeightOf(c.node, 1);
     total += V_GAP * (sideChildren.length - 1);
     let cursor = -total / 2;
     for (const child of sideChildren) {
@@ -232,7 +280,7 @@ export function layoutMindmap(
         side > 0 ? rootNode.box.x + rootNode.box.w : rootNode.box.x,
         cache,
       );
-      cursor += subtreeHeightOf(child.node) + V_GAP;
+      cursor += subtreeHeightOf(child.node, 1) + V_GAP;
     }
   }
 
@@ -367,94 +415,7 @@ export function subtreeHeightCached(ln: LayoutNode): number {
   return result;
 }
 
-/** 紧凑三次贝塞尔（curvature 归一化弧高；支持左右双向） */
-export function compactBezier(
-  sx: number,
-  sy: number,
-  ex: number,
-  ey: number,
-  curvature = 0.4,
-): string {
-  const dx = Math.abs(ex - sx) * curvature;
-  const dy = Math.abs(ey - sy) * curvature;
-  const dir = ex >= sx ? 1 : -1;
-  return `M ${sx} ${sy} C ${sx + dir * dx} ${sy + dy / 2}, ${ex - dir * dx} ${ey - dy / 2}, ${ex} ${ey}`;
-}
-
-/** 二维点（连线折线 / 碰撞采样共用） */
-export interface Point {
-  x: number;
-  y: number;
-}
-
-/** 三次贝塞尔的四个控制点（起点 / 两个控制点 / 终点） */
-export interface BezierControls {
-  sx: number;
-  sy: number;
-  c1x: number;
-  c1y: number;
-  c2x: number;
-  c2y: number;
-  ex: number;
-  ey: number;
-}
-
-/**
- * 父→子贝塞尔的控制点（**渲染与碰撞检测共用的唯一几何来源**）。
- *
- * 与 {@link bezierLink} / {@link compactBezier} 逐值一致：端点贴父/子左右缘，
- * 控制点取中点偏移。碰撞检测采样这条曲线，渲染输出这条曲线的 path——
- * 两者若各写一份，避让算出来的「安全带」就可能与真正画出来的线不一致。
- */
-export function bezierControls(
-  parent: LayoutNode,
-  child: LayoutNode,
-  curvature = 0.4,
-): BezierControls {
-  const fromRight = child.box.x > parent.box.x;
-  const sx = fromRight ? parent.box.x + parent.box.w : parent.box.x;
-  const ex = fromRight ? child.box.x : child.box.x + child.box.w;
-  const sy = parent.box.y + parent.box.h / 2;
-  const ey = child.box.y + child.box.h / 2;
-  const dx = Math.abs(ex - sx) * curvature;
-  const dy = Math.abs(ey - sy) * curvature;
-  const dir = ex >= sx ? 1 : -1;
-  return {
-    sx,
-    sy,
-    c1x: sx + dir * dx,
-    c1y: sy + dy / 2,
-    c2x: ex - dir * dx,
-    c2y: ey - dy / 2,
-    ex,
-    ey,
-  };
-}
-
-/** 把 {@link BezierControls} 转成 SVG path（与 compactBezier 同公式） */
-export function bezierPath(c: BezierControls): string {
-  return `M ${c.sx} ${c.sy} C ${c.c1x} ${c.c1y}, ${c.c2x} ${c.c2y}, ${c.ex} ${c.ey}`;
-}
-
-/** 三次贝塞尔采样为折线（连线穿越检测用；缺省 16 段足够贴合曲线） */
-export function sampleBezier(c: BezierControls, segments = 16): Point[] {
-  const out: Point[] = [];
-  for (let i = 0; i <= segments; i++) {
-    const t = i / segments;
-    const u = 1 - t;
-    const a = u * u * u;
-    const b = 3 * u * u * t;
-    const d = 3 * u * t * t;
-    const e = t * t * t;
-    out.push({
-      x: a * c.sx + b * c.c1x + d * c.c2x + e * c.ex,
-      y: a * c.sy + b * c.c1y + d * c.c2y + e * c.ey,
-    });
-  }
-  return out;
-}
-
-/** 父边线型构建器：由布局方按类型注入 */
+/** 父边线型构建器：由布局方按类型注入（参数是 `LayoutNode`：组织图梁线要用 `parent.children`） */
 export type LinkBuilder = (parent: LayoutNode, child: LayoutNode) => string;
 
 /** 水平紧凑贝塞尔（端点贴父/子左右边界，子在其右取左右缘，反之为左缘） */
@@ -462,16 +423,22 @@ export const bezierLink: LinkBuilder = (parent, child) => bezierPath(bezierContr
 
 // ---------- 共享布局工具（其他结构布局复用：树构建 / 收集 / 连线） ----------
 
-/** 构建可见布局树（折叠节点不展开子女；side 默认同侧继承根=0） */
+/**
+ * 构建可见布局树（折叠节点不展开子女；side 默认同侧继承根=0）。
+ *
+ * MEASURE-RANK：`depth` 形参为**度量深度**（根 = 0），逐层 +1 交给 measure；
+ * 产出的 `depth` 字段仍写 0（消费方 `annotateTree` 会按最终语义重写，保持旧行为逐值不变）。
+ */
 export function buildLayoutTree(
   root: EditableNode,
   measure: MeasureFn,
   collapsedIds: Set<string>,
   side: -1 | 0 | 1 = 0,
+  depth = 0,
 ): LayoutNode {
-  const m = measure(root);
+  const m = measure(root, depth);
   const children = !collapsedIds.has(root.id)
-    ? root.children.map((c) => buildLayoutTree(c, measure, collapsedIds, side))
+    ? root.children.map((c) => buildLayoutTree(c, measure, collapsedIds, side, depth + 1))
     : [];
   return {
     node: root,
@@ -509,68 +476,6 @@ export function collectLayout(
   };
   walk(rootNode);
   return { nodes, links };
-}
-
-/** 正交折线 → SVG path（轴对齐航点，拐角圆角 r，借鉴 markvault-js waypointsToSVGPath） */
-export function orthogonalPath(pts: Array<{ x: number; y: number }>, r = 5): string {
-  if (pts.length < 2) return '';
-  if (pts.length === 2) return `M ${pts[0].x} ${pts[0].y} L ${pts[1].x} ${pts[1].y}`;
-  let d = `M ${pts[0].x} ${pts[0].y}`;
-  for (let i = 1; i < pts.length - 1; i++) {
-    const prev = pts[i - 1];
-    const curr = pts[i];
-    const next = pts[i + 1];
-    const inLen = Math.abs(curr.x - prev.x) + Math.abs(curr.y - prev.y) || 1;
-    const outLen = Math.abs(next.x - curr.x) + Math.abs(next.y - curr.y) || 1;
-    const rr = Math.min(r, inLen / 2, outLen / 2);
-    const inD = {
-      x: curr.x === prev.x ? 0 : (curr.x - prev.x) / Math.abs(curr.x - prev.x),
-      y: curr.y === prev.y ? 0 : (curr.y - prev.y) / Math.abs(curr.y - prev.y),
-    };
-    const outD = {
-      x: next.x === curr.x ? 0 : (next.x - curr.x) / Math.abs(next.x - curr.x),
-      y: next.y === curr.y ? 0 : (next.y - curr.y) / Math.abs(next.y - curr.y),
-    };
-    d += ` L ${curr.x - inD.x * rr} ${curr.y - inD.y * rr}`;
-    d += ` Q ${curr.x} ${curr.y}, ${curr.x + outD.x * rr} ${curr.y + outD.y * rr}`;
-  }
-  const last = pts[pts.length - 1];
-  d += ` L ${last.x} ${last.y}`;
-  return d;
-}
-
-/** 组织图梁线的航点（向下）：父底中心 → 共享梁（beamY）→ 子顶中心 */
-export function orgBeamPoints(parent: LayoutNode, child: LayoutNode, beamY: number): Point[] {
-  return [
-    { x: parent.box.x + parent.box.w / 2, y: parent.box.y + parent.box.h },
-    { x: parent.box.x + parent.box.w / 2, y: beamY },
-    { x: child.box.x + child.box.w / 2, y: beamY },
-    { x: child.box.x + child.box.w / 2, y: child.box.y },
-  ];
-}
-
-/** 组织图梁线：父底中心垂直下 → 共享梁（beamY）水平 → 子顶中心垂直下 */
-export function orgBeamLink(parent: LayoutNode, child: LayoutNode, beamY: number): string {
-  return orthogonalPath(orgBeamPoints(parent, child, beamY));
-}
-
-/** 组织图梁线的航点（向上）：父顶中心 → 共享梁（beamY）→ 子底中心 */
-export function orgBeamPointsUp(parent: LayoutNode, child: LayoutNode, beamY: number): Point[] {
-  return [
-    { x: parent.box.x + parent.box.w / 2, y: parent.box.y },
-    { x: parent.box.x + parent.box.w / 2, y: beamY },
-    { x: child.box.x + child.box.w / 2, y: beamY },
-    { x: child.box.x + child.box.w / 2, y: child.box.y + child.box.h },
-  ];
-}
-
-/**
- * 组织架构连线（向上生长版；G6′ 四向生长）。
- * 与 orgBeamLink 镜像：起点取父**顶边**中点、终点取子**底边**中点。
- * beamY 落在父顶边与子底边之间（由调用方按 direction 计算）。
- */
-export function orgBeamLinkUp(parent: LayoutNode, child: LayoutNode, beamY: number): string {
-  return orthogonalPath(orgBeamPointsUp(parent, child, beamY));
 }
 
 /** 布局包围盒 */

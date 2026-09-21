@@ -12,6 +12,8 @@
  */
 import type { FsDirectoryHandle } from './directoryTypes.js';
 import type { FsFileHandle } from './save.js';
+import { isRegistryRecord } from './workspaceScope.js';
+import type { RegistryReadResult, WorkspaceRegistryRecord } from './workspaceScope.js';
 
 /** IDB 库名 / 对象仓库名 */
 const DB_NAME = 'mindcanvas-handles';
@@ -186,4 +188,199 @@ export async function verifyPermission(
   } catch {
     return false;
   }
+}
+
+// ============================================================ P0-0-2 工作区注册表
+//
+// 为什么是**新键**（CE-02）：身份记录必须与裸句柄分开存。把 `{handle, scopeId, v}`
+// 之类的包装对象写进既有的 `'workspace-root'` 会让旧版本读不回工作区（它的
+// `isDirectoryHandle` 谓词要求对象上直接有 `getDirectoryHandle`）。因此：
+//   - `'workspace-root'`          永远只放**裸**目录句柄（既有语义不变）；
+//   - `'workspace-registry.v1'`   单键单记录，存全部身份条目。
+//
+// 为什么读必须**四态**（R2）：既有 `getRaw()` 在 `catch` 后返回 `null`，把
+// 「存储故障」与「键不存在」折叠成同一种结果；注册表路径若复用它，会在读不到库时
+// 误触发 legacy adoption 并**写坏一个其实存在的数据**。故新增可报告失败的读原语。
+//
+// 为什么写必须**事务内 RMW**（R3）：若允许调用方在事务外构造完整记录再写入，
+// 两个并发调用各自读到同一旧记录、各自合并、各自写回 → 后写覆盖先写（丢更新）。
+// 依赖 IDB 规范「重叠 scope 的 readwrite 事务按创建顺序串行」；模块内的
+// `writeChain` 另保证**本页**并发调用的「开库 → 建事务」顺序稳定（跨上下文仍以
+// 事务串行为准——这也是测试里需要两个独立模块实例的原因）。
+
+/** 工作区注册表键（新键；`'workspace-root'` 永远保持裸句柄，见 CE-02） */
+export const WORKSPACE_REGISTRY_KEY = 'workspace-registry.v1';
+
+/** 裸句柄键（`WORKSPACE_ROOT_KEY`）的处置，与注册表变更**在同一事务内**提交 */
+export type LegacyHandleIntent =
+  | { kind: 'unchanged' }
+  | { kind: 'write'; handle: FsDirectoryHandle }
+  | { kind: 'delete' };
+
+/**
+ * 注册表变更函数：在**事务内**基于事务内读到的结果计算新记录。
+ * 返回值语义：
+ * - 合法记录      → 写入
+ * - `'unchanged'` → 本次不写注册表键（只处置裸句柄）
+ * - `'conflict'`  → 事务读到的状态与阶段 1 基线不一致 → **不写任何键**，交调用方重新解析
+ *
+ * **禁止**在 mutate 内 `await` 任何非 IDB 的 Promise（`isSameEntry` 比较必须在事务外，I-25）。
+ */
+export type RegistryMutate = (prev: RegistryReadResult) => WorkspaceRegistryRecord | 'unchanged' | 'conflict';
+
+export type RegistryWriteResult =
+  | { kind: 'ok'; record: WorkspaceRegistryRecord | null } // null = 本次未写注册表
+  | { kind: 'conflict' } // 状态已变，未写任何键
+  | { kind: 'failed'; reason: 'unavailable' | 'aborted' | 'invalid' };
+
+/**
+ * 读原语：**可报告失败**（**不得**复用 `getRaw()`——它把存储故障折叠成 `null`）。
+ * - `req.onerror`             → `unavailable`
+ * - `req.result === undefined` → `empty`（键不存在是 empty 的唯一情形）
+ * - 其余（**包括已存的 `null`**）→ `{kind:'ok', value}`，由 `classifyRaw` 判定
+ *   （`null` 过不了 `isRegistryRecord` → `corrupt`；不得折叠成 `empty`）
+ */
+async function getRawResult(
+  key: string,
+): Promise<{ kind: 'ok'; value: unknown } | { kind: 'empty' } | { kind: 'unavailable' }> {
+  type RawResult = { kind: 'ok'; value: unknown } | { kind: 'empty' } | { kind: 'unavailable' };
+  try {
+    const conn = await db();
+    return await new Promise<RawResult>((resolve) => {
+      let settled = false;
+      const settle = (r: RawResult): void => {
+        if (!settled) {
+          settled = true;
+          resolve(r);
+        }
+      };
+      try {
+        const req = conn.transaction(STORE, 'readonly').objectStore(STORE).get(key);
+        req.onsuccess = () =>
+          settle(req.result === undefined ? { kind: 'empty' } : { kind: 'ok', value: req.result });
+        req.onerror = () => settle({ kind: 'unavailable' });
+      } catch {
+        settle({ kind: 'unavailable' });
+      }
+    });
+  } catch {
+    return { kind: 'unavailable' };
+  }
+}
+
+/** 四态判定：unavailable / empty / corrupt / ok（corrupt 不删除、不修复、不覆盖） */
+function classifyRaw(
+  raw: { kind: 'ok'; value: unknown } | { kind: 'empty' } | { kind: 'unavailable' },
+): RegistryReadResult {
+  if (raw.kind === 'unavailable') return { kind: 'unavailable' };
+  if (raw.kind === 'empty') return { kind: 'empty' };
+  return isRegistryRecord(raw.value) ? { kind: 'ok', record: raw.value } : { kind: 'corrupt' };
+}
+
+/** 读注册表：四态见上；**永不抛** */
+export async function readWorkspaceRegistry(): Promise<RegistryReadResult> {
+  return classifyRaw(await getRawResult(WORKSPACE_REGISTRY_KEY));
+}
+
+/** 本页串行链：保证「开库 → 建事务」顺序稳定（跨上下文仍以 IDB 事务串行为准） */
+let writeChain: Promise<unknown> = Promise.resolve();
+
+/**
+ * **单事务 read-modify-write**。同一 `readwrite` 事务内依次完成：
+ * ① `get(WORKSPACE_REGISTRY_KEY)` → 判定（ok / empty / corrupt）；
+ * ② 读失败 → 直接 `failed('unavailable')`，**不执行** mutate、不写任何键；
+ * ③ 调用 `mutate(prev)`（**同步**；返回 Promise 会因过不了记录校验而被判 `invalid`）；
+ * ④ `isRegistryRecord` 校验返回值，非法 → `tx.abort()` + `failed('invalid')`（**拒绝写入**）；
+ * ⑤ 写注册表键（除非 `'unchanged'`）；
+ * ⑥ 按 `legacy` 写 / 删 / 不动裸句柄键（同一事务）；
+ * ⑦ `tx.oncomplete` → `ok`；`tx.onerror` / 异常 → `failed('aborted')`。
+ * `mutate` 返回 `'conflict'` → `{kind:'conflict'}`，**不写任何键**。
+ *
+ * 不抛；失败经 `failed` 暴露；请求/事务各路径**只结算一次**（不悬挂、不重复结算）。
+ */
+export function writeWorkspaceRegistry(
+  mutate: RegistryMutate,
+  legacy: LegacyHandleIntent,
+): Promise<RegistryWriteResult> {
+  const op = writeChain.then(() => runRegistryWrite(mutate, legacy));
+  writeChain = op.then(
+    () => undefined,
+    () => undefined,
+  );
+  return op;
+}
+
+async function runRegistryWrite(mutate: RegistryMutate, legacy: LegacyHandleIntent): Promise<RegistryWriteResult> {
+  let conn: IDBDatabase;
+  try {
+    conn = await db();
+  } catch {
+    return { kind: 'failed', reason: 'unavailable' };
+  }
+  return await new Promise<RegistryWriteResult>((resolve) => {
+    let settled = false;
+    const settle = (r: RegistryWriteResult): void => {
+      if (!settled) {
+        settled = true;
+        resolve(r);
+      }
+    };
+    let tx: IDBTransaction;
+    try {
+      tx = conn.transaction(STORE, 'readwrite');
+    } catch {
+      settle({ kind: 'failed', reason: 'unavailable' });
+      return;
+    }
+    let written: WorkspaceRegistryRecord | null = null;
+    const abortWith = (r: RegistryWriteResult): void => {
+      try {
+        tx.abort();
+      } catch {
+        // 事务可能已收束；以 settle 的结果为准
+      }
+      settle(r);
+    };
+
+    tx.oncomplete = () => settle({ kind: 'ok', record: written });
+    tx.onabort = () => settle({ kind: 'failed', reason: 'aborted' });
+    tx.onerror = () => settle({ kind: 'failed', reason: 'aborted' });
+
+    let req: IDBRequest;
+    try {
+      req = tx.objectStore(STORE).get(WORKSPACE_REGISTRY_KEY);
+    } catch {
+      abortWith({ kind: 'failed', reason: 'aborted' });
+      return;
+    }
+    req.onerror = () => abortWith({ kind: 'failed', reason: 'unavailable' });
+    req.onsuccess = () => {
+      try {
+        const raw = req.result;
+        const prev: RegistryReadResult =
+          raw === undefined
+            ? { kind: 'empty' }
+            : isRegistryRecord(raw)
+              ? { kind: 'ok', record: raw }
+              : { kind: 'corrupt' };
+        const next = mutate(prev);
+        if (next === 'conflict') {
+          settle({ kind: 'conflict' }); // 未写任何键；事务自然收束
+          return;
+        }
+        if (next !== 'unchanged') {
+          if (!isRegistryRecord(next)) {
+            abortWith({ kind: 'failed', reason: 'invalid' });
+            return;
+          }
+          tx.objectStore(STORE).put(next, WORKSPACE_REGISTRY_KEY);
+          written = next;
+        }
+        if (legacy.kind === 'write') tx.objectStore(STORE).put(legacy.handle, WORKSPACE_ROOT_KEY);
+        else if (legacy.kind === 'delete') tx.objectStore(STORE).delete(WORKSPACE_ROOT_KEY);
+      } catch {
+        abortWith({ kind: 'failed', reason: 'aborted' });
+      }
+    };
+  });
 }

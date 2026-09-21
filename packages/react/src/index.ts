@@ -136,6 +136,17 @@ export { QaEditor } from './chrome/QaEditor.js';
 
 export type { NotePopoverProps } from './chrome/NotePopover.js';
 export { NotePopover } from './chrome/NotePopover.js';
+// MODE-GUARD：组合输入提交边界 + 编辑会话 pending/flush 通道（MG-R1/R1-B/R4）
+export type { CompositionCommitGuard } from './edit/compositionGuard.js';
+export { useCompositionCommitGuard } from './edit/compositionGuard.js';
+export type { DraftSession } from './edit/draftSessions.js';
+export {
+  commitDraftSessions,
+  draftSessionCount,
+  hasPendingDraftSession,
+  registerDraftSession,
+  useDraftSession,
+} from './edit/draftSessions.js';
 export type { NoteGrowthPanelProps } from './chrome/NoteGrowthPanel.js';
 export { estimateNoteAreaHeight, NoteGrowthPanel } from './chrome/NoteGrowthPanel.js';
 // L1：只读态行内链接渲染（TextLinkSpans —— DescBlock/NotePopover/NoteGrowthPanel 共用）
@@ -320,6 +331,35 @@ export {
   WORKSPACE_ROOT_KEY,
 } from './edit/handleStore.js';
 export type { PermissionAware } from './edit/handleStore.js';
+// P0-0：工作区身份与存储基础（注册表 + 纯函数身份工具）
+export {
+  BROWSER_SCOPE_ID,
+  REGISTRY_MAX_ENTRIES,
+  REGISTRY_VERSION,
+  evictEntries,
+  isRegistryRecord,
+  isScopeId,
+  newScopeId,
+  sameDirectory,
+  upsertEntry,
+} from './edit/workspaceScope.js';
+export type {
+  RegistryReadResult,
+  ScopeId,
+  ScopeState,
+  WorkspaceRegistryEntry,
+  WorkspaceRegistryRecord,
+} from './edit/workspaceScope.js';
+export {
+  WORKSPACE_REGISTRY_KEY,
+  readWorkspaceRegistry,
+  writeWorkspaceRegistry,
+} from './edit/handleStore.js';
+export type {
+  LegacyHandleIntent,
+  RegistryMutate,
+  RegistryWriteResult,
+} from './edit/handleStore.js';
 // FA2-T1：本地目录工作区（showDirectoryPicker）
 export {
   ASSETS_DIR,
@@ -358,10 +398,13 @@ export {
   SvgBackend,
   sceneToSvg,
 } from './render/backend.js';
+export type { CharMeasureOf } from './render/domMeasure.js';
 export {
   createCharMeasure,
   createDisplayMetricsFn,
   createNodeMeasure,
+  // MEASURE-RANK：三档字符度量（与布局/展示同一份 fontForRank 口径）
+  createRankedCharMeasure,
 } from './render/domMeasure.js';
 export type { EdgeLabelProps } from './render/EdgeLabel.js';
 export {
@@ -507,16 +550,26 @@ export type {
   LinkPathResult,
   LodLevel,
   NodeCardStyle,
+  VisualRank,
 } from './render/geometry.js';
 export {
   buildLinkPath,
   computeBranchIndex,
+  // DEPTH-VIS-1 深度视觉阶梯：rank 映射与字号/字重唯一出口
+  fontForRank,
+  fontOf,
   LOD_AUTO_NODES,
+  LOD_DETAIL_K,
+  LOD_DETAIL_K_BIG,
+  LOD_FULL_K,
+  // LOD 滞回（进出档不同阈值：防 k 压线时文字抖动）
+  LOD_HYSTERESIS,
   linkEndpoints,
   lodFor,
   lodSkipText,
   nodeCardStyle,
   nodeHitTest,
+  visualRankOf,
   wavyPath,
 } from './render/geometry.js';
 // v1.11.0 共享梁双把手：MapView.onBeamChange 的提交形态（宿主按 kind 分流写 lens / beamAt）

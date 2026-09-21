@@ -141,7 +141,7 @@ node scripts/analyze-export-classification.mjs
 
 ## 六、测试
 
-- 生产 : 测试行数比约 **1 : 0.71**（基线：kernel 301 + react 469 + canvas 24 = **794**）。
+- 生产 : 测试行数比约 **1 : 0.71**（当前实测：free-canvas 12 + kernel 622 + react 1498 + canvas 353 = **2485**；数字随批次增长，以 `pnpm test` 输出为准）。
 - 改行为必须有测试；改结构（如拆分、导出面）**测试全绿不等于行为不变**，
   需额外冒烟（见规划文档「验证方式」一节）。
 - **新写的守卫必须做变异测试**：改源码复现缺陷，确认测试真的会红。
@@ -156,7 +156,9 @@ node scripts/analyze-export-classification.mjs
 
 ```bash
 pnpm gate:fast   # 提交前：typecheck + depcruise + lint + budget（~1 分钟）
-pnpm gate        # 推送前：+ 794 测试（2-3 分钟）
+pnpm gate        # 推送前：+ 全仓 vitest（3-5 分钟）
+# typecheck 覆盖 4 个子项目；canvas 另跑 tsconfig.test.json（tests/ 类型）——
+# 生产 include 不含 tests/，两者都在 `pnpm -r typecheck` 内，pre-push 回退路径同集合。
 pnpm budget      # 单跑债务预算
 pnpm analyze     # 单跑结构实测（规模 / 导出面 / 复杂度热点）
 ```
@@ -206,6 +208,4 @@ refactor(stage): ADR-0007 StageInner 拆分——条件 Hook 调用归零
 两份 bundle 与当前仓库历史**不连续**，无法自动拼接，都留着别删。
 
 
-## 公开仓库补充约定（2026-09-21）
-
-开发环境与当前分支状态以 README.md、docs/development.md 和 docs/development-handoff.md 为准。上文的历史测试数字不代表当前 CI。main 不自动吸收工作区暂存线或 S5 候选；S5 的 REJECT 必须另行返修和复验。
+公开工作流以 README.md 与 docs/development.md 为准；历史测试数字不代表本分支当前 CI。

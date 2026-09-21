@@ -4,6 +4,10 @@
 
 [![CI](https://github.com/zc63463-cmyk/mindcanvas/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/zc63463-cmyk/mindcanvas/actions/workflows/ci.yml)
 
+## 当前分支
+
+原主工作区未整合的开发快照，尚未签收。
+
 ## 开发状态
 
 这是持续开发中的项目。`main` 从原工程已提交基线 `a2ce72bf122574815bf1b9134253a7bd0349c038` 建立公开源码快照，另行加入 GitHub 配置与可移植性调整；并非宣称产品已发布或所有特性通过验收。

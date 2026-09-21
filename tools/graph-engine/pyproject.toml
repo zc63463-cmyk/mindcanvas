@@ -1,0 +1,20 @@
+[project]
+name = "graph-engine"
+version = "0.1.0"
+description = "Cognitive causality graph engine and MCP server for mindcanvas"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "networkx>=3.2",
+    "pydantic>=2.7.0",
+    "pyyaml>=6.0",
+    "fastmcp>=0.4.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

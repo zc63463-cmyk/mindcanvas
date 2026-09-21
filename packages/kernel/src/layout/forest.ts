@@ -90,12 +90,17 @@ export function layoutForest(
   centers: readonly CenterSpec[],
   measure: MeasureFn,
   collapsedIds: Set<string>,
-  opts: { gap?: number; cache?: LayoutCache; measureKey?: string } = {},
+  opts: { gap?: number; cache?: LayoutCache; measureKey?: string; measureDepthBase?: number } = {},
 ): LayoutResult {
   if (centers.length === 0) return emptyResult();
 
   const gap = opts.gap ?? 160;
   const cache = opts.cache;
+  // MEASURE-RANK：岛内局部深度 + 基准 = 文档绝对深度（视觉档度量用）。
+  // 缺省 0 = 顶层森林（岛根即文档深度 0），逐像素维持旧行为。
+  const depthBase = opts.measureDepthBase ?? 0;
+  const islandMeasure: MeasureFn =
+    depthBase === 0 ? measure : (node, depth) => measure(node, depthBase + (depth ?? 0));
   // 缓存失效契约（与 layoutMindmap 的 mindmap.ts:112-121 逐字同款）：
   // collapsedIds / measureKey 均**身份比较**，不匹配即 reset() + 全量。
   // 本检查先于任何岛内布局执行——分支路径当前忽略缓存命中，但通道的键位在此统一管理，
@@ -121,11 +126,12 @@ export function layoutForest(
   //    只影响提速、不影响正确性。
   const local = centers.map((spec) => {
     const entries = cache?.forestIslands.get(spec.node);
-    const hit = entries?.find((e) => e.dir === spec.dir);
+    // 命中判据含 depthBase（MEASURE-RANK）：同岛根在不同基准下的盒尺寸不同，不得混用
+    const hit = entries?.find((e) => e.dir === spec.dir && (e.depthBase ?? 0) === depthBase);
     if (hit) return { spec, res: hit.local, dirSink: hit.dirSink, entry: hit };
 
     const dirSink = new Map<string, GrowDir>();
-    const res = layoutMindmapBranched(spec.node, measure, collapsedIds, {
+    const res = layoutMindmapBranched(spec.node, islandMeasure, collapsedIds, {
       islandDir: spec.dir,
       // 回退沿用岛内原四向布局（整棵朝该方向），保证无 note.dir 时零行为变更
       fallback: LAYOUT_BY_DIR[spec.dir],
@@ -136,7 +142,7 @@ export function layoutForest(
       cache,
       measureKey: opts.measureKey,
     });
-    const entry: ForestIslandEntry = { dir: spec.dir, local: res, dirSink, placed: null };
+    const entry: ForestIslandEntry = { dir: spec.dir, depthBase, local: res, dirSink, placed: null };
     if (cache) {
       const list = cache.forestIslands.get(spec.node);
       if (list) list.push(entry);

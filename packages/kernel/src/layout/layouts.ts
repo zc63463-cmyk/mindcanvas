@@ -235,7 +235,8 @@ function buildSkeletonCached(
       return cached;
     }
   }
-  const m = measure(node);
+  // MEASURE-RANK：depth 已是最终语义（logic/org 不再 annotate 重建），直接交给度量
+  const m = measure(node, depth);
   const children: LayoutNode[] = !collapsedIds.has(node.id)
     ? node.children.map((c) =>
         buildSkeletonCached(c, measure, collapsedIds, cache, side, depth + 1, node.id, useCache),
@@ -269,7 +270,7 @@ export function layoutLogic(
 ): LayoutResult {
   const cache = opts.cache;
   // 根：手工构建（side=0、居中定位——与旧路径逐位一致）；不查/不写缓存
-  const rootM = measure(root);
+  const rootM = measure(root, 0);
   const tree: LayoutNode = {
     node: root,
     box: { x: -rootM.w / 2, y: -rootM.h / 2, w: rootM.w, h: rootM.h },

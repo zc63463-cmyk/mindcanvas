@@ -46,7 +46,7 @@ import {
   collectEntityRelations,
   collectFreeEdges,
   collectNodeChoices,
-  createCharMeasure,
+  createRankedCharMeasure,
   createReactRegistries,
   DemoPlugin,
   DocLibrary,
@@ -112,10 +112,19 @@ import {
   useRef,
   useState,
 } from 'react';
+import { flushActiveDraft, hasPendingDraft } from './draftFlush.js';
+import {
+  SAVE_METADATA_WARNING,
+  type DocumentLeavePort,
+  type RequestLeave,
+  type SaveCompletion,
+} from './documentLifecycle.js';
+import { useLeavePortRegistration } from './hooks/useDocumentLeaveRegistration.js';
 import gatewaySource from './demo/gateway.mm.md?raw';
 import { useAutoSave } from './hooks/useAutoSave.js';
 import { useCanvasDegradeNotice } from './hooks/useCanvasDegradeNotice.js';
 import { useDocumentActions } from './hooks/useDocumentActions.js';
+import { useDocumentSaveSession } from './hooks/useDocumentSaveSession.js';
 import { useDocumentSwitch } from './hooks/useDocumentSwitch.js';
 import { nodeById, useEdgeActions } from './hooks/useEdgeActions.js';
 import { EdgeDraftLayer, type EdgeContextMenuState } from './EdgeDraftLayer.js';
@@ -130,7 +139,6 @@ import { makeCenterActions, makeDescActions, makeNoteActions } from './nodeMenuB
 import { ghostBoxOf } from './radialGhost.js';
 import { LenBubble } from './LenBubble.js';
 import { FrameDepthBubble } from './FrameDepthBubble.js';
-import { UnsavedPrompt } from './UnsavedPrompt.js';
 import { applyLen } from './lenEdit.js';
 import { applyBeamCommit } from './beamEdit.js';
 import { PerfPanel } from './PerfPanel.js';
@@ -166,9 +174,16 @@ const COLLAPSE_KEY = 'mindcanvas.collapsed.v2';
 /** C+1：自由画布入口透传（App 模式态；缺省不影响导图任何行为） */
 export interface MindmapStageProps {
   onOpenFreeCanvas?: () => void;
+  /**
+   * MODE-GUARD：App 注入的离开决策器（模式切换与文档替换共用）。
+   * 缺省 = 不做离开保护（独立用法/旧测试）；生产由 App 注入。
+   */
+  requestLeave?: RequestLeave;
+  /** MODE-GUARD：把本 Stage 的 leave port 登记到 App */
+  registerLeavePort?: (port: DocumentLeavePort | null) => () => void;
 }
 
-function StageInner({ onOpenFreeCanvas }: MindmapStageProps) {
+function StageInner({ onOpenFreeCanvas, requestLeave, registerLeavePort }: MindmapStageProps) {
   const { token } = useTheme();
   const [stats, setStats] = useState<MapStats | null>(null);
   const [pluginActive, setPluginActive] = useState(false);
@@ -252,6 +267,20 @@ function StageInner({ onOpenFreeCanvas }: MindmapStageProps) {
   // 初值只算一次：有最近文档 → 显示启动页；没有（全新用户）→ 沿用内置示例。
   const [showStartup, setShowStartup] = useState(() => docHost.recent().length > 0);
 
+  // MODE-GUARD：启动页 / 解析失败态也要登记 leave port，否则模式切换会被「未就绪」挡住。
+  // - 启动页：尚无可编辑内容（文件未被内存改写）→ 干净端口，允许直接切换；
+  // - 解析失败：若该文档从未落盘（拖入/粘贴导入的源文解析失败），存在只在内存里的内容 →
+  //   只有用户显式「放弃修改」才离开，不默认当作可安全丢弃。
+  const needsFallbackLeavePort = showStartup || !controller;
+  useLeavePortRegistration(needsFallbackLeavePort ? registerLeavePort : undefined, () => ({
+    flushEdits: () => true,
+    isDirty: () => !showStartup && !doc.saved,
+    isSaving: () => false,
+    waitForIdle: () => Promise.resolve(),
+    // 无 controller 无法序列化：保存不可用（用户仍可显式放弃或取消）
+    save: (): Promise<SaveCompletion> => Promise.resolve({ kind: 'failed' }),
+  }));
+
   // 启动页优先于其它分支：它不读画布状态，controller 是否就绪都无关。
   // 放在全部 Hook 之后（useState 是最后一个 Hook），Hook 调用数恒定。
   if (showStartup) {
@@ -327,6 +356,8 @@ function StageInner({ onOpenFreeCanvas }: MindmapStageProps) {
       controller={controller}
       commandNotice={commandNotice}
       setCommandNotice={setCommandNotice}
+      requestLeave={requestLeave}
+      registerLeavePort={registerLeavePort}
     />
   );
 }
@@ -359,6 +390,10 @@ interface StageContentProps {
   /** A5 命令告警（R1-4 状态提升至 StageInner：锚迁移冲突回调在 controller 构造处闭包） */
   commandNotice: string | null;
   setCommandNotice: Dispatch<SetStateAction<string | null>>;
+  /** MODE-GUARD：离开决策器（App 注入；模式切换与文档替换共用同一个判定） */
+  requestLeave?: RequestLeave;
+  /** MODE-GUARD：把本 Stage 的 leave port 登记到 App */
+  registerLeavePort?: (port: DocumentLeavePort | null) => () => void;
 }
 
 /**
@@ -390,6 +425,8 @@ function StageContent({
   controller,
   commandNotice,
   setCommandNotice,
+  requestLeave,
+  registerLeavePort,
 }: StageContentProps) {
   // M1 实体 picker：候选宿主 —— 为 useDocumentSwitch 首挂登记提前声明（原「实体候选」区仅剩使用）
   const entityHostRef = useRef<LocalEntityStore | null>(null);
@@ -397,6 +434,15 @@ function StageContent({
   const entityHost = entityHostRef.current;
   // 展开态节点 id（单一展开；点击有 qa 节点展开，再点/其他节点收起）——为 useDocumentSwitch 提前声明
   const [expandedQaId, setExpandedQaId] = useState<string | null>(null);
+
+  // SAVE-LIFECYCLE：保存会话（同会话写入串行 + 会话/内容归属校验）。
+  // 「保存中…」指示由会话推送 —— 旧会话的迟完成不会隐藏新会话正在保存的状态。
+  // 声明位置：早于 useDocumentSwitch / useDocumentActions / useAutoSave（三者都要用它）。
+  const { session: saveSession, saving } = useDocumentSaveSession({
+    readContent: () => controller.root,
+    // 附属回填（commit）异常：写盘已成功，仅提示「附属步骤未完成」（复核 R4-B）
+    onCommitError: () => setCommandNotice(SAVE_METADATA_WARNING),
+  });
 
   // B1 文档切换（迁至 hooks/useDocumentSwitch；纯搬迁：动作顺序 / deps / 首挂跳过逐字保留）。
   // 调用点留在原位 —— 保证 useDocumentSwitch 的 effect 注册在 useAutoSave 之前
@@ -411,6 +457,7 @@ function StageContent({
     gatewayTitles: GATEWAY_TITLES,
     controllerRef,
     syncedSourceRef,
+    session: saveSession,
     setEntities,
     setExpandedQaId,
     apiRef,
@@ -445,26 +492,6 @@ function StageContent({
 
   // GH-T3：自动保存（debounce 300ms；仅已落盘文档；手动 Ctrl+S 取消 pending；失败静默由手动保存兜底）
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // FA1-T1：落盘中转瞬态（驱动「保存中...」指示）；saving 期间不重复触发
-  const [saving, setSaving] = useState(false);
-
-  // A-D4：未保存切换确认——自定义模态（替代被 webview 静默吞掉的 window.confirm）
-  const [discardAsk, setDiscardAsk] = useState(false);
-  const discardResolver = useRef<((ok: boolean) => void) | null>(null);
-  const confirmDiscard = useCallback(
-    (): Promise<boolean> =>
-      new Promise<boolean>((resolve) => {
-        discardResolver.current = resolve;
-        setDiscardAsk(true);
-      }),
-    [],
-  );
-  const settleDiscard = useCallback((ok: boolean): void => {
-    setDiscardAsk(false);
-    const resolve = discardResolver.current;
-    discardResolver.current = null;
-    resolve?.(ok);
-  }, []);
 
   // 文档操作（打开/新建/保存/另存为）—— 依赖 autoSaveTimer，故在其定义之后调用
   const { applyDoc, handleOpen, handleNew, handleSave, handleSaveAs } = useDocumentActions({
@@ -474,10 +501,13 @@ function StageContent({
     setDoc,
     fileInputRef,
     autoSaveTimer,
+    session: saveSession,
     syncedSourceRef,
     onBlockedSave: setCommandNotice,
-    onSavingChange: setSaving,
-    confirmDiscard,
+    // 写盘成功但附属记录失败 → 独立附属警告（不能显示「未标记已保存」，复核 R4-B）
+    onSaveWarning: setCommandNotice,
+    // MODE-GUARD：打开/新建/最近/拖入/工作区等替换入口统一走离开决策器
+    requestLeave,
   });
 
   // GH-T3：自动保存 —— 逻辑已抽至 hooks/useAutoSave（debounce 300ms；仅已落盘文档；
@@ -487,11 +517,27 @@ function StageContent({
     docHost,
     doc,
     setDoc,
+    session: saveSession,
     autoSaveTimer,
     syncedSourceRef,
     onBlockedSave: setCommandNotice,
-    onSavingChange: setSaving,
   });
+
+  // MODE-GUARD：把本 Stage 的离开端口登记到 App（模式切换与文档替换共用同一判定）。
+  // 端口方法读实时状态；`suppressPendingAuto` 供「放弃修改并离开」停止排定新的自动保存。
+  useLeavePortRegistration(registerLeavePort, () => ({
+    flushEdits: flushActiveDraft,
+    isDirty: () => controller.dirty,
+    isSaving: () => saveSession.isSaving(),
+    waitForIdle: () => saveSession.waitForIdle(),
+    save: () => handleSave(),
+    suppressPendingAuto: () => {
+      if (autoSaveTimer.current) {
+        clearTimeout(autoSaveTimer.current);
+        autoSaveTimer.current = null;
+      }
+    },
+  }));
 
   // 选中节点：单一来源 = controller.selectedId + 从当前树取节点（编辑后引用自动刷新，
   // 避免点选时的快照引用陈旧导致 QaEditor/QuickCommentPanel 读不到新 note）
@@ -875,7 +921,12 @@ function StageContent({
 
   // 主题字体度量 → 布局（树 / 折叠 / 展开 / 主题字体任一变化重排）
   // 关键：依赖 controller.root（不可变引用）而非 controller（引用稳定）——编辑后布局必须重算
-  const char = useMemo(() => createCharMeasure(token.font), [token.font]);
+  //
+  // MEASURE-RANK：按**视觉档**分档度量（root/branch/leaf 三档字号，字重无关）。
+  // 叶卡不再用 branch 字号量（白边约 25% 的根源），整体盒随之收紧 → fit k 回升、
+  // LOD 文字更晚被省。`charOf` 与传给 MapView 的是**同一份**（观察/命中与绘制同源）。
+  const charOf = useMemo(() => createRankedCharMeasure(token.font), [token.font]);
+  const char = useMemo(() => charOf('branch'), [charOf]);
   // M5-T6 增量布局：缓存实例跨编辑复用（折叠/度量键变化时内核自动作废重算，结果恒等于全量）
   const layoutCacheRef = useRef<LayoutCache | null>(null);
   if (layoutCacheRef.current === null) layoutCacheRef.current = new LayoutCache();
@@ -947,16 +998,22 @@ function StageContent({
         // 修正后的重排成本：**进入/退出编辑各一次**（用户主动操作，可接受）；
         // 键入过程中 descEditingId 不变 → 键不变 → 不重排。
         // 这与当初"避免每敲一字就重排"的诉求并不冲突。
-        `${token.font.family}|${token.font.size}|${entities.size}|${expandedQaId ?? ''}|${descEditingId ?? ''}|${idsMeasureKey(pinnedNoteIdSet)}`,
+        //
+        // MEASURE-RANK：键必须含**分档字号全量**（sizeRoot / sizeLeaf / 三档字重）——
+        // 度量自本批起按视觉档分档，只盯 size 会在换主题（如 size/leaf 同时变）时漏判。
+        `${token.font.family}|${token.font.size}|${token.font.sizeRoot ?? ''}|${token.font.sizeLeaf}|${token.font.weight}|${token.font.weightRoot}|${token.font.weightLeaf ?? ''}|${entities.size}|${expandedQaId ?? ''}|${descEditingId ?? ''}|${idsMeasureKey(pinnedNoteIdSet)}`,
         // 让正在编辑描述的节点在布局里预留编辑区（节点自己扩张，而不是浮出遮挡）
         descEditingId,
         pinnedNoteIdSet,
         centerSpecs,
+        // 档位度量：与 MapView charOf 同一份（布局盒 = 渲染字号同一事实源）
+        charOf,
       ).layout,
     [
       controller.root,
       entities,
       char,
+      charOf,
       controller.collapsed,
       expandedQaId,
       token.font,
@@ -1176,9 +1233,16 @@ function StageContent({
     // A6/T23 Canvas 门禁：含中心岛（跨岛父子连接）或自由边的文档仅 SVG 后端完整支持
     // → 显式 forceBackend='svg' 压过 >50K 自动 Canvas 降级，不静默丢岛/边；
     //   纯树文档保持既有降级策略（Canvas 大图性能路径）不变。
-    const forceBackend = useMemo<'svg' | undefined>(() => {
+    //
+    // 验收入口（VERIFY-CANVAS）：`?backend=canvas` / `?backend=svg` 显式指定后端，
+    // 供真浏览器矩阵核对 Canvas 纯树后端的身份与渲染（自动降级阈值 5 万节点在浏览器里不可达）。
+    // 纯只读覆盖：**无参数时上面两条门禁逐字不变**，也不进任何产品 UI。
+    const forceBackend = useMemo<'svg' | 'canvas' | undefined>(() => {
       if (centerSpecs !== null) return 'svg';
       if (edgeActions.freeEdges.length > 0) return 'svg';
+      const forced =
+        typeof location === 'undefined' ? null : new URLSearchParams(location.search).get('backend');
+      if (forced === 'canvas' || forced === 'svg') return forced;
       return undefined;
     }, [centerSpecs, edgeActions.freeEdges]);
 
@@ -1342,8 +1406,15 @@ function StageContent({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [controller]);
 
-  // beforeunload 守卫：未保存变更时拦截离开（T2）
-  useEffect(() => installBeforeUnload(() => controller.dirty), [controller]);
+  // beforeunload 守卫：未保存变更 / 未提交草稿 / 写入进行中 时拦截离开（T2 + MODE-GUARD）。
+  // 原生能力，不在 unload 里弹自定义异步模态（浏览器不允许）。
+  useEffect(
+    () =>
+      installBeforeUnload(
+        () => controller.dirty || saveSession.isSaving() || hasPendingDraft(),
+      ),
+    [controller, saveSession],
+  );
 
   // E3：边编辑/连线创建浮窗 Esc 关闭
   useEffect(() => {
@@ -1549,6 +1620,8 @@ function StageContent({
           forceBackend={forceBackend}
         entities={entities}
         char={char}
+        // MEASURE-RANK：展示度量按视觉档分档（与上面 layoutDemo 的 charOf 同一份）
+        charOf={charOf}
         // assetBaseUrl = 导图根 URL（demo 资产 id 已含「demo-assets/」相对导图前缀）
         assetBaseUrl="/"
         // P0-1 渲染接线：上传资产（objectURL）只有宿主能解析，NodeG 优先走宿主
@@ -2235,9 +2308,6 @@ function StageContent({
         />
       )}
 
-      {/* A-D4：未保存切换确认（取代原生 confirm——webview 静默吞掉；放弃/取消两按钮） */}
-      <UnsavedPrompt open={discardAsk} onSettle={settleDiscard} />
-
       {/* E7 树边标注 + E5 连线创建器 / 边编辑浮窗 —— 已抽到 EdgeDraftLayer */}
       <EdgeDraftLayer
         controller={controller}
@@ -2409,10 +2479,18 @@ const PRE_DIR_LABEL_CN: Readonly<Record<GrowDir, string>> = {
   right: '向右',
 };
 
-export default function MindmapStage({ onOpenFreeCanvas }: MindmapStageProps = {}) {
+export default function MindmapStage({
+  onOpenFreeCanvas,
+  requestLeave,
+  registerLeavePort,
+}: MindmapStageProps = {}) {
   return (
     <ThemeProvider>
-      <StageInner onOpenFreeCanvas={onOpenFreeCanvas} />
+      <StageInner
+        onOpenFreeCanvas={onOpenFreeCanvas}
+        requestLeave={requestLeave}
+        registerLeavePort={registerLeavePort}
+      />
     </ThemeProvider>
   );
 }

@@ -23,6 +23,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { CHROME } from '../theme/tokens.js';
 import type { TokenSet } from '../theme/types.js';
+import { useCompositionCommitGuard } from '../edit/compositionGuard.js';
 
 export interface GrowthCommentPanelProps {
   items: readonly string[];
@@ -106,6 +107,22 @@ export function GrowthCommentPanel({
     }
     onChange([...items, text]);
     setAddDraft('');
+  };
+  // MG-R1-B：批注编辑/新增也是 blur 提交的编辑器 —— 组合未结束不得提交候选串，
+  // 组合结束用确认文字补提交（与标题/描述/备注正文/背面 Markdown 同一约定）
+  const editGuard = useCompositionCommitGuard(() => {
+    commitEdit();
+  });
+  const addGuard = useCompositionCommitGuard(() => {
+    commitAdd();
+  });
+  const blurEdit = (): void => {
+    if (!editGuard.allowCommit()) return;
+    commitEdit();
+  };
+  const blurAdd = (): void => {
+    if (!addGuard.allowCommit()) return;
+    commitAdd();
   };
   const stopBubble = (e: React.SyntheticEvent): void => {
     e.stopPropagation();
@@ -233,7 +250,9 @@ export function GrowthCommentPanel({
                   setEditingIndex(null);
                 }
               }}
-              onBlur={commitEdit}
+              onCompositionStart={editGuard.onCompositionStart}
+              onCompositionEnd={(e) => editGuard.onCompositionEnd(e.currentTarget.value)}
+              onBlur={blurEdit}
               data-gcp-input-editing
               style={{
                 height: rowH,
@@ -319,7 +338,9 @@ export function GrowthCommentPanel({
                 setAddDraft('');
               }
             }}
-            onBlur={commitAdd}
+            onCompositionStart={addGuard.onCompositionStart}
+            onCompositionEnd={(e) => addGuard.onCompositionEnd(e.currentTarget.value)}
+            onBlur={blurAdd}
             placeholder="写下批注…（回车提交）"
             data-gcp-input-adding
             style={{

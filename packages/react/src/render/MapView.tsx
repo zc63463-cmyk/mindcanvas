@@ -47,7 +47,7 @@ import { useTheme } from '../theme/ThemeContext.js';
 import type { TokenSet } from '../theme/types.js';
 import { createSvgBackend, type RenderBackend } from './backend.js';
 import { CanvasSurface } from './canvasBackend.js';
-import { createDisplayMetricsFn } from './domMeasure.js';
+import { type CharMeasureOf, createDisplayMetricsFn } from './domMeasure.js';
 import { cubicMidNormal, EdgeLabel } from './EdgeLabel.js';
 import type { EdgeRouteEntry } from './FreeEdgeLayer.js';
 import { type EdgeManual, FreeEdgeLayer } from './FreeEdgeLayer.js';
@@ -92,11 +92,13 @@ import type { LodLevel } from './geometry.js';
 import {
   buildLinkPath,
   computeBranchIndex,
+  fontOf,
   lodFor,
   lodSkipText,
   nodeCardStyle,
   nodeHitTest,
   horizontalBeamMap,
+  visualRankOf,
   hubArrowTip,
   verticalBeamMap,
 } from './geometry.js';
@@ -156,8 +158,14 @@ export interface MapViewProps {
    */
   nestedCenterIdsByRoot?: ReadonlyMap<string, readonly string[]>;
   entities: Map<string, Entity>;
-  /** DOM 精确字符度量（T3 注入；随主题字体切换） */
+  /** DOM 精确字符度量（T3 注入；随主题字体切换）。`charOf` 缺省时即全档共用的那一把 */
   char: CharMeasure;
+  /**
+   * 档位字符度量（MEASURE-RANK 可选）：`createRankedCharMeasure(token.font)` 产出。
+   * 给了 → 展示度量按 `depth` 分档（与布局 `createNodeMeasure(char, entities, charOf)` **同一份**，
+   * 盒与字号同源）；缺省 → 恒用 `char`（旧行为逐像素不变）。
+   */
+  charOf?: CharMeasureOf;
   /** 外部控制柄（fit / zoomBy） */
   apiRef?: RefObject<MapViewApi | null>;
   /** 渲染后端强制（C2）：'canvas' → 大图模式（场景树 → 2D 画布，交互走坐标命中）；缺省 'svg' */
@@ -425,6 +433,7 @@ export function MapView({
   nestedCenterIdsByRoot,
   entities,
   char,
+  charOf,
   apiRef,
   forceBackend,
   onStats,
@@ -807,17 +816,22 @@ export function MapView({
   }, [viewport]);
 
   // 派生数据：分支索引 / 盒表 / 渲染度量（layout 或字符度量变化时重建）
+  // MEASURE-RANK：度量按 depth 取档（与布局同一份 charOf）——盒与渲染字号不看两套口径
+  const charFor = useCallback(
+    (depth: number): CharMeasure => (charOf === undefined ? char : charOf(visualRankOf(depth))),
+    [char, charOf],
+  );
   const derived = useMemo(() => {
-    const metric = createDisplayMetricsFn(char, entities);
+    const metric = createDisplayMetricsFn(char, entities, charOf);
     const branchIndex = computeBranchIndex(layout.nodes);
     const boxes = new Map<string, { x: number; y: number; w: number; h: number }>();
     const metrics = new Map<string, ReturnType<typeof metric>>();
     for (const ln of layout.nodes) {
       boxes.set(ln.node.id, ln.box);
-      metrics.set(ln.node.id, metric(ln.node));
+      metrics.set(ln.node.id, metric(ln.node, ln.depth));
     }
     return { boxes, metrics, branchIndex, metricFn: metric };
-  }, [layout, char, entities]);
+  }, [layout, char, charOf, entities]);
 
   /**
    * B-P2：节点卡样式缓存（键 = 色板索引|档位|实体类型）——style 引用稳定是 NodeG memo 命中的前提
@@ -872,10 +886,12 @@ export function MapView({
   // A2：大图（>LOD_AUTO_NODES）自动激进 LOD（T8 降级策略 L1 接线）
   // B-P3：缩放手势期**冻结 LOD** —— 手势中跨越阈值会让整图文案/结构反复重排（可见抖动）；
   //        手势结束再按实时 k 切换一次。平移不改 k，LOD 天然稳定 → 平移不进入冻结（计划 §1 第 7 条）。
-  const lodLive = lodFor(viewport.transform.k, layout.nodes.length);
-  const frozenLodRef = useRef<LodLevel>(lodLive);
+  // MEASURE-RANK 后续：LOD 滞回 —— 回传上一档，进出档取不同阈值（k 停在 0.5/0.26 附近时
+  // 密叶文字不再随 ±0.001 抖动反复进出）。首帧 prev = null → 无滞回（旧行为逐值不变）。
+  const frozenLodRef = useRef<LodLevel | null>(null);
+  const lodLive = lodFor(viewport.transform.k, layout.nodes.length, frozenLodRef.current);
   if (!zoomGestureActive) frozenLodRef.current = lodLive;
-  const lod = zoomGestureActive ? frozenLodRef.current : lodLive;
+  const lod: LodLevel = zoomGestureActive ? (frozenLodRef.current ?? lodLive) : lodLive;
 
   // IO-1（B-P3 同款冻结）：缩放手势期「总览判定用的 k」也取冻结值（与 LOD 同一开关）——
   // 手势中跨越 K_OVERVIEW 会让整层卡片反复建/拆（远观整屏重排）；松手再切一次档。
@@ -2119,12 +2135,13 @@ export function MapView({
                   const branchIdx = derived.branchIndex.get(ln.node.id) ?? 0;
                   const palette = token.color.branches[branchIdx] ?? token.color.branches[0]!;
                   const entityKind = ln.node.type === 'entity' ? (ln.node.ref?.kind ?? null) : null;
-                  const tier = ln.depth >= 2 ? 'leaf' : 'branch';
+                  // DEPTH-VIS-1：三档视觉 rank（root / branch / leaf）—— depth 0 独立成档
+                  const rank = visualRankOf(ln.depth);
                   // B-P2：样式按缓存键取稳定引用（同键 ⇒ 同值；引用稳定是 memo 命中的前提）
-                  const styleKey = `${branchIdx}|${tier}|${entityKind ?? ''}`;
+                  const styleKey = `${branchIdx}|${rank}|${entityKind ?? ''}`;
                   let style = cardStyleCache.get(styleKey);
                   if (!style) {
-                    style = nodeCardStyle(token, palette, tier, entityKind);
+                    style = nodeCardStyle(token, palette, rank, entityKind);
                     cardStyleCache.set(styleKey, style);
                   }
                   // A4：中心岛拖动 = 整岛偏移预览（成员已在原位平移渲染）——
@@ -2141,7 +2158,7 @@ export function MapView({
                       token={token}
                       depth={ln.depth}
                       root={ln.depth === 0}
-                      chipX={entityKind !== null ? chipXOf(m, char) : null}
+                      chipX={entityKind !== null ? chipXOf(m, charFor(ln.depth)) : null}
                       // 编辑态不画 SVG 文字：内联编辑器（NodeTextOverlay）是浮在节点盒上的
                       // <input>，两层文字会同时可见并互相穿插——
                       // 暗色主题下编辑器底色只有 7% 不透明度（entityFill:
@@ -2246,17 +2263,13 @@ export function MapView({
                   {visibleGhosts.map((g) => {
                     const a = animBoxes?.get(g.node.id);
                     if (!a) return null;
-                    const m = derived.metrics.get(g.node.id) ?? derived.metricFn(g.node);
+                    const m =
+                      derived.metrics.get(g.node.id) ?? derived.metricFn(g.node, g.depth);
                     const palette =
                       token.color.branches[derived.branchIndex.get(g.node.id) ?? 0] ??
                       token.color.branches[0]!;
                     const entityKind = g.node.type === 'entity' ? (g.node.ref?.kind ?? null) : null;
-                    const style = nodeCardStyle(
-                      token,
-                      palette,
-                      g.depth >= 2 ? 'leaf' : 'branch',
-                      entityKind,
-                    );
+                    const style = nodeCardStyle(token, palette, visualRankOf(g.depth), entityKind);
                     return (
                       <NodeG
                         key={`ghost-${g.node.id}`}
@@ -2266,7 +2279,7 @@ export function MapView({
                         token={token}
                         depth={g.depth}
                         root={g.depth === 0}
-                        chipX={entityKind !== null ? chipXOf(m, char) : null}
+                        chipX={entityKind !== null ? chipXOf(m, charFor(g.depth)) : null}
                         noText={lodSkipText(lod, g.depth)}
                         hasChildren={g.node.children.length > 0}
                         collapsed={collapsedIds?.has(g.node.id) ?? false}
@@ -2287,13 +2300,14 @@ export function MapView({
                         token,
                         token.color.branches[derived.branchIndex.get(draggedLn.node.id) ?? 0] ??
                           token.color.branches[0]!,
-                        draggedLn.depth >= 2 ? 'leaf' : 'branch',
+                        visualRankOf(draggedLn.depth),
                         draggedLn.node.type === 'entity'
                           ? (draggedLn.node.ref?.kind ?? null)
                           : null,
                       )}
                       metrics={
-                        derived.metrics.get(draggedLn.node.id) ?? derived.metricFn(draggedLn.node)
+                        derived.metrics.get(draggedLn.node.id) ??
+                        derived.metricFn(draggedLn.node, draggedLn.depth)
                       }
                       token={token}
                       depth={draggedLn.depth}
@@ -2302,8 +2316,8 @@ export function MapView({
                         draggedLn.node.type === 'entity' && draggedLn.node.ref?.kind
                           ? chipXOf(
                               derived.metrics.get(draggedLn.node.id) ??
-                                derived.metricFn(draggedLn.node),
-                              char,
+                                derived.metricFn(draggedLn.node, draggedLn.depth),
+                              charFor(draggedLn.depth),
                             )
                           : null
                       }
@@ -2607,11 +2621,11 @@ export function MapView({
 }
 
 /**
- * 节点正文字号（世界 px，k=1）：叶用小一号 —— 与 DescBlock 的 descFontSize 同分档口径。
+ * 节点正文字号（世界 px，k=1）：三档随 rank —— 与 NodeG 走同一出口 fontOf（DEPTH-VIS-1）。
  * note 浮窗/卡片据此封顶自己的字号（笔记不得大于所属节点字体）。
  */
 function nodeFontOf(token: TokenSet, depth: number): number {
-  return depth >= 2 ? token.font.sizeLeaf : token.font.size;
+  return fontOf(token, depth).size;
 }
 
 /** 实体 kind chip 起点（contentX - kindW - 6；与内核 displayMetrics 排版一致） */

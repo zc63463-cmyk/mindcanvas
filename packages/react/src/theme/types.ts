@@ -11,11 +11,16 @@ export interface BranchColor {
   readonly stroke: string;
   readonly fill: string;
   readonly text: string;
+  /**
+   * 根节点卡片变体（DEPTH-VIS-1「父先于子」）：同支深色描边 + 略实填充。
+   * 未设 → 回退 color.rootDefault，再回退分支色（= 分支卡）。
+   */
+  readonly root?: BranchLeaf;
   /** 叶节点卡片变体（classic 按分支浅化；未设则回退 color.leafDefault） */
   readonly leaf?: BranchLeaf;
 }
 
-/** 叶节点卡片三色（classic 分支浅化 / sticker 橄榄贴 / glass 霓虹卡） */
+/** 根/叶节点卡片三色（classic 分支浅化 / sticker 橄榄贴 / glass 半透明霓虹卡） */
 export interface BranchLeaf {
   readonly fill: string;
   readonly stroke: string;
@@ -53,8 +58,13 @@ export interface TokenSet {
     accent: string | null;
     /** 连线基础色（color-curve 语言下被分支色覆盖） */
     linkStroke: string;
-    /** 叶节点默认卡（sticker 橄榄贴 / glass 霓虹卡；classic 走分支 leaf 变体） */
+    /** 叶节点默认卡（sticker 橄榄贴 / glass 半透明霓虹卡；classic 走分支 leaf 变体） */
     leafDefault: BranchLeaf;
+    /**
+     * 根节点默认卡（DEPTH-VIS-1）：分支未给 root 变体时的兜底（glass 更不透明玻璃卡）。
+     * 未设 → 回退分支色（classic/sticker 走各自分支的 root 变体）。
+     */
+    rootDefault?: BranchLeaf;
     /** 警示色（未解析实体等） */
     warn: string;
     /** 选中节点描边（编辑/导航高亮；跨主题一致语义，各主题取醒目色） */
@@ -78,10 +88,16 @@ export interface TokenSet {
   };
   font: {
     family: string;
+    /** 一级分支字号（视觉档 branch） */
     size: number;
+    /** 根字号（视觉档 root；缺省 = size + 2 —— DEPTH-VIS-1） */
+    sizeRoot?: number;
     sizeLeaf: number;
+    /** 一级分支字重（视觉档 branch） */
     weight: number;
     weightRoot: number;
+    /** 叶字重（视觉档 leaf；缺省 = weight —— DEPTH-VIS-1） */
+    weightLeaf?: number;
   };
   motion: {
     duration: string;
@@ -95,8 +111,11 @@ export interface TokenSet {
   };
   nodeStyle: {
     shape: NodeShape;
+    /** 一级分支描边宽（视觉档 branch） */
     strokeWidth: number;
-    /** 叶节点描边宽（classic 1 / sticker 1 / glass 0.8——对照设计报告叶子卡） */
+    /** 根描边宽（视觉档 root；缺省 = strokeWidth —— DEPTH-VIS-1：父描边 ≥ 子） */
+    strokeWidthRoot?: number;
+    /** 叶节点描边宽（classic 1 / sticker 1 / glass 0.7——对照设计报告叶子卡） */
     strokeWidthLeaf: number;
     /** 节点阴影（'none' 表示无） */
     shadow: string;
