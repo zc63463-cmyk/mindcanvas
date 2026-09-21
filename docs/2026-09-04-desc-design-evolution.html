@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>幕布注释（note.desc）设计演变与调整方向</title>
+<style>
+:root{
+  --bg:#fbfaf8; --card:#fff; --ink:#2b2926; --muted:#6b665e; --line:#e5e0d6;
+  --accent:#c2410c; --accent-soft:#fff7ed; --ok:#15803d; --ok-soft:#f0fdf4;
+  --warn:#a16207; --warn-soft:#fefce8; --bad:#b91c1c; --bad-soft:#fef2f2;
+  --info:#1d4ed8; --info-soft:#eff6ff;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  line-height:1.75;font-size:15px}
+.wrap{max-width:1000px;margin:0 auto;padding:32px 24px 72px}
+h1{font-size:26px;margin:0 0 6px;letter-spacing:-.3px}
+h2{font-size:18px;margin:32px 0 12px}
+.sub{color:var(--muted);font-size:13px;margin-bottom:20px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:20px;flex-wrap:wrap}
+.tab{padding:9px 15px;cursor:pointer;border:none;background:none;font-size:14px;
+  color:var(--muted);border-bottom:2px solid transparent;font-family:inherit}
+.tab:hover{color:var(--ink)}
+.tab.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+.panel{display:none}.panel.on{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:18px 20px;margin-bottom:16px}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:12.5px}
+tr:last-child td{border-bottom:none}
+code{background:#f3f1ec;padding:1px 5px;border-radius:4px;font-size:12.5px;
+  font-family:"SF Mono",Consolas,monospace}
+.badge{display:inline-block;padding:1px 8px;border-radius:20px;font-size:11.5px;font-weight:700}
+.b-ok{background:var(--ok-soft);color:var(--ok)}
+.b-warn{background:var(--warn-soft);color:var(--warn)}
+.b-bad{background:var(--bad-soft);color:var(--bad)}
+.b-info{background:var(--info-soft);color:var(--info)}
+
+.stage{background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:24px 20px;margin-bottom:16px;min-height:330px;position:relative;overflow:hidden}
+.nodebox{width:200px;margin-left:20px}
+.rect{background:#fff;border:1.5px solid #888780;border-radius:8px;padding:9px 12px;
+  font-size:13px;font-weight:500;background:#fdfcfa}
+.attached{background:var(--accent-soft);border:1.5px solid var(--accent);border-radius:8px;
+  margin-top:5px;padding:7px 11px;font-size:11.5px;color:var(--muted);overflow:hidden;
+  position:relative}
+.qabox{background:var(--info-soft);border:1.5px solid var(--info);border-radius:8px;
+  margin-top:5px;padding:7px 11px;font-size:11.5px;color:var(--muted);overflow:hidden}
+.neighbor{margin-left:20px;width:200px;margin-top:14px}
+.nrect{background:#f5f4f0;border:1.5px dashed #b4b2a9;border-radius:8px;padding:9px 12px;
+  font-size:13px;color:var(--muted)}
+.note{font-size:12.5px;color:var(--muted);margin-top:14px;text-align:center}
+
+@keyframes grow{0%{height:26px}45%{height:250px}80%{height:250px}100%{height:26px}}
+@keyframes push{0%{transform:translateY(0)}45%{transform:translateY(224px)}
+  80%{transform:translateY(224px)}100%{transform:translateY(0)}}
+@keyframes collide{0%{transform:translateY(0)}45%{transform:translateY(100px)}
+  80%{transform:translateY(100px)}100%{transform:translateY(0)}}
+.anim-grow{animation:grow 6s ease-in-out infinite}
+.anim-push{animation:push 6s ease-in-out infinite}
+.anim-collide{animation:collide 6s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){
+  .anim-grow,.anim-push,.anim-collide{animation:none}
+}
+.controls{text-align:center;margin-bottom:12px}
+.btn{padding:6px 14px;margin:0 4px;border:1px solid var(--line);background:var(--card);
+  border-radius:6px;cursor:pointer;font-size:13px;font-family:inherit;color:var(--ink)}
+.btn.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+footer{margin-top:36px;padding-top:16px;border-top:1px solid var(--line);
+  color:var(--muted);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>幕布注释（note.desc）设计演变与调整方向</h1>
+<div class="sub">2026-09-04 · 基于规格书、CHANGELOG、17 次提交与今日自审结果的深度梳理</div>
+
+<div class="tabs">
+<button class="tab on" data-p="p1">一、历史演变</button>
+<button class="tab" data-p="p2">二、当前几何</button>
+<button class="tab" data-p="p3">三、结构性问题</button>
+<button class="tab" data-p="p4">四、调整方向</button>
+</div>
+
+<div class="panel on" id="p1">
+<div class="card">
+<h2 style="margin-top:0">时间线：从「协议字段」到「可挤压的附属块」</h2>
+<table>
+<tr><th>时间</th><th>提交</th><th>做了什么</th></tr>
+<tr><td>09-01</td><td><code>v1.3.0</code></td>
+    <td>协议层新增 <code>Note.desc</code>；渲染 <code>DescBlock</code> —— 节点下方引用块，
+        <b>默认收缩一行、点击展开全文</b>。明确与 <code>qa</code> 是两套并存机制</td></tr>
+<tr><td>09-03 上午</td><td><code>91bc7a5</code></td>
+    <td>friction-log 两修：展开上限 6→12 行、字号随层级差分（10 / 8.5）</td></tr>
+<tr><td>09-03 夜</td><td><code>1215f87</code></td>
+    <td>点击节点「放大展开」——第一版做成了<b>浮出不占布局</b></td></tr>
+<tr><td></td><td><code>26ea1cf</code></td>
+    <td>改为<b>占布局挤压</b>，多节点可同时展开，状态写 localStorage 常驻</td></tr>
+<tr><td></td><td><code>c8261e1</code></td>
+    <td>软上限收到 16 行，保留换行 + 局部滚动（40 行会把画布撑爆）</td></tr>
+<tr><td></td><td><code>2d6fb9f</code></td>
+    <td>恢复浮出卡片<b>视觉</b>（之前被误当成"不占布局"一起去掉了）</td></tr>
+<tr><td></td><td><code>ea969d4</code></td>
+    <td>几何修正：描述块画在 rect <b>之外</b>（是节点附属，不是节点内部）</td></tr>
+<tr><td>09-04 上午</td><td><code>abf8dd9</code></td>
+    <td>自审修两个 P0：度量键只编码数量 → 缓存错布局；注释区与描述块重叠</td></tr>
+</table>
+</div>
+
+<div class="card">
+<h2 style="margin-top:0">⚠️ 被遗忘的一版：R15「快速注释」（qa）走过同一条路</h2>
+<p style="margin:0 0 12px">你记得的"非幕布注释"是它 —— <b>R15 快速注释（qa）</b>。
+它<b>在 08-27~08-28 就已经把今天 desc 遇到的所有问题解决了一遍</b>，而且结论相同。</p>
+<table>
+<tr><th>时间</th><th>形态</th><th>做法</th></tr>
+<tr><td>08-27</td><td>① 上浮卡片</td><td><code>QaCard</code> 画布注释卡浮现（新增即时出现）+ <code>QaEditor</code> 在翻卡面板里增删改</td></tr>
+<tr><td>08-27</td><td>② 侧边 popover</td><td>popover 替代上浮卡片，节点边缘自动避让翻向</td></tr>
+<tr><td><b>08-28</b></td><td><b>③ 向下生长展开</b></td>
+    <td><code>QuickCommentPanel</code> → <code>GrowthCommentPanel</code>：
+        <b>节点加宽加高参与布局、推开邻接节点</b>，连体注释区，
+        <b>换行完整显示</b>、内容随视口缩放防裁剪，点击展开收起</td></tr>
+</table>
+<p style="margin:14px 0 0">对比一下 ③ 的提交说明和今天我们为 desc 做的事：</p>
+<table>
+<tr><th>qa（08-28 已解决）</th><th>desc（09-03~04 重新遇到）</th></tr>
+<tr><td>节点加宽加高参与布局推开邻接节点</td><td>占布局、上下挤压（<code>26ea1cf</code>）</td></tr>
+<tr><td>换行完整显示</td><td>换行 + 局部滚动（<code>c8261e1</code>）</td></tr>
+<tr><td>内容随视口缩放防裁剪</td><td>16 行软上限 + 滚动（同一个问题）</td></tr>
+<tr><td>连体注释区</td><td>附属块挂在 rect 下方（<code>ea969d4</code>）</td></tr>
+</table>
+<p style="margin:14px 0 0"><b>结论：同一个项目里，同一个问题被独立解决了两次，且两次的结论完全一致
+（浮出/侧边气泡都不行，占布局挤压才对）。</b>这不是巧合 —— 说明二者在用户心智里
+本来就是同一种东西。</p>
+</div>
+
+<div class="card">
+<h2 style="margin-top:0">📌 一个前提事实：这段历史不在当前仓库里</h2>
+<p style="margin:0 0 10px">当前仓库只有 <b>53 个提交</b>，最早的是 09-01 的 <code>82df477</code>
+—— 它是一次性导入的<b>初始提交</b>（216 文件、28,525 行插入、0 删除）。
+08-28~08-31 的历史（v1.0.0 / v1.0.1 / v1.2.0，含上面这三版注释设计）<b>从未进入这个仓库</b>。</p>
+<p style="margin:0">它们只存在于 <code><workspace>-backup-20260831.bundle</code>
+（157 个提交）。这也是记忆里一直记着的 P3 待办：<b>8 月 157 commits 尚未进远端</b>。</p>
+</div>
+
+<div class="card">
+<h2 style="margin-top:0">原始设计意图（来自 CHANGELOG v1.3.0）</h2>
+<p style="margin:0 0 10px">「对齐幕布（mubu.com）的<b>描述</b>语义 —— 对某一主题的解释说明，
+<b>常驻</b>节点下方，默认收缩一行、点击展开全文。」</p>
+<p style="margin:0">注意：<b>「默认收缩一行」是原始设计语义，不是缺陷</b>。
+今天所有调整都在"保留这一行"和"让用户看见更多"之间找平衡 —— 这是后面所有取舍的根源。</p>
+</div>
+</div>
+
+<div class="panel" id="p2">
+<h2>当前几何关系（动画演示）</h2>
+<div class="controls">
+<button class="btn on" id="b1">展开 / 收起</button>
+<button class="btn" id="b2">与快速注释共存</button>
+</div>
+
+<div class="stage" id="stage1">
+  <div class="nodebox">
+    <div class="rect">节点标题（本体 rect，高度恒定 34）</div>
+    <div class="attached anim-grow" id="desc">描述文字…<br>最多 16 行，超出内部滚动</div>
+  </div>
+  <div class="neighbor anim-push"><div class="nrect">下方相邻节点</div></div>
+  <div class="note">展开时：rect 不动，附属块变高 → 邻居被推下去（占布局、挤压）</div>
+</div>
+
+<div class="stage" id="stage2" style="display:none">
+  <div class="nodebox">
+    <div class="rect">节点标题</div>
+    <div class="qabox" id="qa">快速注释区（qa）</div>
+    <div class="attached" id="desc2" style="height:120px">描述块（desc）<br>位于注释区下方</div>
+  </div>
+  <div class="neighbor" style="transform:translateY(150px)"><div class="nrect">下方相邻节点</div></div>
+  <div class="note">两个附属区上下排开：<code>bodyH = box.h − 注释区 − 描述区</code>（今日修的重叠问题）</div>
+</div>
+
+<div class="card">
+<h2 style="margin-top:0">关键数字</h2>
+<table>
+<tr><th>项</th><th>值</th><th>依据</th></tr>
+<tr><td>收缩态</td><td>固定 1 行 + 省略号</td><td>原始设计语义（幕布对齐）</td></tr>
+<tr><td>点击描述块展开</td><td>最多 12 行</td><td><code>DESC_MAX_LINES</code></td></tr>
+<tr><td>点击节点放大展开</td><td>最多 16 行 + 内部滚动</td><td><code>DESC_EXPAND_MAX_LINES</code></td></tr>
+<tr><td>本体 rect</td><td>恒定（不随描述区变）</td><td><code>bodyHeight = box.h − 附属区</code></td></tr>
+<tr><td>常驻</td><td>localStorage，多节点同时</td><td>视图状态，不写进 .mm.md</td></tr>
+</table>
+</div>
+</div>
+
+<div class="panel" id="p3">
+<div class="card">
+<h2 style="margin-top:0"><span class="badge b-bad">根本问题</span> desc 与 qa 是两套重叠机制</h2>
+<p>规格书写得很清楚：<b>desc（常驻说明）与 qa（快速注释，按需展开）是两套并存机制</b>。
+但它们本质上做的是同一件事 —— <b>在节点下方显示额外文本</b>。</p>
+<table>
+<tr><th></th><th>desc（描述）</th><th>qa（快速注释）</th></tr>
+<tr><td>内容形态</td><td>一段纯文本（多行）</td><td>问答条目列表</td></tr>
+<tr><td>显示位置</td><td>节点下方</td><td>节点下方</td></tr>
+<tr><td>触发方式</td><td>点描述块 / 点节点（放大）</td><td>点节点</td></tr>
+<tr><td>占布局</td><td>是（16 行软上限）</td><td>是（固定注释区高）</td></tr>
+<tr><td>实现</td><td><code>DescBlock</code> + <code>DescOverlays</code></td>
+    <td><code>GrowthCommentPanel</code> + <code>ExpandCommentOverlay</code></td></tr>
+</table>
+<p style="margin:14px 0 0"><b>后果</b>：两套各自维护"从盒底往上锚"的逻辑，改了其中一套的高度构成，
+另一套就会压上来 —— 今日修的 P0-2 正是这么产生的。这不是偶然 bug，是<b>结构性重复</b>。</p>
+</div>
+
+<div class="card">
+<h2 style="margin-top:0"><span class="badge b-warn">次要问题</span> 收缩一行与「换行可见」的张力</h2>
+<p>原始设计要"默认收缩一行"，你实际使用中要"注释换行可见"。
+于是展开上限被一路抬高：6 → 12 → 40 → 16。每次调整都是在两者之间重新找平衡点，
+<b>但底层的"收缩一行"从未被质疑过</b>。</p>
+</div>
+
+<div class="card">
+<h2 style="margin-top:0"><span class="badge b-info">已修</span> 今日自审的两个 P0</h2>
+<table>
+<tr><th>问题</th><th>根因</th><th>状态</th></tr>
+<tr><td>展开 A 换 B，布局不更新</td><td>度量键只编码 <code>size</code>，缓存未失效</td>
+    <td><span class="badge b-ok">已修</span></td></tr>
+<tr><td>注释区压在描述块上</td><td>注释区 bodyH 没扣描述区高度</td>
+    <td><span class="badge b-ok">已修</span></td></tr>
+</table>
+</div>
+</div>
+
+<div class="panel" id="p4">
+<div class="card">
+<h2 style="margin-top:0">三个调整方向</h2>
+
+<h3 style="font-size:15px">A · 合并 desc 与 qa 为「节点附属内容」</h3>
+<p>统一数据模型与渲染，用类型字段区分（说明 / 问答）。</p>
+<table>
+<tr><th>成本项</th><th>判定</th></tr>
+<tr><td>协议变更</td><td><b>差异项</b> —— 需迁移既有 .mm.md（或保留 desc/qa 双字段兼容）</td></tr>
+<tr><td>消除结构性重复</td><td><b>唯一占优项</b> —— 从此只有一处算"盒底往上锚"</td></tr>
+<tr><td>UI 改造</td><td><b>共担</b> —— 三个方向都要动 UI</td></tr>
+</table>
+<p><b>代价</b>：动协议，风险最高；且幕布语义里 desc 与 qa 确实是两种东西，
+强行合并可能丢失表达力。<b>反转条件</b>：若你始终把二者当同一种"补充说明"用 → 该合并。</p>
+
+<h3 style="font-size:15px">B · 保持两套，但抽出公共的「附属区栈」</h3>
+<p>把它们抽象成节点下方的<b>纵向栈</b>：rect 之后依次排 desc、qa，各自声明高度，
+由一个统一的布局函数负责分配位置。谁先谁后可配置。</p>
+<p><b>代价</b>：不解决模型重复，只是把"重叠"从 bug 变成架构上不可能。
+<b>反转条件</b>：若 desc 与 qa 在你心里是两种不同东西 → 选这个（改动最小）。</p>
+
+<h3 style="font-size:15px">C · 不改模型，改交互：把「更多内容」移出画布</h3>
+<p>节点上只留一行摘要，点击后在<b>侧边面板</b>（已有 SidePanels 互斥单态）或
+<b>浮层卡片</b>里看完整内容，画布上的节点不再被撑变形。</p>
+<p><b>代价</b>：与"让树变形、上下挤压"的需求相反 —— 这是你明确要过的功能。
+<b>反转条件</b>：若挤压后观感仍不理想（比如节点密时太乱）→ 回到这个方向。</p>
+</div>
+
+<div class="card">
+<h2 style="margin-top:0">我的判断（已根据 qa 的历史修正）</h2>
+<p>原本我推荐 <b>B</b>（只抽公共附属区栈、不动模型）。但翻出 qa 的三版演变之后，
+<b>推荐改为 A</b> —— 理由不是"它们相似"，而是：</p>
+<p style="margin:12px 0 0"><b>它们已经被各自的历史推到了同一个终点。</b>qa 在 08-28 就否掉了浮出和 popover，
+选择了占布局挤压 + 换行完整显示；desc 在 09-03 用四次返工走了同样的路，最后也是占布局挤压 + 换行。
+现在两套代码在做<b>完全相同的事</b>，只是数据结构不同（一段纯文本 vs 问答条目列表）。</p>
+<p style="margin:12px 0 0">继续留着两套，我们今天修的"重叠"只是第一个代价 —— 以后任何一边调整高度构成，
+另一边还会再压上来一次。</p>
+<p style="margin:14px 0 0"><b>稳妥的走法</b>：先做 B（把重叠封死），再在 B 的统一栈之上合并数据模型 ——
+B 是 A 的安全中间步骤，不是二选一。</p>
+<p style="margin:14px 0 0"><b>C 先不做</b>：它是你上次明确否掉的方向（你要的就是挤压）。</p>
+</div>
+</div>
+
+<footer>mindcanvas · 幕布注释设计演变 · 2026-09-04 · 配套提交 <code>abf8dd9</code></footer>
+</div>
+<script>
+document.querySelectorAll('.tab').forEach(function(t){
+  t.addEventListener('click',function(){
+    document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('on')});
+    document.querySelectorAll('.panel').forEach(function(x){x.classList.remove('on')});
+    t.classList.add('on');
+    document.getElementById(t.dataset.p).classList.add('on');
+  });
+});
+document.getElementById('b1').addEventListener('click',function(){
+  this.classList.add('on');document.getElementById('b2').classList.remove('on');
+  document.getElementById('stage1').style.display='block';
+  document.getElementById('stage2').style.display='none';
+});
+document.getElementById('b2').addEventListener('click',function(){
+  this.classList.add('on');document.getElementById('b1').classList.remove('on');
+  document.getElementById('stage1').style.display='none';
+  document.getElementById('stage2').style.display='block';
+});
+</script>
+</body>
+</html>

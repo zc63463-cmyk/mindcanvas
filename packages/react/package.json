@@ -1,0 +1,40 @@
+{
+  "name": "@mindcanvas/react",
+  "version": "1.7.0",
+  "description": "mindcanvas React 渲染器（消费 @mindcanvas/kernel；三主题令牌系统 + 玻璃 chrome）",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc -b tsconfig.json"
+  },
+  "dependencies": {
+    "@mindcanvas/free-canvas": "workspace:*",
+    "@mindcanvas/kernel": "workspace:*",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "fake-indexeddb": "^6.2.5",
+    "jsdom": "^30.0.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11"
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "name": "canvas",
+  "version": "1.7.0",
+  "private": true,
+  "type": "module",
+  "description": "mindcanvas 应用组合入口（= kernel + react 渲染器 + 插件）",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc -b tsconfig.json",
+    "diag:anchors": "node scripts/diag-anchors.mjs",
+    "diag:render": "node scripts/diag-render.mjs",
+    "diag:dup": "node scripts/diag-dup.mjs",
+    "diag:empty": "node scripts/diag-empty.mjs",
+    "diag:roundtrip": "node scripts/diag-roundtrip.mjs",
+    "diag:corridor": "node scripts/diag-corridor.mjs",
+    "diag:stepwise": "node scripts/diag-stepwise.mjs",
+    "diag:bench": "node scripts/diag-aesthetic-bench.mjs",
+    "diag:layout": "node scripts/diag-layout.mjs",
+    "diag:overlap": "node scripts/diag-overlap.mjs",
+    "diag:place": "node scripts/diag-place.mjs",
+    "diag:positions": "node scripts/diag-all-positions.mjs",
+    "diag:perf10k": "node scripts/diag-10k-layout-perf.mjs",
+    "gen:routing": "node scripts/gen-routing-tuning.mjs"
+  },
+  "dependencies": {
+    "@mindcanvas/free-canvas": "workspace:*",
+    "@mindcanvas/kernel": "workspace:*",
+    "@mindcanvas/react": "workspace:*",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.2",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
+    "@vitejs/plugin-react": "^6.1.0",
+    "jsdom": "^30.0.1",
+    "typescript": "^5.9.3",
+    "vite": "^8.2.2",
+    "vitest": "^4.1.11"
+  }
+}

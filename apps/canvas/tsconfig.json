@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "types": ["vite/client"]
+  },
+  "include": ["src", "vite.config.ts"],
+
+  // 项目引用（同上）：canvas 同时消费 kernel 与 react 的类型。
+  // 指向各自的 build 配置，因为被引用的项目不允许 noEmit（TS6310）。
+  "references": [
+    { "path": "../../packages/kernel/tsconfig.build.json" },
+    { "path": "../../packages/react/tsconfig.build.json" }
+  ]
+}

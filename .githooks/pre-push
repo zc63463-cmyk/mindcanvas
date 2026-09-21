@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+pnpm check:public
+pnpm gate
+pnpm build

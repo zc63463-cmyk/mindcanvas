@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>文件管理 · 深度调研 2026-09-03</title>
+<style>
+:root{
+  --bg:#fbfaf8; --card:#fff; --ink:#2b2926; --muted:#6b665e; --line:#e5e0d6;
+  --accent:#c2410c; --accent-soft:#fff7ed; --ok:#15803d; --ok-soft:#f0fdf4;
+  --p0:#b91c1c; --p0-soft:#fef2f2; --p1:#a16207; --p1-soft:#fefce8; --p2:#57534e; --p2-soft:#f5f5f4;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  line-height:1.7;font-size:15px}
+.wrap{max-width:1080px;margin:0 auto;padding:32px 24px 64px}
+h1{font-size:26px;margin:0 0 6px;letter-spacing:-.3px}
+.sub{color:var(--muted);font-size:13px;margin-bottom:24px}
+.verdict{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--accent);
+  border-radius:10px;padding:18px 20px;margin-bottom:24px}
+.verdict h2{margin:0 0 10px;font-size:16px;color:var(--accent)}
+.verdict ul{margin:0;padding-left:20px}
+.verdict li{margin:5px 0}
+.p0flag{background:var(--p0-soft);border:1px solid #fecaca;border-radius:8px;
+  padding:12px 16px;margin-bottom:24px;color:var(--p0);font-weight:600;font-size:14px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:20px;flex-wrap:wrap}
+.tab{padding:9px 16px;cursor:pointer;border:none;background:none;font-size:14px;
+  color:var(--muted);border-bottom:2px solid transparent;font-family:inherit}
+.tab:hover{color:var(--ink)}
+.tab.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+.panel{display:none}.panel.on{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;
+  padding:18px 20px;margin-bottom:16px}
+.card h3{margin:0 0 12px;font-size:15px}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.3px}
+tr:last-child td{border-bottom:none}
+code{background:#f3f1ec;padding:1px 5px;border-radius:4px;font-size:12.5px;
+  font-family:"SF Mono",Consolas,monospace}
+.badge{display:inline-block;padding:1px 8px;border-radius:20px;font-size:11.5px;font-weight:700}
+.b0{background:var(--p0-soft);color:var(--p0)}
+.b1{background:var(--p1-soft);color:var(--p1)}
+.b2{background:var(--p2-soft);color:var(--p2)}
+.bok{background:var(--ok-soft);color:var(--ok)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:16px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.stat .n{font-size:24px;font-weight:700;color:var(--accent);line-height:1.2}
+.stat .l{font-size:12.5px;color:var(--muted);margin-top:2px}
+.no{color:var(--p0);font-weight:700}.yes{color:var(--ok);font-weight:700}
+.note{background:var(--accent-soft);border:1px solid #fed7aa;border-radius:8px;
+  padding:12px 16px;font-size:13.5px;margin-top:12px}
+.flow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:10px 0;font-size:13px}
+.flow .n{background:#f3f1ec;padding:5px 10px;border-radius:6px}
+.flow .a{color:var(--muted)}
+footer{margin-top:32px;padding-top:16px;border-top:1px solid var(--line);
+  color:var(--muted);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>文件管理 · 深度调研与设计建议</h1>
+<div class="sub">2026-09-03 · 分层 Explore + 逐条交叉验证 + jsdom 运行时取证 · 所有量化数据为实测</div>
+
+<div class="p0flag">🔴 P0 会丢数据：切换文档时未保存修改被静默丢弃 —— 三处打开入口中两处没有守卫，连提示都没有。</div>
+
+<div class="verdict">
+<h2>结论先行</h2>
+<ul>
+<li><b>当前形态</b>：「元数据索引」+「最近列表」两堆独立 localStorage；UI 是一个非单态浮层；<code>.mm.md</code> 才是事实源。</li>
+<li><b>核心取舍</b>：库里<b>只有最近 8 条文档保留内容快照</b>，更早的只剩元数据，打开需重新选文件。</li>
+<li><b>建议路径</b>：① 先修 P0 ② 合并为单一事实源 ③ 8 条上限在 UI 显式化 ④ 目录<b>保持虚目录</b>，不做实体化。</li>
+<li><b>暂缓</b>：升级 IndexedDB、目录实体化 —— 等 friction-log 触发反转条件再动。</li>
+</ul>
+</div>
+
+<div class="tabs">
+<button class="tab on" data-p="p1">结论</button>
+<button class="tab" data-p="p2">分层实证</button>
+<button class="tab" data-p="p3">运行时取证</button>
+<button class="tab" data-p="p4">缺口清单</button>
+<button class="tab" data-p="p5">设计方案</button>
+<button class="tab" data-p="p6">文件索引</button>
+</div>
+
+<div class="panel on" id="p1">
+<div class="grid">
+<div class="stat"><div class="n">2</div><div class="l">独立的 localStorage（互不通知）</div></div>
+<div class="stat"><div class="n">8</div><div class="l">可直接打开的文档上限</div></div>
+<div class="stat"><div class="n">3</div><div class="l">打开入口，仅 1 处有守卫</div></div>
+<div class="stat"><div class="n">10.4 KB</div><div class="l">12 条文档的实际占用</div></div>
+</div>
+<div class="card">
+<h3>一句话</h3>
+<p style="margin:0">功能骨架是完整的，但<b>「打开」这条最基础的路径存在数据丢失风险</b>，且容量策略会让文件库在超过 8 个文档后退化成"最近使用列表"。</p>
+</div>
+<div class="card">
+<h3>推荐执行顺序</h3>
+<table>
+<tr><th>顺序</th><th>事项</th><th>量级</th><th>理由</th></tr>
+<tr><td>1</td><td><b>修 P0：三处入口统一走 applyDoc</b></td><td>半天</td><td>会丢数据，改动极小（两处 setDoc → applyDoc）</td></tr>
+<tr><td>2</td><td>合并两堆存储为单一事实源</td><td>1–2 天</td><td>消除状态漂移；需先补齐 DocEntry 缺失字段</td></tr>
+<tr><td>3</td><td>8 条上限在 UI 上显式化</td><td>半天</td><td>让取舍可见，而不是撞上才知道</td></tr>
+<tr><td>4</td><td>交互补全（拖拽/搜索/建时选位）</td><td>2–3 天</td><td>等 F 周摩擦排序后再做，别提前投资</td></tr>
+<tr><td>—</td><td>~~升级 IndexedDB~~</td><td>—</td><td>暂缓，等 friction-log 触发</td></tr>
+<tr><td>—</td><td>~~目录实体化~~</td><td>—</td><td>不做，代价大于收益</td></tr>
+</table>
+</div>
+</div>
+
+<div class="panel" id="p2">
+<div class="card">
+<h3>1.1 数据层 · DocLibrary（元数据索引）</h3>
+<table>
+<tr><th>项</th><th>事实</th><th>证据</th></tr>
+<tr><td>存储 key</td><td><code>mindcanvas.library.v1</code></td><td>docLibrary.ts:18</td></tr>
+<tr><td>数据模型</td><td><code>{ id, name, ts, folder, tags, source? }</code></td><td>docLibrary.ts:23-38</td></tr>
+<tr><td>schema 版本</td><td><b>无独立版本号</b>，靠 isEntry 运行时校验</td><td>docLibrary.ts:56</td></tr>
+<tr><td>配额降级</td><td>满时剥掉旧条目 source 重试；仍失败静默丢弃</td><td>docLibrary.ts:96-104</td></tr>
+<tr><td>损坏处理</td><td>load() 失败返回空数组，退化为内存态</td><td>docLibrary.ts:88</td></tr>
+</table>
+</div>
+<div class="card">
+<h3>1.2 数据层 · LocalDocHost（最近列表）</h3>
+<table>
+<tr><th>项</th><th>事实</th><th>证据</th></tr>
+<tr><td>存储 key</td><td><code>mindcanvas.docs.v1</code>（<b>与上面不是同一个</b>）</td><td>document.ts:47</td></tr>
+<tr><td>上限</td><td>RECENT_MAX = 8</td><td>document.ts:48</td></tr>
+<tr><td>handle</td><td>remember() <b>显式丢弃</b> FileSystemFileHandle（不可序列化）</td><td>document.ts:99-107</td></tr>
+</table>
+<div class="note">跨会话恢复的文档<b>没有句柄</b>，再次保存只能走下载兜底（document.ts:83）。这是 S2 启动页的已知约束。</div>
+</div>
+<div class="card">
+<h3>1.3 UI 层 · FileManager</h3>
+<table>
+<tr><th>项</th><th>事实</th></tr>
+<tr><td>形态</td><td>纯浮层，props <code>{library, onOpen, onCreate, onClose}</code>（FileManager.tsx:15-21）</td></tr>
+<tr><td>树渲染</td><td>递归 renderLevel(path, depth)，先目录后文档（:90-125）</td></tr>
+<tr><td>状态</td><td>expanded / renamingId / movingId / forceRender（:70-73）</td></tr>
+<tr><td>重渲染</td><td>DocLibrary 是命令式的，改完要手动 refresh()（:75-76）</td></tr>
+<tr><td>开关</td><td><b>不走 panel 单态</b>，是独立的 fileManagerOpen（MindmapStage.tsx:434）</td></tr>
+<tr><td>登记时机</td><td>useEffect 在 doc.saved 为真时 upsert（MindmapStage.tsx:558-560）</td></tr>
+</table>
+<div class="note"><b>新建但未保存的文档不进库</b>（MindmapStage.tsx:550-551 注释）。</div>
+</div>
+</div>
+
+<div class="panel" id="p3">
+<div class="card">
+<h3>取证方式</h3>
+<p style="margin:0 0 10px">临时探针在 jsdom 中实跑 <code>DocLibrary</code>（跑完已删除），而非读代码推断。</p>
+<div class="flow"><span class="n">upsert ×2</span><span class="a">→</span><span class="n">move 到 工作/项目</span><span class="a">→</span><span class="n">folders()</span><span class="a">→</span><span class="n">childrenOf()</span><span class="a">→</span><span class="n">rename</span><span class="a">→</span><span class="n">读 localStorage 原文</span></div>
+</div>
+<div class="card">
+<h3>发现 1 · 目录树逻辑本身是健康的</h3>
+<table>
+<tr><th>调用</th><th>实测返回</th></tr>
+<tr><td>folders()</td><td><code>["工作","工作/项目"]</code></td></tr>
+<tr><td>childrenOf('工作')</td><td><code>{"dirs":["项目"],"docs":[]}</code></td></tr>
+<tr><td>childrenOf('工作/项目')</td><td><code>{"dirs":[],"docs":[b.mm.md]}</code></td></tr>
+<tr><td>深层 生活/2026/计划</td><td>逐级正确推导</td></tr>
+<tr><td>脏路径 <code>' 工作 //项目 '</code></td><td>被 cleanFolder 清洗为 <code>工作/项目</code></td></tr>
+</table>
+</div>
+<div class="card">
+<h3>发现 2 · rename 只改显示名，id 不变</h3>
+<p style="margin:0 0 8px"><code>{"id":"b.mm.md","name":"新名字",...}</code></p>
+<p style="margin:0">表面看是"失配"，但有 source 快照兜底，短期仍能打开。<b>真正的问题在没有 source 的旧条目</b>：名字改了、磁盘文件名没改，用户再也找不到对应关系。</p>
+</div>
+<div class="card">
+<h3>发现 3 · 容量策略的真实形态（最关键）</h3>
+<table>
+<tr><th>指标</th><th>实测值</th></tr>
+<tr><td>库内文档总数</td><td>12 条</td></tr>
+<tr><td><b>仍带内容快照的</b></td><td><b>8 条</b>（仅最近 8 条 d5–d12）</td></tr>
+<tr><td>每条 source 体积</td><td>约 1.2 KB（400 字中文）</td></tr>
+<tr><td>12 条总占用</td><td>约 10.4 KB</td></tr>
+</table>
+<div class="note"><code>SOURCE_KEEP = 8</code> 是硬约束：超过 8 条的文档只剩元数据，点击打开会走"重新选择文件"。<br>
+即：文档数 &gt; 8 之后，文件库实质上退化成「最近 8 个可直接打开的 + 一堆需重新定位的快捷方式」。</div>
+</div>
+</div>
+
+<div class="panel" id="p4">
+<div class="card">
+<h3><span class="badge b0">P0</span> 切换文档会静默丢未保存修改</h3>
+<p style="margin:0 0 10px"><code>applyDoc</code> 有守卫（useDocumentActions.ts:43）：</p>
+<p style="margin:0 0 12px"><code>if (controller.dirty && !window.confirm('当前文档有未保存的修改，确定放弃并切换？')) return;</code></p>
+<table>
+<tr><th>入口</th><th>实现</th><th>守卫</th></tr>
+<tr><td>文档栏「最近」菜单</td><td>applyDoc(d)（MindmapStage.tsx:1202）</td><td class="yes">✅ 有</td></tr>
+<tr><td>工具栏「打开」</td><td>applyDoc(...)（:1059、:1231）</td><td class="yes">✅ 有</td></tr>
+<tr><td><b>FileManager 点击文档</b></td><td>直接 setDoc({...})（:1578）</td><td class="no">❌ 无</td></tr>
+<tr><td><b>启动页「最近」</b></td><td>直接 setDoc(d)（StartupScreen.tsx:205）</td><td class="no">❌ 无</td></tr>
+</table>
+<div class="note">从文件管理器或启动页切换文档，未保存修改<b>连提示都没有</b>就直接没了。</div>
+</div>
+<div class="card">
+<h3><span class="badge b1">P1</span> 两堆 localStorage 各说各话</h3>
+<p style="margin:0">schema 独立、容量策略独立、互不通知。同一份文档在两处都有记录，重命名/删除只影响其中一处 → 两边状态漂移。</p>
+</div>
+<div class="card">
+<h3><span class="badge b1">P1</span> 只有 8 条能直接打开</h3>
+<p style="margin:0">见取证发现 3。这是容量策略的必然结果，不是 bug，但是<b>设计上的取舍</b> —— 需要明确是否接受。</p>
+</div>
+<div class="card">
+<h3><span class="badge b2">P2</span> 交互缺失</h3>
+<table>
+<tr><th>缺口</th><th>证据</th></tr>
+<tr><td>移动靠手填路径文本，无拖拽、无目录选择器</td><td>FileManager.tsx:192-210</td></tr>
+<tr><td>无文件名搜索（画布 Ctrl+F 只搜节点）</td><td>—</td></tr>
+<tr><td>新建后落到根目录，不能建时选位</td><td>FileManager.tsx:217</td></tr>
+<tr><td>「移除」只删索引、无撤销/回收</td><td>FileManager.tsx:220-231</td></tr>
+<tr><td>无目录实体：不能建空目录 / 重命名 / 删除目录</td><td>docLibrary.ts 无对应 API</td></tr>
+</table>
+</div>
+</div>
+
+<div class="panel" id="p5">
+<div class="card">
+<h3>决策 A · 存储后端是否升级</h3>
+<table>
+<tr><th>成本项</th><th>维持 localStorage</th><th>升级 IndexedDB</th><th>判定</th></tr>
+<tr><td>解除 8 条上限</td><td class="no">✗</td><td class="yes">✓</td><td><b>差异项</b></td></tr>
+<tr><td>重写持久化层</td><td>—</td><td>中（异步 API，调用点全变 async）</td><td>差异项</td></tr>
+<tr><td>迁移旧数据</td><td>—</td><td>小（读一次写入即可）</td><td>差异项</td></tr>
+<tr><td>UI 改造</td><td colspan="2" style="text-align:center">两方案都要做</td><td><b>共担</b></td></tr>
+<tr><td>打开守卫（P0）</td><td colspan="2" style="text-align:center">两方案都要做</td><td><b>共担</b></td></tr>
+</table>
+<div class="note"><b>推荐：先不动后端</b>，只把 8 条上限显式化。<br>
+目前没有证据支持"文档数 &gt; 8 且有必须直接从库里打开的强需求"。<br>
+<b>反转条件</b>：friction-log 出现「想打开第 N 个历史文档却要重新选文件」≥ 2 次，立刻升级。</div>
+</div>
+<div class="card">
+<h3>决策 B · 目录是否实体化</h3>
+<table>
+<tr><th>成本项</th><th>虚目录（现状）</th><th>实体目录</th></tr>
+<tr><td>建空目录</td><td class="no">✗</td><td class="yes">✓</td></tr>
+<tr><td>目录重命名级联</td><td class="yes">无（不存在）</td><td class="no">高（要改写全部后代 folder）</td></tr>
+<tr><td>删除目录语义</td><td class="yes">无</td><td class="no">要定义（级联删？提升子级？）</td></tr>
+</table>
+<div class="note"><b>推荐：保持虚目录。</b>当前"目录 = 路径推导"足够支撑层级浏览，实体化换来的是「建空目录」这个低频需求，代价是一整套级联语义。<br>
+<b>反转条件</b>：出现「我想先建好目录结构再往里放文档」的真实需求。</div>
+</div>
+<div class="card">
+<h3>决策 C · 两堆存储是否合并</h3>
+<p style="margin:0 0 10px"><b>推荐：合并为单一事实源</b>（DocLibrary 唯一入口，recent 从它派生：list() 按 ts 排序取前 8）。</p>
+<p style="margin:0">成本小（新增方法 + 改几处调用），收益是消除状态漂移。<b>代价</b>：recent 存的是 MindDoc（含 saved 等业务字段），DocEntry 没有 —— 合并时要补字段或做映射，需谨慎。</p>
+</div>
+</div>
+
+<div class="panel" id="p6">
+<div class="card">
+<table>
+<tr><th>层</th><th>文件</th><th>职责</th></tr>
+<tr><td>数据</td><td><code>packages/react/src/edit/docLibrary.ts</code></td><td>元数据索引（目录 / 标签 / 快照）</td></tr>
+<tr><td>数据</td><td><code>packages/react/src/edit/document.ts</code></td><td>文档宿主（FS Access + 最近列表）</td></tr>
+<tr><td>UI</td><td><code>apps/canvas/src/FileManager.tsx</code></td><td>目录树浮层</td></tr>
+<tr><td>UI</td><td><code>apps/canvas/src/StartupScreen.tsx</code></td><td>启动页（最近 8 条）</td></tr>
+<tr><td>接线</td><td><code>apps/canvas/src/MindmapStage.tsx</code></td><td>挂载 / 开关 / 打开链 / 保存登记</td></tr>
+<tr><td>逻辑</td><td><code>apps/canvas/src/hooks/useDocumentActions.ts</code></td><td>applyDoc（<b>唯一有守卫的入口</b>）</td></tr>
+<tr><td>测试</td><td><code>packages/react/tests/doc-library.test.ts</code></td><td>26 条（覆盖目录树）</td></tr>
+</table>
+</div>
+<div class="card">
+<h3>诚实披露</h3>
+<ul style="margin:0;padding-left:20px">
+<li>取证基于 jsdom 模拟的 localStorage，<b>未覆盖真实浏览器的配额触顶行为</b>（5MB 是注释里的经验值，未实测）。</li>
+<li>「升级 IndexedDB」的成本是架构级判断，未做原型验证；真要做时建议先写 30 行读写原型。</li>
+<li>决策 B（不做目录实体化）是判断而非实证。<b>如果你预期会大量使用"先建结构再放文档"的工作流，这个结论应该反过来。</b></li>
+</ul>
+</div>
+</div>
+
+<footer>mindcanvas · 文件管理深度调研 · 2026-09-03 · 配套 Markdown：<code>文件管理-深度调研-2026-09-03.md</code></footer>
+</div>
+<script>
+document.querySelectorAll('.tab').forEach(function(t){
+  t.addEventListener('click',function(){
+    document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('on')});
+    document.querySelectorAll('.panel').forEach(function(x){x.classList.remove('on')});
+    t.classList.add('on');
+    document.getElementById(t.dataset.p).classList.add('on');
+  });
+});
+</script>
+</body>
+</html>

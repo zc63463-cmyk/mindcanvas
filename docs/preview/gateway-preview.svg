@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-573.5 -223 1275 446" font-family="'Segoe UI', 'Microsoft YaHei', sans-serif">
+<rect x="-573.5" y="-223" width="1275" height="446" fill="#fafaf8"/>
+<path d="M 57.5 0 C 83.1 14.4, 95.9 -86.4, 121.5 -72" fill="none" stroke="#b4b2a9" stroke-width="1.2"/>
+<path d="M 273.5 -72 C 299.1 -57.2, 311.9 -160.8, 337.5 -146" fill="none" stroke="#b4b2a9" stroke-width="1.2"/>
+<path d="M 273.5 -72 C 299.1 -69.4, 311.9 -87.6, 337.5 -85" fill="none" stroke="#b4b2a9" stroke-width="1.2"/>
+<path d="M 273.5 -72 C 299.1 -59.8, 311.9 -23.200000000000003, 337.5 -11" fill="none" stroke="#b4b2a9" stroke-width="1.2"/>
+<path d="M -57.5 0 C -83.1 14.4, -95.9 -86.4, -121.5 -72" fill="none" stroke="#b4b2a9" stroke-width="1.2"/>
+<path d="M -259.5 -72 C -285.1 -62.4, -297.9 -129.6, -323.5 -120" fill="none" stroke="#b4b2a9" stroke-width="1.2"/>
+<path d="M -259.5 -72 C -285.1 -72, -297.9 -72, -323.5 -72" fill="none" stroke="#b4b2a9" stroke-width="1.2"/>
+<path d="M -259.5 -72 C -285.1 -62.4, -297.9 -33.6, -323.5 -24" fill="none" stroke="#b4b2a9" stroke-width="1.2"/>
+<path d="M -57.5 0 C -83.1 4.800000000000001, -95.9 19.2, -121.5 24" fill="none" stroke="#b4b2a9" stroke-width="1.2"/>
+<path d="M -181.5 24 C -207.1 24, -219.9 24, -245.5 24" fill="none" stroke="#b4b2a9" stroke-width="1.2"/>
+<path d="M -57.5 0 C -83.1 14.4, -95.9 57.6, -121.5 72" fill="none" stroke="#b4b2a9" stroke-width="1.2"/>
+<path d="M -193.5 72 C -219.1 72, -231.9 72, -257.5 72" fill="none" stroke="#b4b2a9" stroke-width="1.2"/>
+<path d="M 57.5 0 C 83.1 19.6, 95.9 78.4, 121.5 98" fill="none" stroke="#b4b2a9" stroke-width="1.2"/>
+<path d="M 318.5 98 C 344.1 107.6, 356.9 40.4, 382.5 50" fill="none" stroke="#b4b2a9" stroke-width="1.2"/>
+<path d="M 318.5 98 C 344.1 98, 356.9 98, 382.5 98" fill="none" stroke="#b4b2a9" stroke-width="1.2"/>
+<path d="M 318.5 98 C 344.1 107.6, 356.9 136.4, 382.5 146" fill="none" stroke="#b4b2a9" stroke-width="1.2"/>
+<path d="M -57.5 0 C -83.1 24, -95.9 96, -121.5 120" fill="none" stroke="#b4b2a9" stroke-width="1.2"/>
+<path d="M -193.5 120 C -219.1 120, -231.9 120, -257.5 120" fill="none" stroke="#b4b2a9" stroke-width="1.2"/>
+<rect x="-57.5" y="-17" width="115" height="34" rx="6" fill="#d9d7ef" stroke="#534ab7" stroke-width="1.5"/>
+<text x="-49.5" y="0" dominant-baseline="central" font-size="13" fill="#26215c">Agent Gateway</text>
+<rect x="121.5" y="-89" width="152" height="34" rx="6" fill="#e4e2f4" stroke="#c9c7e8" stroke-width="0.8"/>
+<text x="129.5" y="-72" dominant-baseline="central" font-size="13" fill="#26215c">文档（Forgejo 真实）</text>
+<rect x="337.5" y="-163" width="273" height="34" rx="6" fill="#eceaf8" stroke="#c9c7e8" stroke-width="0.8"/>
+<text x="345.5" y="-146" dominant-baseline="central" font-size="13" fill="#26215c">@doc:docs/01-architecture.md</text>
+<rect x="337.5" y="-115" width="280" height="60" rx="6" fill="#eceaf8" stroke="#c9c7e8" stroke-width="0.8"/>
+<text x="345.5" y="-85" dominant-baseline="central" font-size="13" fill="#26215c">@doc:docs/07-entity-ref-protocol.md</text>
+<rect x="337.5" y="-41" width="280" height="60" rx="6" fill="#eceaf8" stroke="#c9c7e8" stroke-width="0.8"/>
+<text x="345.5" y="-11" dominant-baseline="central" font-size="13" fill="#26215c">@doc:docs/09-knowledge-canvas-and-conventions.md</text>
+<rect x="-259.5" y="-89" width="138" height="34" rx="6" fill="#e4e2f4" stroke="#c9c7e8" stroke-width="0.8"/>
+<text x="-251.5" y="-72" dominant-baseline="central" font-size="13" fill="#26215c">任务（真实 Issue）</text>
+<rect x="-470.5" y="-137" width="147" height="34" rx="6" fill="#eceaf8" stroke="#c9c7e8" stroke-width="0.8"/>
+<text x="-462.5" y="-120" dominant-baseline="central" font-size="13" fill="#26215c">@issue:1</text>
+<rect x="-470.5" y="-89" width="147" height="34" rx="6" fill="#eceaf8" stroke="#c9c7e8" stroke-width="0.8"/>
+<text x="-462.5" y="-72" dominant-baseline="central" font-size="13" fill="#26215c">@issue:6</text>
+<rect x="-470.5" y="-41" width="147" height="34" rx="6" fill="#eceaf8" stroke="#c9c7e8" stroke-width="0.8"/>
+<text x="-462.5" y="-24" dominant-baseline="central" font-size="13" fill="#26215c">@issue:8</text>
+<rect x="-181.5" y="7" width="60" height="34" rx="6" fill="#e4e2f4" stroke="#c9c7e8" stroke-width="0.8"/>
+<text x="-173.5" y="24" dominant-baseline="central" font-size="13" fill="#26215c">里程碑</text>
+<rect x="-513.5" y="7" width="268" height="34" rx="6" fill="#eceaf8" stroke="#c9c7e8" stroke-width="0.8"/>
+<text x="-505.5" y="24" dominant-baseline="central" font-size="13" fill="#26215c">@milestone:门户显示优化</text>
+<rect x="-193.5" y="55" width="72" height="34" rx="6" fill="#e4e2f4" stroke="#c9c7e8" stroke-width="0.8"/>
+<text x="-185.5" y="72" dominant-baseline="central" font-size="13" fill="#26215c">灵感联动</text>
+<rect x="-474.5" y="55" width="217" height="34" rx="6" fill="#eceaf8" stroke="#c9c7e8" stroke-width="0.8"/>
+<text x="-466.5" y="72" dominant-baseline="central" font-size="13" fill="#26215c">@idea:forge-inbox:2</text>
+<rect x="121.5" y="81" width="197" height="34" rx="6" fill="#e4e2f4" stroke="#c9c7e8" stroke-width="0.8"/>
+<text x="129.5" y="98" dominant-baseline="central" font-size="13" fill="#26215c">断裂引用（unresolved 演示）</text>
+<rect x="382.5" y="33" width="154" height="34" rx="6" fill="#eceaf8" stroke="#c9c7e8" stroke-width="0.8"/>
+<text x="390.5" y="50" dominant-baseline="central" font-size="13" fill="#26215c">@issue:99</text>
+<rect x="382.5" y="81" width="112" height="34" rx="6" fill="#eceaf8" stroke="#c9c7e8" stroke-width="0.8"/>
+<text x="390.5" y="98" dominant-baseline="central" font-size="13" fill="#26215c">@pr:17</text>
+<rect x="382.5" y="129" width="259" height="34" rx="6" fill="#eceaf8" stroke="#c9c7e8" stroke-width="0.8"/>
+<text x="390.5" y="146" dominant-baseline="central" font-size="13" fill="#26215c">@doc:docs/架构设计-不存在.md</text>
+<rect x="-193.5" y="103" width="72" height="34" rx="6" fill="#e4e2f4" stroke="#c9c7e8" stroke-width="0.8"/>
+<text x="-185.5" y="120" dominant-baseline="central" font-size="13" fill="#26215c">我的想法</text>
+<rect x="-454.5" y="103" width="197" height="34" rx="6" fill="#eceaf8" stroke="#c9c7e8" stroke-width="0.8"/>
+<text x="-446.5" y="120" dominant-baseline="central" font-size="13" fill="#26215c">先只读，把引用解析链路跑通</text>
+</svg>

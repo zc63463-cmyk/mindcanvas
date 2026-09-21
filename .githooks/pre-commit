@@ -1,0 +1,75 @@
+#!/bin/sh
+# MindCanvas · pre-commit 门禁
+#
+# 只跑「快检」：架构依赖守护 + lint（各 ~10s）。
+# 全量（typecheck + 746 测试）留给 pre-push 与 CI —— 提交要轻快，推送要可靠。
+#
+# 注意：lint 只在出现 error 时失败，warning（存量代码质量债）不阻塞。
+#
+# 绕过（仅限紧急场景）：git commit --no-verify
+
+set -e
+
+# ── ADR-0006 机器防线：.forge/ 私有知识区永不进入本公开仓库 ────────────────────
+# 提交路径含 .forge/ 时直接拒绝（机器强制，不依赖人自觉）；先于依赖守护/ lint 执行。
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+if printf '%s\n' "$staged" | grep -q '\.forge/'; then
+  echo ""
+  echo "✗ [pre-commit] 拒绝提交：暂存区包含 .forge/ 路径（ADR-0006 机器防线）。"
+  echo ""
+  printf '%s\n' "$staged" | grep '\.forge/' | sed 's/^/    /'
+  echo ""
+  echo "  处理：git restore --staged <路径>"
+  exit 1
+fi
+
+# pnpm 可用时走原命令；不可用时（受管 Node 沙箱无 pnpm shim，如 WorkBuddy/CI 受限环境）
+# 回退到等价的直接二进制调用——门禁项目一项不少，只换 invocation。
+# 回退需要 node 在 PATH（受管运行时或系统 Node 均可）。
+run_depcruise() {
+  if command -v pnpm >/dev/null 2>&1; then
+    pnpm depcruise
+  else
+    ./node_modules/.bin/depcruise packages apps --config .dependency-cruiser.js
+  fi
+}
+run_lint() {
+  if command -v pnpm >/dev/null 2>&1; then
+    pnpm lint
+  else
+    node node_modules/@biomejs/biome/bin/biome lint packages apps
+  fi
+}
+
+echo "▶ [pre-commit] 架构依赖守护 (dependency-cruiser)..."
+
+if ! run_depcruise; then
+  echo ""
+  echo "✗ 架构依赖守护未通过 —— 依赖方向违反了 .dependency-cruiser.js 的规则。"
+  echo "  常见原因："
+  echo "   · kernel 引入了 react / DOM / apps（kernel 必须保持零依赖、无 DOM）"
+  echo "   · 产生了循环依赖"
+  echo "   · 跨 app 引用（apps/canvas → apps/other）"
+  echo ""
+  echo "  查看规则：cat .dependency-cruiser.js"
+  echo "  手动跑：pnpm depcruise"
+  echo "  紧急绕过（不推荐）：git commit --no-verify"
+  exit 1
+fi
+
+echo "✔ 架构依赖守护通过"
+
+echo "▶ [pre-commit] 代码检查 (biome lint)..."
+
+if ! run_lint; then
+  echo ""
+  echo "✗ 代码检查未通过 —— biome lint 报告了 error 级问题。"
+  echo "  说明：warning 级（如 any / console）不阻塞，只有 error 会中断提交。"
+  echo ""
+  echo "  自动修复：pnpm lint:fix"
+  echo "  仅看格式：pnpm format"
+  echo "  紧急绕过（不推荐）：git commit --no-verify"
+  exit 1
+fi
+
+echo "✔ 代码检查通过"

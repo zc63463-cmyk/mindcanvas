@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="520" viewBox="0 0 760 520">
+<rect width="760" height="520" fill="#ffffff"/>
+<title>连线避障路由可视化对比</title>
+
+  <g>
+    <text x="126.66666666666667" y="30" text-anchor="middle" font-family="system-ui, sans-serif" font-size="13" font-weight="500" fill="#1a1a1a">改造前：原贝塞尔</text>
+    <g transform="translate(0,0)">
+      
+  <rect x="80" y="60" width="150" height="44" rx="8" fill="#e8f0fe" stroke="#185fa5" stroke-width="1.2"/>
+  <text x="155" y="75" text-anchor="middle" dominant-baseline="central"
+        font-family="system-ui, sans-serif" font-size="13" fill="#1a1a1a">源节点</text>
+  <text x="155" y="93" text-anchor="middle" dominant-baseline="central"
+        font-family="system-ui, sans-serif" font-size="10" fill="#666">A</text>
+      
+  <rect x="60" y="210" width="190" height="44" rx="8" fill="#fdecea" stroke="#a32d2d" stroke-width="1.2"/>
+  <text x="155" y="225" text-anchor="middle" dominant-baseline="central"
+        font-family="system-ui, sans-serif" font-size="13" fill="#1a1a1a">中间节点（障碍）</text>
+  <text x="155" y="243" text-anchor="middle" dominant-baseline="central"
+        font-family="system-ui, sans-serif" font-size="10" fill="#666">M</text>
+      
+  <rect x="80" y="360" width="150" height="44" rx="8" fill="#e8f0fe" stroke="#185fa5" stroke-width="1.2"/>
+  <text x="155" y="375" text-anchor="middle" dominant-baseline="central"
+        font-family="system-ui, sans-serif" font-size="13" fill="#1a1a1a">目标节点</text>
+  <text x="155" y="393" text-anchor="middle" dominant-baseline="central"
+        font-family="system-ui, sans-serif" font-size="10" fill="#666">B</text>
+    </g>
+    <path d="M 155 104C 114.03999999999999 193.6 114.03999999999999 270.4 155 360" fill="none" stroke="#c0392b" stroke-width="2.2" stroke-dasharray="6 4" stroke-linecap="round"/>
+    <text x="126.66666666666667" y="496" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12"
+          fill="#a32d2d">穿过 M ✗</text>
+  </g>
+  <line x1="0" y1="44" x2="0" y2="476" stroke="#e0e0e0" stroke-width="1"/>
+  <g>
+    <text x="380" y="30" text-anchor="middle" font-family="system-ui, sans-serif" font-size="13" font-weight="500" fill="#1a1a1a">新：圆角折线绕行</text>
+    <g transform="translate(0,0)">
+      
+  <rect x="333.33333333333337" y="60" width="150" height="44" rx="8" fill="#e8f0fe" stroke="#185fa5" stroke-width="1.2"/>
+  <text x="408.33333333333337" y="75" text-anchor="middle" dominant-baseline="central"
+        font-family="system-ui, sans-serif" font-size="13" fill="#1a1a1a">源节点</text>
+  <text x="408.33333333333337" y="93" text-anchor="middle" dominant-baseline="central"
+        font-family="system-ui, sans-serif" font-size="10" fill="#666">A</text>
+      
+  <rect x="313.33333333333337" y="210" width="190" height="44" rx="8" fill="#fdecea" stroke="#a32d2d" stroke-width="1.2"/>
+  <text x="408.33333333333337" y="225" text-anchor="middle" dominant-baseline="central"
+        font-family="system-ui, sans-serif" font-size="13" fill="#1a1a1a">中间节点（障碍）</text>
+  <text x="408.33333333333337" y="243" text-anchor="middle" dominant-baseline="central"
+        font-family="system-ui, sans-serif" font-size="10" fill="#666">M</text>
+      
+  <rect x="333.33333333333337" y="360" width="150" height="44" rx="8" fill="#e8f0fe" stroke="#185fa5" stroke-width="1.2"/>
+  <text x="408.33333333333337" y="375" text-anchor="middle" dominant-baseline="central"
+        font-family="system-ui, sans-serif" font-size="13" fill="#1a1a1a">目标节点</text>
+  <text x="408.33333333333337" y="393" text-anchor="middle" dominant-baseline="central"
+        font-family="system-ui, sans-serif" font-size="10" fill="#666">B</text>
+    </g>
+    <path d="M 491.33333333333337 82L 513.3333333333334 82Q 523.3333333333334 82 523.3333333333334 92L 523.3333333333334 372Q 523.3333333333334 382 513.3333333333334 382L 491.33333333333337 382" fill="none" stroke="#1d9e75" stroke-width="2.2"  stroke-linecap="round"/>
+    <text x="380" y="496" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12"
+          fill="#0f6e56">绕开 M ✓</text>
+  </g>
+  <line x1="253.33333333333334" y1="44" x2="253.33333333333334" y2="476" stroke="#e0e0e0" stroke-width="1"/>
+  <g>
+    <text x="633.3333333333334" y="30" text-anchor="middle" font-family="system-ui, sans-serif" font-size="13" font-weight="500" fill="#1a1a1a">新：Catmull-Rom 平滑</text>
+    <g transform="translate(0,0)">
+      
+  <rect x="586.6666666666667" y="60" width="150" height="44" rx="8" fill="#e8f0fe" stroke="#185fa5" stroke-width="1.2"/>
+  <text x="661.6666666666667" y="75" text-anchor="middle" dominant-baseline="central"
+        font-family="system-ui, sans-serif" font-size="13" fill="#1a1a1a">源节点</text>
+  <text x="661.6666666666667" y="93" text-anchor="middle" dominant-baseline="central"
+        font-family="system-ui, sans-serif" font-size="10" fill="#666">A</text>
+      
+  <rect x="566.6666666666667" y="210" width="190" height="44" rx="8" fill="#fdecea" stroke="#a32d2d" stroke-width="1.2"/>
+  <text x="661.6666666666667" y="225" text-anchor="middle" dominant-baseline="central"
+        font-family="system-ui, sans-serif" font-size="13" fill="#1a1a1a">中间节点（障碍）</text>
+  <text x="661.6666666666667" y="243" text-anchor="middle" dominant-baseline="central"
+        font-family="system-ui, sans-serif" font-size="10" fill="#666">M</text>
+      
+  <rect x="586.6666666666667" y="360" width="150" height="44" rx="8" fill="#e8f0fe" stroke="#185fa5" stroke-width="1.2"/>
+  <text x="661.6666666666667" y="375" text-anchor="middle" dominant-baseline="central"
+        font-family="system-ui, sans-serif" font-size="13" fill="#1a1a1a">目标节点</text>
+  <text x="661.6666666666667" y="393" text-anchor="middle" dominant-baseline="central"
+        font-family="system-ui, sans-serif" font-size="10" fill="#666">B</text>
+    </g>
+    <path d="M 744.6666666666667 82C 755.3333333333334 82 768.6260533218439 73.9593866551772 776.6666666666667 82C 801.285916558953 106.61924989228623 801.285916558953 357.38075010771377 776.6666666666667 382C 768.6260533218439 390.0406133448228 755.3333333333334 382 744.6666666666667 382" fill="none" stroke="#534ab7" stroke-width="2.2"  stroke-linecap="round"/>
+    <text x="633.3333333333334" y="496" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12"
+          fill="#0f6e56">绕开 M ✓</text>
+  </g>
+  <line x1="506.6666666666667" y1="44" x2="506.6666666666667" y2="476" stroke="#e0e0e0" stroke-width="1"/>
+<text x="380" y="514" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11" fill="#888">
+  三列为同一场景（A 与 B 纵向排列，M 夹在中间）· 节点为世界坐标盒
+</text>
+</svg>

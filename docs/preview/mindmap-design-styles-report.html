@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>思维导图设计风格 · 深度调研报告</title>
+<style>
+  :root{--paper:#faf8f4;--card:#ffffff;--ink:#2b2926;--ink-2:#6b655c;--ink-3:#9a948a;--line:#e7e2d8;--accent:#0f6e56;--accent-2:#534ab7;
+    --serif:'Songti SC','Noto Serif SC',Georgia,serif;--sans:'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;--mono:'Cascadia Code',Consolas,monospace;}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.7;padding-bottom:80px}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 28px}
+  header{padding:64px 0 28px;border-bottom:1px solid var(--line);margin-bottom:36px}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.18em;color:var(--accent);margin-bottom:14px}
+  h1{font-family:var(--serif);font-weight:500;font-size:34px;letter-spacing:.02em}
+  .sub{margin-top:14px;color:var(--ink-2);font-size:14px;max-width:660px}
+  .meta{display:flex;gap:24px;margin-top:22px;font-family:var(--mono);font-size:12px;color:var(--ink-3);flex-wrap:wrap}
+  h2{font-family:var(--serif);font-weight:500;font-size:22px;margin:52px 0 18px}
+  h2 .no{color:var(--accent-2);margin-right:10px;font-size:15px;vertical-align:2px}
+  .tabs{display:flex;flex-wrap:wrap;gap:8px;margin:22px 0 8px}
+  .tab{border:1px solid var(--line);background:var(--card);color:var(--ink-2);padding:8px 16px;border-radius:999px;font-size:13px;cursor:pointer;transition:all .18s}
+  .tab:hover{border-color:var(--accent);color:var(--accent)}
+  .tab.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .panels{margin-top:18px}
+  .panel{display:none;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:28px;animation:fade .25s ease}
+  .panel.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .panel-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+  .panel-head h3{font-family:var(--serif);font-weight:500;font-size:20px}
+  .pill{font-family:var(--mono);font-size:11px;color:var(--accent);border:1px solid var(--accent);border-radius:999px;padding:2px 10px}
+  .pill.ser{color:var(--accent-2);border-color:var(--accent-2)}
+  .demo-box{margin:20px 0;border:1px solid var(--line);border-radius:12px;background:#fffdf9;overflow:hidden}
+  .demo-box svg{display:block;width:100%;height:auto}
+  .attrs{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:18px 0}
+  .attr{background:#faf8f4;border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+  .attr b{display:block;font-size:11px;color:var(--ink-3);font-weight:500;letter-spacing:.08em;margin-bottom:4px}
+  .attr span{font-size:13px;color:var(--ink)}
+  .verdict{font-size:13.5px;color:var(--ink-2);border-top:1px dashed var(--line);padding-top:14px;margin-top:6px}
+  .verdict b{color:var(--ink)}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line)}
+  th{font-weight:500;color:var(--ink-3);font-size:11px;letter-spacing:.06em;background:#faf8f4}
+  tr:last-child td{border-bottom:none}
+  td.hot{color:var(--accent)}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px;margin-top:18px;perspective:1200px}
+  .flip{height:230px;cursor:pointer;position:relative;transform-style:preserve-3d;transition:transform .55s cubic-bezier(.2,.7,.3,1)}
+  .flip.on{transform:rotateY(180deg)}
+  .face{position:absolute;inset:0;backface-visibility:hidden;border-radius:16px;padding:22px;display:flex;flex-direction:column;justify-content:center;gap:8px;border:1px solid var(--line)}
+  .face.front{background:var(--card)}
+  .face.back{background:var(--ink);color:#f2efe9;transform:rotateY(180deg)}
+  .face .tag{font-family:var(--mono);font-size:11px;letter-spacing:.14em;color:var(--ink-3)}
+  .face.back .tag{color:#9fd8c2}
+  .face h4{font-family:var(--serif);font-weight:500;font-size:19px}
+  .face p{font-size:13px;color:var(--ink-2)}
+  .face.back p{color:#c9c3b8}
+  .hint{font-size:12px;color:var(--ink-3);margin-top:10px}
+  footer{margin-top:60px;border-top:1px solid var(--line);padding-top:22px;font-size:12.5px;color:var(--ink-3)}
+  @media(max-width:640px){h1{font-size:26px}.wrap{padding:0 16px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div class="kicker">MINDCANVAS · K3 DESIGN RESEARCH</div>
+  <h1>思维导图设计风格 · 八个版本对照</h1>
+  <p class="sub">为 mindcanvas 内核 K3 阶段「设计令牌先行」提供视觉参照弹药。八个风格版本按设计谱系排列——从托尼·博赞的手绘传统到现代玻璃拟态，每个版本附同风格渲染的迷你导图与设计属性拆解。</p>
+  <div class="meta"><span>2026-08-27</span><span>服务对象：K3 设计令牌决策</span><span>点击标签切换版本</span></div>
+</header>
+
+<h2><span class="no">01</span>八个风格版本</h2>
+<div class="tabs" id="tabs"></div>
+<div class="panels" id="panels"></div>
+
+<h2><span class="no">02</span>对比矩阵</h2>
+<table>
+  <thead><tr><th>风格</th><th>发散力</th><th>结构力</th><th>信息密度</th><th>视觉噪音</th><th>正式感</th><th>内核实现成本</th></tr></thead>
+  <tbody>
+    <tr><td>V1 经典曲线</td><td>中高</td><td>高</td><td>中</td><td>高（多色）</td><td>高</td><td>低（曲线 SVG）</td></tr>
+    <tr><td>V2 文本极简</td><td>高</td><td>中</td><td class="hot">高</td><td class="hot">极低</td><td>中</td><td class="hot">最低（无框）</td></tr>
+    <tr><td>V3 放射</td><td class="hot">最高</td><td>中</td><td>低</td><td>中</td><td>中</td><td>中（角度分配）</td></tr>
+    <tr><td>V4 组织层级</td><td>低</td><td class="hot">最高</td><td>高</td><td>低</td><td>高</td><td>低</td></tr>
+    <tr><td>V5 鱼骨因果</td><td>中</td><td>高（因果）</td><td>中</td><td>低</td><td>中</td><td>低</td></tr>
+    <tr><td>V6 手绘松弛</td><td>高</td><td>低</td><td>中</td><td>低</td><td class="hot">低</td><td>中（rough 算法）</td></tr>
+    <tr><td>V7 画布贴纸</td><td>高</td><td>低</td><td>中</td><td>中高</td><td>中</td><td>中（阴影/拖拽）</td></tr>
+    <tr><td>V8 玻璃现代</td><td>中</td><td>中</td><td>中</td><td class="hot">极低</td><td class="hot">极高</td><td>中（暗色/光晕）</td></tr>
+  </tbody>
+</table>
+
+<h2><span class="no">03</span>设计令牌候选方向（翻卡）</h2>
+<p style="font-size:13.5px;color:var(--ink-2)">三个候选方向已按 mindcanvas 定位（纯文本事实源 + 实体可升格 + 库优先）预筛。点击卡片翻转查看适配评估——这是你钦定 K3 方向的素材，最终决定权在你。</p>
+<div class="cards">
+  <div class="flip" onclick="this.classList.toggle('on')">
+    <div class="face front"><span class="tag">方向 A · 推荐</span><h4>墨纸极简</h4><p>暖纸底 + 墨色文字 + 单强调色<br>无框文本节点 · 细灰贝塞尔线</p></div>
+    <div class="face back"><span class="tag">适配评估</span><h4>墨纸极简</h4><p>与纯文本内核气质最合：节点即文字，升格实体才显色。留白承载思考。实现成本最低。硬伤：无框节点对选中/拖拽的交互反馈需额外设计。</p></div>
+  </div>
+  <div class="flip" onclick="this.classList.toggle('on')">
+    <div class="face front"><span class="tag">方向 B</span><h4>手绘松弛</h4><p>波浪线 + 不规则节点<br>蜡笔色点缀 · 弹簧动效</p></div>
+    <div class="face back"><span class="tag">适配评估</span><h4>手绘松弛</h4><p>最有「人味」与个性，Excalidraw/rough.js 已验证路径。硬伤：正式演示场景偏弱；rough 波浪在大图下易乱；与实体升格后的「工单感」气质需调和。</p></div>
+  </div>
+  <div class="flip" onclick="this.classList.toggle('on')">
+    <div class="face front"><span class="tag">方向 C</span><h4>玻璃工具感</h4><p>深色底 + 半透明圆角卡<br>霓虹强调 · 微光晕动效</p></div>
+    <div class="face back"><span class="tag">适配评估</span><h4>玻璃工具感</h4><p>最现代、工具感最强（Linear/Arc 气质），深色沉浸。硬伤：浅色文档需双主题；backdrop-filter 在千级节点下性能需验证；与「纯文本文件可读」哲学距离最远。</p></div>
+  </div>
+</div>
+<p class="hint">提示：点卡片翻面。三个方向可混合（如 A 的底 + C 的深色模式），设计令牌本就可分层。</p>
+
+<footer>mindcanvas · K3 设计调研 · 下一输入：你的视觉参照 / 风格关键词 / 现 UI 痛点清单</footer>
+</div>
+<script>
+const V=[
+{id:'v1',name:'V1 经典曲线',pill:'XMind · MindManager',head:'经典曲线谱系',verdict:'<b>适合：</b>结构化呈现、演示汇报、正式交付——最广谱系的「默认脑图长相」。<b>硬伤：</b>信息密度偏低，多色在深树层产生视觉噪声；曲线曲率统一性对实现有要求。',
+attrs:[['节点','圆角矩形 + 图标'],['连线','彩色曲线贝塞尔'],['配色','每分支一色（高饱和）'],['留白','中密'],['字体','圆润无衬线'],['动效','分支展开动画']],
+svg:'<svg viewBox="0 0 340 200" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI,Microsoft YaHei,sans-serif"><g stroke-width="2.2" fill="none"><path d="M112 100 C150 100 150 36 192 36" stroke="#d97706"/><path d="M112 100 C150 100 150 88 192 88" stroke="#2f9e44"/><path d="M112 100 C150 100 150 146 192 146" stroke="#0c8599"/><path d="M248 36 C272 36 272 20 296 20" stroke="#d97706"/><path d="M248 36 C272 36 272 52 296 52" stroke="#d97706"/><path d="M248 88 C272 88 272 80 296 80" stroke="#2f9e44"/><path d="M248 146 C272 146 272 136 296 136" stroke="#0c8599"/><path d="M248 146 C272 146 272 160 296 160" stroke="#0c8599"/></g><rect x="40" y="83" width="72" height="34" rx="9" fill="#fef2e4" stroke="#d97706" stroke-width="1.4"/><text x="76" y="100" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#633806">根</text><rect x="192" y="19" width="56" height="34" rx="9" fill="#fef2e4" stroke="#d97706" stroke-width="1.4"/><text x="220" y="36" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#633806">分支一</text><rect x="192" y="71" width="56" height="34" rx="9" fill="#eaf3de" stroke="#2f9e44" stroke-width="1.4"/><text x="220" y="88" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#27500a">分支二</text><rect x="192" y="129" width="56" height="34" rx="9" fill="#e1f5ee" stroke="#0c8599" stroke-width="1.4"/><text x="220" y="146" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#085041">分支三</text><rect x="296" y="10" width="40" height="22" rx="8" fill="#fff7ec" stroke="#e8a34e" stroke-width="1"/><text x="316" y="21" text-anchor="middle" dominant-baseline="central" font-size="9" fill="#854f0b">叶1</text><rect x="296" y="41" width="40" height="22" rx="8" fill="#fff7ec" stroke="#e8a34e" stroke-width="1"/><text x="316" y="52" text-anchor="middle" dominant-baseline="central" font-size="9" fill="#854f0b">叶2</text><rect x="296" y="70" width="40" height="22" rx="8" fill="#f3f8e9" stroke="#88a94e" stroke-width="1"/><text x="316" y="81" text-anchor="middle" dominant-baseline="central" font-size="9" fill="#3b6d11">叶3</text><rect x="296" y="126" width="40" height="22" rx="8" fill="#e8f6f1" stroke="#4fa88f" stroke-width="1"/><text x="316" y="137" text-anchor="middle" dominant-baseline="central" font-size="9" fill="#0f6e56">叶4</text><rect x="296" y="150" width="40" height="22" rx="8" fill="#e8f6f1" stroke="#4fa88f" stroke-width="1"/><text x="316" y="161" text-anchor="middle" dominant-baseline="central" font-size="9" fill="#0f6e56">叶5</text></svg>'},
+{id:'v2',name:'V2 文本极简',pill:'Markmap · 幕布',head:'文本极简谱系',verdict:'<b>适合：</b>快速思考、技术文档、代码人日常。节点即文字，渲染只是文本的投影——与 mindcanvas 纯文本内核哲学同源。<b>硬伤：</b>无框节点缺少选中/拖拽的视觉承载，层次感知弱。',
+attrs:[['节点','无框纯文本'],['连线','细灰平滑贝塞尔'],['配色','墨色 + 单强调色'],['留白','高'],['字体','轻量无衬线'],['动效','几乎无']],
+svg:'<svg viewBox="0 0 340 200" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI,Microsoft YaHei,sans-serif"><g stroke="#c9c4b8" stroke-width="1.1" fill="none"><path d="M118 100 C145 100 145 38 176 38"/><path d="M118 100 C145 100 145 90 176 90"/><path d="M118 100 C145 100 145 150 176 150"/><path d="M232 38 C252 38 252 20 272 20"/><path d="M232 38 C252 38 252 56 272 56"/><path d="M232 90 C252 90 252 82 272 82"/><path d="M232 150 C252 150 252 140 272 140"/><path d="M232 150 C252 150 252 162 272 162"/></g><text x="52" y="100" dominant-baseline="central" font-size="14" font-weight="600" fill="#2b2926">根</text><text x="178" y="38" dominant-baseline="central" font-size="12.5" fill="#2b2926">分 支 一</text><text x="178" y="90" dominant-baseline="central" font-size="12.5" fill="#2b2926">分 支 二</text><text x="178" y="150" dominant-baseline="central" font-size="12.5" fill="#2b2926">分 支 三</text><text x="276" y="20" dominant-baseline="central" font-size="11" fill="#9a948a">子 1</text><text x="276" y="56" dominant-baseline="central" font-size="11" fill="#9a948a">子 2</text><text x="276" y="82" dominant-baseline="central" font-size="11" fill="#9a948a">子 3</text><text x="276" y="140" dominant-baseline="central" font-size="11" fill="#9a948a">子 4</text><text x="276" y="162" dominant-baseline="central" font-size="11" fill="#9a948a">子 5</text></svg>'},
+{id:'v3',name:'V3 放射',pill:'Coggle · 博赞原始形态',head:'放射谱系',verdict:'<b>适合：</b>发散头脑风暴、广度优先联想——「思维导图」一词的原义形态。<b>硬伤：</b>树深后射线拥挤，父子层级方向感知弱于左右树。',
+attrs:[['节点','中心圆 + 椭圆'],['连线','放射直线/浅弧'],['配色','每分支一色（浅）'],['留白','中心集中'],['字体','圆润'],['动效','旋转入场']],
+svg:'<svg viewBox="0 0 340 200" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI,Microsoft YaHei,sans-serif"><g stroke-width="1.4" fill="none"><path d="M170 100 L92 50" stroke="#e8590c"/><path d="M170 100 L62 100" stroke="#d97706"/><path d="M170 100 L92 150" stroke="#2f9e44"/><path d="M170 100 L248 50" stroke="#0c8599"/><path d="M170 100 L282 100" stroke="#534ab7"/><path d="M170 100 L248 150" stroke="#185fa5"/></g><circle cx="170" cy="100" r="24" fill="#2b2926"/><text x="170" y="100" text-anchor="middle" dominant-baseline="central" font-size="10.5" fill="#fff">根</text><ellipse cx="92" cy="50" rx="30" ry="14" fill="#fdeee5" stroke="#e8590c" stroke-width="1.1"/><text x="92" y="50" text-anchor="middle" dominant-baseline="central" font-size="9.5" fill="#712b13">分支一</text><ellipse cx="62" cy="100" rx="30" ry="14" fill="#fef2e4" stroke="#d97706" stroke-width="1.1"/><text x="62" y="100" text-anchor="middle" dominant-baseline="central" font-size="9.5" fill="#633806">分支二</text><ellipse cx="92" cy="150" rx="30" ry="14" fill="#eaf3de" stroke="#2f9e44" stroke-width="1.1"/><text x="92" y="150" text-anchor="middle" dominant-baseline="central" font-size="9.5" fill="#27500a">分支三</text><ellipse cx="248" cy="50" rx="30" ry="14" fill="#e1f5ee" stroke="#0c8599" stroke-width="1.1"/><text x="248" y="50" text-anchor="middle" dominant-baseline="central" font-size="9.5" fill="#085041">分支四</text><ellipse cx="282" cy="100" rx="30" ry="14" fill="#eeedfe" stroke="#534ab7" stroke-width="1.1"/><text x="282" y="100" text-anchor="middle" dominant-baseline="central" font-size="9.5" fill="#3c3489">分支五</text><ellipse cx="248" cy="150" rx="30" ry="14" fill="#e6f1fb" stroke="#185fa5" stroke-width="1.1"/><text x="248" y="150" text-anchor="middle" dominant-baseline="central" font-size="9.5" fill="#0c447c">分支六</text></svg>'},
+{id:'v4',name:'V4 组织层级',pill:'Org-chart · 目录组织',head:'组织结构谱系',verdict:'<b>适合：</b>层级分明的内容（目录、组织、分类体系）。直角折线 + 扁平矩形传达秩序。<b>硬伤：</b>发散感最弱，大量同级节点横向溢出。',
+attrs:[['节点','扁平矩形'],['连线','直角折线'],['配色','单色 + 强调'],['留白','规整'],['字体','冷硬'],['动效','无/下推']],
+svg:'<svg viewBox="0 0 340 200" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI,Microsoft YaHei,sans-serif"><g stroke="#a8a298" stroke-width="1.1" fill="none"><path d="M170 58 V82"/><path d="M170 82 H64 V104"/><path d="M170 82 H170 V104"/><path d="M170 82 H276 V104"/><path d="M64 104 H42 V136"/><path d="M64 104 H86 V136"/><path d="M170 104 H148 V136"/><path d="M170 104 H192 V136"/><path d="M276 104 H254 V136"/><path d="M276 104 H298 V136"/></g><rect x="128" y="24" width="84" height="34" fill="#2b2926"/><text x="170" y="41" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#fff">根</text><rect x="38" y="104" width="52" height="30" fill="#f5f3ee" stroke="#a8a298" stroke-width="1.1"/><text x="64" y="119" text-anchor="middle" dominant-baseline="central" font-size="10" fill="#444441">甲</text><rect x="144" y="104" width="52" height="30" fill="#f5f3ee" stroke="#a8a298" stroke-width="1.1"/><text x="170" y="119" text-anchor="middle" dominant-baseline="central" font-size="10" fill="#444441">乙</text><rect x="250" y="104" width="52" height="30" fill="#f5f3ee" stroke="#a8a298" stroke-width="1.1"/><text x="276" y="119" text-anchor="middle" dominant-baseline="central" font-size="10" fill="#444441">丙</text><rect x="30" y="136" width="44" height="22" fill="#faf8f4" stroke="#c9c4b8" stroke-width="1"/><text x="52" y="147" text-anchor="middle" dominant-baseline="central" font-size="9" fill="#6b655c">子1</text><rect x="76" y="136" width="44" height="22" fill="#faf8f4" stroke="#c9c4b8" stroke-width="1"/><text x="98" y="147" text-anchor="middle" dominant-baseline="central" font-size="9" fill="#6b655c">子2</text><rect x="136" y="136" width="44" height="22" fill="#faf8f4" stroke="#c9c4b8" stroke-width="1"/><text x="158" y="147" text-anchor="middle" dominant-baseline="central" font-size="9" fill="#6b655c">子3</text><rect x="182" y="136" width="44" height="22" fill="#faf8f4" stroke="#c9c4b8" stroke-width="1"/><text x="204" y="147" text-anchor="middle" dominant-baseline="central" font-size="9" fill="#6b655c">子4</text><rect x="242" y="136" width="44" height="22" fill="#faf8f4" stroke="#c9c4b8" stroke-width="1"/><text x="264" y="147" text-anchor="middle" dominant-baseline="central" font-size="9" fill="#6b655c">子5</text><rect x="288" y="136" width="44" height="22" fill="#faf8f4" stroke="#c9c4b8" stroke-width="1"/><text x="310" y="147" text-anchor="middle" dominant-baseline="central" font-size="9" fill="#6b655c">子6</text></svg>'},
+{id:'v5',name:'V5 鱼骨因果',pill:'Fishbone · 因果分析',head:'鱼骨因果谱系',verdict:'<b>适合：</b>根因分析、问题诊断（错题复盘、故障归因）。中轴 + 斜骨刺天然表达因果归类。<b>硬伤：</b>非通用结构，树状内容无法表达；节点容量有限。',
+attrs:[['节点','矩形小节点（骨刺顶）'],['连线','中轴 + 斜向骨刺'],['配色','灰 + 单强调色'],['留白','紧凑'],['字体','中性'],['动效','无']],
+svg:'<svg viewBox="0 0 340 200" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI,Microsoft YaHei,sans-serif"><g stroke="#8a847a" stroke-width="2" fill="none"><path d="M30 100 H310"/><path d="M310 100 L322 94"/><path d="M310 100 L322 106"/><path d="M80 100 L60 64"/><path d="M140 100 L120 64"/><path d="M200 100 L180 64"/><path d="M260 100 L240 64"/><path d="M80 100 L60 136"/><path d="M140 100 L120 136"/><path d="M200 100 L180 136"/><path d="M260 100 L240 136"/></g><rect x="40" y="34" width="44" height="24" fill="#e1f5ee" stroke="#0f6e56" stroke-width="1"/><text x="62" y="46" text-anchor="middle" dominant-baseline="central" font-size="9" fill="#085041">人</text><rect x="100" y="34" width="44" height="24" fill="#e1f5ee" stroke="#0f6e56" stroke-width="1"/><text x="122" y="46" text-anchor="middle" dominant-baseline="central" font-size="9" fill="#085041">机</text><rect x="160" y="34" width="44" height="24" fill="#e1f5ee" stroke="#0f6e56" stroke-width="1"/><text x="182" y="46" text-anchor="middle" dominant-baseline="central" font-size="9" fill="#085041">料</text><rect x="220" y="34" width="44" height="24" fill="#e1f5ee" stroke="#0f6e56" stroke-width="1"/><text x="242" y="46" text-anchor="middle" dominant-baseline="central" font-size="9" fill="#085041">法</text><rect x="40" y="142" width="44" height="24" fill="#f5f3ee" stroke="#8a847a" stroke-width="1"/><text x="62" y="154" text-anchor="middle" dominant-baseline="central" font-size="9" fill="#444441">环</text><rect x="100" y="142" width="44" height="24" fill="#f5f3ee" stroke="#8a847a" stroke-width="1"/><text x="122" y="154" text-anchor="middle" dominant-baseline="central" font-size="9" fill="#444441">测</text><rect x="160" y="142" width="44" height="24" fill="#f5f3ee" stroke="#8a847a" stroke-width="1"/><text x="182" y="154" text-anchor="middle" dominant-baseline="central" font-size="9" fill="#444441">管</text><rect x="220" y="142" width="44" height="24" fill="#f5f3ee" stroke="#8a847a" stroke-width="1"/><text x="242" y="154" text-anchor="middle" dominant-baseline="central" font-size="9" fill="#444441">其</text><rect x="272" y="88" width="44" height="24" fill="#2b2926"/><text x="294" y="100" text-anchor="middle" dominant-baseline="central" font-size="9" fill="#fff">问题</text></svg>'},
+{id:'v6',name:'V6 手绘松弛',pill:'Excalidraw · iMindMap',head:'手绘自由谱系',verdict:'<b>适合：</b>草稿、自由联想、低压力创作。延续托尼·博赞的手绘传统——波浪线 + 不规则节点最有「人味」。<b>硬伤：</b>正式演示弱，rough 算法在大图下视觉易乱。',
+attrs:[['节点','不规则多边形（手绘感）'],['连线','波浪线'],['配色','蜡笔色点缀'],['留白','松弛'],['字体','手写感'],['动效','弹簧/涂改']],
+svg:'<svg viewBox="0 0 340 200" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI,Microsoft YaHei,sans-serif"><g stroke-width="1.8" fill="none" stroke-linejoin="round"><path d="M96 100 q12 -6 24 0 t24 0 t24 0" stroke="#b7791f"/><path d="M168 100 q12 -6 24 0 t24 0 t24 0" stroke="#2f9e44"/><path d="M240 100 q12 -6 24 0 t24 0 t24 0" stroke="#0c8599"/><path d="M36 30 q6 -4 12 0 t12 0 t12 0" stroke="#b7791f"/><path d="M36 30 q6 4 12 0 t12 0 t12 0" stroke="#b7791f"/></g><path d="M28 82 q10 -6 20 0 q10 6 20 0 q10 -6 20 0 q10 6 20 0 q10 -6 22 0" fill="#fdf6e8" stroke="#b7791f" stroke-width="1.6"/><text x="68" y="100" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#854f0b">根</text><path d="M150 66 q9 -5 18 0 q9 5 18 0 q9 -5 18 0 q9 5 18 0" fill="#f3f8e9" stroke="#2f9e44" stroke-width="1.6"/><text x="190" y="80" text-anchor="middle" dominant-baseline="central" font-size="10" fill="#27500a">分支一</text><path d="M222 122 q9 -5 18 0 q9 5 18 0 q9 -5 18 0 q9 5 18 0" fill="#e8f6f1" stroke="#0c8599" stroke-width="1.6"/><text x="262" y="136" text-anchor="middle" dominant-baseline="central" font-size="10" fill="#085041">分支二</text><path d="M10 14 q6 -4 12 0 q6 4 12 0 q6 -4 12 0" fill="#fdf6e8" stroke="#b7791f" stroke-width="1.4"/><text x="28" y="22" text-anchor="middle" dominant-baseline="central" font-size="8.5" fill="#854f0b">子1</text><path d="M10 32 q6 -4 12 0 q6 4 12 0 q6 -4 12 0" fill="#fdf6e8" stroke="#b7791f" stroke-width="1.4"/><text x="28" y="40" text-anchor="middle" dominant-baseline="central" font-size="8.5" fill="#854f0b">子2</text></svg>'},
+{id:'v7',name:'V7 画布贴纸',pill:'Miro · FigJam · Notion 白板',head:'画布贴纸谱系',verdict:'<b>适合：</b>协作头脑风暴、发散-收敛工作坊。贴纸卡片 + 图标，卡片即承载，随处摆放。<b>硬伤：</b>结构松散、大画布性能与秩序管理是长期痛点。',
+attrs:[['节点','贴纸卡片 + 图标'],['连线','任意曲线'],['配色','多彩贴纸'],['留白','宽松'],['字体','圆润无衬线'],['动效','拖拽/吸附']],
+svg:'<svg viewBox="0 0 340 200" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI,Microsoft YaHei,sans-serif"><g stroke="#c9c4b8" stroke-width="1.2" fill="none"><path d="M150 92 C180 92 180 40 215 40"/><path d="M150 92 C180 92 185 150 218 150"/><path d="M280 40 C300 40 300 24 318 24"/><path d="M280 40 C300 40 300 58 318 58"/></g><rect x="92" y="74" width="116" height="38" rx="10" fill="#fdf3d8" stroke="#d9a441" stroke-width="1.3" style="filter:drop-shadow(0 2px 3px rgba(43,41,38,.12))"/><text x="150" y="93" text-anchor="middle" dominant-baseline="central" font-size="12" fill="#633806">主题卡</text><rect x="215" y="24" width="65" height="32" rx="9" fill="#ffe9e3" stroke="#d85a30" stroke-width="1.2" style="filter:drop-shadow(0 2px 3px rgba(43,41,38,.12))"/><text x="247" y="40" text-anchor="middle" dominant-baseline="central" font-size="10.5" fill="#712b13">想法 A</text><rect x="218" y="134" width="65" height="32" rx="9" fill="#e4ecfd" stroke="#185fa5" stroke-width="1.2" style="filter:drop-shadow(0 2px 3px rgba(43,41,38,.12))"/><text x="250" y="150" text-anchor="middle" dominant-baseline="central" font-size="10.5" fill="#0c447c">想法 B</text><rect x="318" y="12" width="38" height="22" rx="7" fill="#eaf3de" stroke="#639922" stroke-width="1"/><text x="337" y="23" text-anchor="middle" dominant-baseline="central" font-size="8.5" fill="#3b6d11">贴1</text><rect x="318" y="46" width="38" height="22" rx="7" fill="#eaf3de" stroke="#639922" stroke-width="1"/><text x="337" y="57" text-anchor="middle" dominant-baseline="central" font-size="8.5" fill="#3b6d11">贴2</text></svg>'},
+{id:'v8',name:'V8 玻璃现代',pill:'Linear · Arc · 新 Xmind',head:'玻璃拟态谱系',verdict:'<b>适合：</b>工具感产品、夜间沉浸深耕。深色底 + 半透明圆角卡 + 霓虹强调，克制且精致。<b>硬伤：</b>浅色文档需双主题；backdrop-filter 在千级节点下性能需验证。',
+attrs:[['节点','半透明圆角卡'],['连线','柔和贝塞尔'],['配色','深底 + 霓虹点缀'],['留白','高'],['字体','精致无衬线'],['动效','微光晕']],
+svg:'<svg viewBox="0 0 340 200" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI,Microsoft YaHei,sans-serif"><rect x="0" y="0" width="340" height="200" fill="#16181d"/><g stroke="#3a3f4d" stroke-width="1.2" fill="none"><path d="M118 100 C146 100 146 40 182 40"/><path d="M118 100 C146 100 146 88 182 88"/><path d="M118 100 C146 100 146 150 182 150"/><path d="M238 40 C258 40 258 24 276 24"/><path d="M238 88 C258 88 258 80 276 80"/><path d="M238 150 C258 150 258 142 276 142"/></g><rect x="48" y="84" width="70" height="32" rx="10" fill="rgba(255,255,255,.07)" stroke="rgba(255,255,255,.18)"/><text x="83" y="100" text-anchor="middle" dominant-baseline="central" font-size="11" fill="#e8eaef">根</text><rect x="182" y="24" width="56" height="32" rx="10" fill="rgba(255,255,255,.05)" stroke="rgba(255,255,255,.14)"/><text x="210" y="40" text-anchor="middle" dominant-baseline="central" font-size="10.5" fill="#d3d7e0">分支一</text><rect x="182" y="72" width="56" height="32" rx="10" fill="rgba(255,255,255,.05)" stroke="rgba(255,255,255,.14)"/><text x="210" y="88" text-anchor="middle" dominant-baseline="central" font-size="10.5" fill="#d3d7e0">分支二</text><rect x="182" y="134" width="56" height="32" rx="10" fill="rgba(255,255,255,.05)" stroke="rgba(255,255,255,.14)"/><text x="210" y="150" text-anchor="middle" dominant-baseline="central" font-size="10.5" fill="#d3d7e0">分支三</text><rect x="276" y="14" width="56" height="22" rx="8" fill="rgba(122,233,196,.08)" stroke="rgba(122,233,196,.35)"/><text x="304" y="25" text-anchor="middle" dominant-baseline="central" font-size="9" fill="#7ae9c4">子 1</text><rect x="276" y="70" width="56" height="22" rx="8" fill="rgba(122,233,196,.08)" stroke="rgba(122,233,196,.35)"/><text x="304" y="81" text-anchor="middle" dominant-baseline="central" font-size="9" fill="#7ae9c4">子 2</text><rect x="276" y="132" width="56" height="22" rx="8" fill="rgba(122,233,196,.08)" stroke="rgba(122,233,196,.35)"/><text x="304" y="143" text-anchor="middle" dominant-baseline="central" font-size="9" fill="#7ae9c4">子 3</text></svg>'}
+];
+const tabs=document.getElementById('tabs'),panels=document.getElementById('panels');
+V.forEach(function(v,i){
+  var b=document.createElement('button');
+  b.className='tab'+(i===0?' on':'');
+  b.textContent=v.name;
+  b.onclick=function(){var all=document.querySelectorAll('.tab');for(var k=0;k<all.length;k++){all[k].classList.remove('on');}var ps=document.querySelectorAll('.panel');for(var j=0;j<ps.length;j++){ps[j].classList.remove('on');}b.classList.add('on');panels.children[i].classList.add('on');};
+  tabs.appendChild(b);
+  var p=document.createElement('div');
+  p.className='panel'+(i===0?' on':'');
+  var attrsHtml='';
+  for(var a=0;a<v.attrs.length;a++){attrsHtml+='<div class="attr"><b>'+v.attrs[a][0]+'</b><span>'+v.attrs[a][1]+'</span></div>';}
+  p.innerHTML='<div class="panel-head"><h3>'+v.head+'</h3><span class="pill">'+v.name+'</span><span class="pill ser">'+v.pill+'</span></div>'+
+    '<div class="demo-box">'+v.svg+'</div>'+
+    '<div class="attrs">'+attrsHtml+'</div>'+
+    '<div class="verdict">'+v.verdict+'</div>';
+  panels.appendChild(p);
+});
+</script>
+</body>
+</html>

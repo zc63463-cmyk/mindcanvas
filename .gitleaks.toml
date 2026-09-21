@@ -1,0 +1,10 @@
+title = "Mindcanvas secret scan"
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Literal editor shortcut, not an API credential"
+condition = "AND"
+paths = ['''(?:^|/)packages/react/src/edit/keys\.ts$''']
+regexTarget = "line"
+regexes = ['''key: 'Ctrl\+Shift\+Tab', label: '反缩进', action: 'outdent'''']

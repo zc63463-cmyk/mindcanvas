@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "canvasId": "cv_demo_free",
+  "title": "自由画布演示",
+  "placements": [
+    {
+      "kind": "native",
+      "placementUuid": "pl_demo_a",
+      "shell": "sticky-classic",
+      "face": "front",
+      "front": {
+        "contentKind": "markdown",
+        "body": "## 便签\n双击编辑当前面\n悬停右上角 ⟳ 翻面"
+      },
+      "back": {
+        "contentKind": "markdown",
+        "body": "## 背面\n添加背面后，空背也可翻（D3）。\n\n- 失焦提交\n- Shift+Enter 提交"
+      },
+      "transform": { "x": 80, "y": 120, "w": 220, "h": 170 },
+      "zIndex": 1,
+      "createdAt": 1757900000000,
+      "updatedAt": 1757900000000
+    },
+    {
+      "kind": "native",
+      "placementUuid": "pl_demo_b",
+      "shell": "card-panel",
+      "face": "front",
+      "front": {
+        "contentKind": "markdown",
+        "body": "## 面板卡\n- 工具条切「连线」\n- 从一张卡拖到另一张"
+      },
+      "transform": { "x": 420, "y": 240, "w": 280, "h": 200 },
+      "zIndex": 2,
+      "createdAt": 1757900000000,
+      "updatedAt": 1757900000000
+    }
+  ],
+  "edges": [
+    {
+      "edgeUuid": "ed_demo_1",
+      "fromPlacementUuid": "pl_demo_a",
+      "toPlacementUuid": "pl_demo_b",
+      "createdAt": 1757900000000,
+      "updatedAt": 1757900000000
+    }
+  ],
+  "viewport": { "panX": 40, "panY": 40, "scale": 1 },
+  "updatedAt": 1757900000000
+}

@@ -1,0 +1,21 @@
+name: 缺陷报告
+description: 记录可复现的问题
+title: "[Bug] "
+body:
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤与预期/实际行为
+      description: 使用最小脱敏样例，不上传个人笔记或浏览器完整档案。
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 系统、浏览器与分支/提交
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 脱敏错误信息或截图

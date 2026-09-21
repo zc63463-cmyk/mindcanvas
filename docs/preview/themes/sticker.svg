@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-573.5 -223 1275 446" font-family="Segoe UI, Microsoft YaHei, PingFang SC, sans-serif">
+<rect x="-573.5" y="-223" width="1275" height="446" fill="#fdfdfb"/>
+<path d="M 57.5 0 C 83.1 0, 81.82 -41.36, 89.5 -36 C 97.18 -30.64, 95.9 -72, 121.5 -72" fill="none" stroke="#c9c4b8" stroke-width="1.2" stroke-linecap="round"/>
+<path d="M 273.5 -72 C 299.1 -72, 297.82 -114.42, 305.5 -109 C 313.18 -103.58, 311.9 -146, 337.5 -146" fill="none" stroke="#c9c4b8" stroke-width="1.2" stroke-linecap="round"/>
+<path d="M 273.5 -72 C 299.1 -72, 297.82 -82.09, 305.5 -78.5 C 313.18 -74.91, 311.9 -85, 337.5 -85" fill="none" stroke="#c9c4b8" stroke-width="1.2" stroke-linecap="round"/>
+<path d="M 273.5 -72 C 299.1 -72, 297.82 -46.53, 305.5 -41.5 C 313.18 -36.47, 311.9 -11, 337.5 -11" fill="none" stroke="#c9c4b8" stroke-width="1.2" stroke-linecap="round"/>
+<path d="M -57.5 0 C -83.1 0, -81.82 -41.36, -89.5 -36 C -97.18 -30.64, -95.9 -72, -121.5 -72" fill="none" stroke="#c9c4b8" stroke-width="1.2" stroke-linecap="round"/>
+<path d="M -259.5 -72 C -285.1 -72, -283.82 -100.64, -291.5 -96 C -299.18 -91.36, -297.9 -120, -323.5 -120" fill="none" stroke="#c9c4b8" stroke-width="1.2" stroke-linecap="round"/>
+<path d="M -259.5 -72 C -285.1 -72, -283.82 -75.2, -291.5 -72 C -299.18 -68.8, -297.9 -72, -323.5 -72" fill="none" stroke="#c9c4b8" stroke-width="1.2" stroke-linecap="round"/>
+<path d="M -259.5 -72 C -285.1 -72, -283.82 -52.64, -291.5 -48 C -299.18 -43.36, -297.9 -24, -323.5 -24" fill="none" stroke="#c9c4b8" stroke-width="1.2" stroke-linecap="round"/>
+<path d="M -57.5 0 C -83.1 0, -81.82 8.08, -89.5 12 C -97.18 15.92, -95.9 24, -121.5 24" fill="none" stroke="#c9c4b8" stroke-width="1.2" stroke-linecap="round"/>
+<path d="M -181.5 24 C -207.1 24, -205.82 20.8, -213.5 24 C -221.18 27.2, -219.9 24, -245.5 24" fill="none" stroke="#c9c4b8" stroke-width="1.2" stroke-linecap="round"/>
+<path d="M -57.5 0 C -83.1 0, -81.82 30.64, -89.5 36 C -97.18 41.36, -95.9 72, -121.5 72" fill="none" stroke="#c9c4b8" stroke-width="1.2" stroke-linecap="round"/>
+<path d="M -193.5 72 C -219.1 72, -217.82 68.8, -225.5 72 C -233.18 75.2, -231.9 72, -257.5 72" fill="none" stroke="#c9c4b8" stroke-width="1.2" stroke-linecap="round"/>
+<path d="M 57.5 0 C 83.1 0, 81.82 42.86, 89.5 49 C 97.18 55.14, 95.9 98, 121.5 98" fill="none" stroke="#c9c4b8" stroke-width="1.2" stroke-linecap="round"/>
+<path d="M 318.5 98 C 344.1 98, 342.82 69.36, 350.5 74 C 358.18 78.64, 356.9 50, 382.5 50" fill="none" stroke="#c9c4b8" stroke-width="1.2" stroke-linecap="round"/>
+<path d="M 318.5 98 C 344.1 98, 342.82 94.8, 350.5 98 C 358.18 101.2, 356.9 98, 382.5 98" fill="none" stroke="#c9c4b8" stroke-width="1.2" stroke-linecap="round"/>
+<path d="M 318.5 98 C 344.1 98, 342.82 117.36, 350.5 122 C 358.18 126.64, 356.9 146, 382.5 146" fill="none" stroke="#c9c4b8" stroke-width="1.2" stroke-linecap="round"/>
+<path d="M -57.5 0 C -83.1 0, -81.82 53.2, -89.5 60 C -97.18 66.8, -95.9 120, -121.5 120" fill="none" stroke="#c9c4b8" stroke-width="1.2" stroke-linecap="round"/>
+<path d="M -193.5 120 C -219.1 120, -217.82 116.8, -225.5 120 C -233.18 123.2, -231.9 120, -257.5 120" fill="none" stroke="#c9c4b8" stroke-width="1.2" stroke-linecap="round"/>
+<rect x="-57.5" y="-17" width="115" height="34" rx="10" fill="#fdf3d8" stroke="#d9a441" stroke-width="1.2" stroke-linejoin="round" style="filter:drop-shadow(0 2px 3px rgba(43,41,38,.12))"/>
+<text x="-45.5" y="0" font-size="12" font-weight="600" fill="#633806" dominant-baseline="central">Agent Gateway</text>
+<rect x="121.5" y="-89" width="152" height="34" rx="10" fill="#fdf3d8" stroke="#d9a441" stroke-width="1.2" stroke-linejoin="round" style="filter:drop-shadow(0 2px 3px rgba(43,41,38,.12))"/>
+<text x="133.5" y="-72" font-size="12" font-weight="500" fill="#633806" dominant-baseline="central">文档（Forgejo 真实）</text>
+<rect x="337.5" y="-163" width="273" height="34" rx="10" fill="#f5f3ee" stroke="#2f9e44" stroke-width="1.2" stroke-linejoin="round" style="filter:drop-shadow(0 2px 3px rgba(43,41,38,.12))"/>
+<text x="349.5" y="-146" font-size="10" font-weight="600" fill="#2f9e44" dominant-baseline="central">@doc</text>
+<text x="393.5" y="-146" font-size="10" font-weight="500" fill="#444441" dominant-baseline="central">01 · 架构设计</text>
+<rect x="337.5" y="-115" width="280" height="60" rx="10" fill="#f5f3ee" stroke="#2f9e44" stroke-width="1.2" stroke-linejoin="round" style="filter:drop-shadow(0 2px 3px rgba(43,41,38,.12))"/>
+<text x="349.5" y="-85" font-size="10" font-weight="600" fill="#2f9e44" dominant-baseline="central">@doc</text>
+<text x="393.5" y="-85" font-size="10" font-weight="500" fill="#444441" dominant-baseline="central">07 · 实体引用协议</text>
+<rect x="337.5" y="-41" width="280" height="60" rx="10" fill="#f5f3ee" stroke="#2f9e44" stroke-width="1.2" stroke-linejoin="round" style="filter:drop-shadow(0 2px 3px rgba(43,41,38,.12))"/>
+<text x="349.5" y="-11" font-size="10" font-weight="600" fill="#2f9e44" dominant-baseline="central">@doc</text>
+<text x="393.5" y="-11" font-size="10" font-weight="500" fill="#444441" dominant-baseline="central">09 · 知识画布与约定</text>
+<rect x="-259.5" y="-89" width="138" height="34" rx="10" fill="#ffe9e3" stroke="#d85a30" stroke-width="1.2" stroke-linejoin="round" style="filter:drop-shadow(0 2px 3px rgba(43,41,38,.12))"/>
+<text x="-247.5" y="-72" font-size="12" font-weight="500" fill="#712b13" dominant-baseline="central">任务（真实 Issue）</text>
+<rect x="-470.5" y="-137" width="147" height="34" rx="10" fill="#f5f3ee" stroke="#d97706" stroke-width="1.2" stroke-linejoin="round" style="filter:drop-shadow(0 2px 3px rgba(43,41,38,.12))"/>
+<text x="-458.5" y="-120" font-size="10" font-weight="600" fill="#d97706" dominant-baseline="central">@issue</text>
+<text x="-400.5" y="-120" font-size="10" font-weight="500" fill="#444441" dominant-baseline="central">门户显示优化</text>
+<rect x="-470.5" y="-89" width="147" height="34" rx="10" fill="#f5f3ee" stroke="#d97706" stroke-width="1.2" stroke-linejoin="round" style="filter:drop-shadow(0 2px 3px rgba(43,41,38,.12))"/>
+<text x="-458.5" y="-72" font-size="10" font-weight="600" fill="#d97706" dominant-baseline="central">@issue</text>
+<text x="-400.5" y="-72" font-size="10" font-weight="500" fill="#444441" dominant-baseline="central">解析链路验证</text>
+<rect x="-470.5" y="-41" width="147" height="34" rx="10" fill="#f5f3ee" stroke="#d97706" stroke-width="1.2" stroke-linejoin="round" style="filter:drop-shadow(0 2px 3px rgba(43,41,38,.12))"/>
+<text x="-458.5" y="-24" font-size="10" font-weight="600" fill="#d97706" dominant-baseline="central">@issue</text>
+<text x="-400.5" y="-24" font-size="10" font-weight="500" fill="#444441" dominant-baseline="central">K3 渲染层</text>
+<rect x="-181.5" y="7" width="60" height="34" rx="10" fill="#e4ecfd" stroke="#185fa5" stroke-width="1.2" stroke-linejoin="round" style="filter:drop-shadow(0 2px 3px rgba(43,41,38,.12))"/>
+<text x="-169.5" y="24" font-size="12" font-weight="500" fill="#0c447c" dominant-baseline="central">里程碑</text>
+<rect x="-513.5" y="7" width="268" height="34" rx="10" fill="#f5f3ee" stroke="#0c8599" stroke-width="1.2" stroke-linejoin="round" style="filter:drop-shadow(0 2px 3px rgba(43,41,38,.12))"/>
+<text x="-501.5" y="24" font-size="10" font-weight="600" fill="#0c8599" dominant-baseline="central">@milestone</text>
+<text x="-415.5" y="24" font-size="10" font-weight="500" fill="#444441" dominant-baseline="central">门户显示优化里程碑</text>
+<rect x="-193.5" y="55" width="72" height="34" rx="10" fill="#eaf3de" stroke="#639922" stroke-width="1.2" stroke-linejoin="round" style="filter:drop-shadow(0 2px 3px rgba(43,41,38,.12))"/>
+<text x="-181.5" y="72" font-size="12" font-weight="500" fill="#3b6d11" dominant-baseline="central">灵感联动</text>
+<rect x="-474.5" y="55" width="217" height="34" rx="10" fill="#f5f3ee" stroke="#e8590c" stroke-width="1.2" stroke-linejoin="round" style="filter:drop-shadow(0 2px 3px rgba(43,41,38,.12))"/>
+<text x="-462.5" y="72" font-size="10" font-weight="600" fill="#e8590c" dominant-baseline="central">@idea</text>
+<text x="-411.5" y="72" font-size="10" font-weight="500" fill="#444441" dominant-baseline="central">灵感：只读先行</text>
+<rect x="121.5" y="81" width="197" height="34" rx="10" fill="#f6e8fd" stroke="#9c6ad4" stroke-width="1.2" stroke-linejoin="round" style="filter:drop-shadow(0 2px 3px rgba(43,41,38,.12))"/>
+<text x="133.5" y="98" font-size="12" font-weight="500" fill="#5c2d7f" dominant-baseline="central">断裂引用（unresolved 演示）</text>
+<rect x="382.5" y="33" width="154" height="34" rx="10" fill="#f5f3ee" stroke="#d97706" stroke-width="1.2" stroke-linejoin="round" style="filter:drop-shadow(0 2px 3px rgba(43,41,38,.12))"/>
+<text x="394.5" y="50" font-size="10" font-weight="600" fill="#d97706" dominant-baseline="central">@issue</text>
+<text x="452.5" y="50" font-size="10" font-weight="500" fill="#444441" dominant-baseline="central">issue:99</text>
+<circle cx="524.5" cy="45" r="3.5" fill="none" stroke="#d85a30" stroke-width="1.4" opacity="0.9"/>
+<rect x="382.5" y="81" width="112" height="34" rx="10" fill="#f5f3ee" stroke="#6741d9" stroke-width="1.2" stroke-linejoin="round" style="filter:drop-shadow(0 2px 3px rgba(43,41,38,.12))"/>
+<text x="394.5" y="98" font-size="10" font-weight="600" fill="#6741d9" dominant-baseline="central">@pr</text>
+<text x="431.5" y="98" font-size="10" font-weight="500" fill="#444441" dominant-baseline="central">pr:17</text>
+<circle cx="482.5" cy="93" r="3.5" fill="none" stroke="#d85a30" stroke-width="1.4" opacity="0.9"/>
+<rect x="382.5" y="129" width="259" height="34" rx="10" fill="#f5f3ee" stroke="#2f9e44" stroke-width="1.2" stroke-linejoin="round" style="filter:drop-shadow(0 2px 3px rgba(43,41,38,.12))"/>
+<text x="394.5" y="146" font-size="10" font-weight="600" fill="#2f9e44" dominant-baseline="central">@doc</text>
+<text x="438.5" y="146" font-size="10" font-weight="500" fill="#444441" dominant-baseline="central">doc:docs/架构设计-不存在.md</text>
+<circle cx="629.5" cy="141" r="3.5" fill="none" stroke="#d85a30" stroke-width="1.4" opacity="0.9"/>
+<rect x="-193.5" y="103" width="72" height="34" rx="10" fill="#e8f6f1" stroke="#0f6e56" stroke-width="1.2" stroke-linejoin="round" style="filter:drop-shadow(0 2px 3px rgba(43,41,38,.12))"/>
+<text x="-181.5" y="120" font-size="12" font-weight="500" fill="#085041" dominant-baseline="central">我的想法</text>
+<rect x="-454.5" y="103" width="197" height="34" rx="7" fill="#eaf3de" stroke="#639922" stroke-width="1" stroke-linejoin="round" style="filter:drop-shadow(0 2px 3px rgba(43,41,38,.12))"/>
+<text x="-442.5" y="120" font-size="10" font-weight="500" fill="#3b6d11" dominant-baseline="central">先只读，把引用解析链路跑通</text>
+<circle cx="-269.5" cy="125" r="2.5" fill="#6b655c" opacity="0.85"/>
+</svg>

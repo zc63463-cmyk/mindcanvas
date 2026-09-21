@@ -1,0 +1,36 @@
+{
+  "name": "mindcanvas",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "纯文本思维导图内核与应用（微内核 + 插件 + 渐进增强）pnpm workspace 根",
+  "packageManager": "pnpm@10.33.2",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "depcruise": "depcruise packages apps --config .dependency-cruiser.js",
+    "depcruise:graph": "depcruise packages apps --config .dependency-cruiser.js --output-type dot | dot -T svg > dependency-graph.svg",
+    "lint": "biome lint packages apps",
+    "format": "biome format packages apps",
+    "format:fix": "biome format packages apps --write",
+    "lint:fix": "biome check packages apps --write",
+    "budget": "node scripts/check-code-budget.mjs",
+    "analyze": "node scripts/analyze-codebase.mjs",
+    "gate": "pnpm typecheck && pnpm test && pnpm depcruise && pnpm lint && pnpm budget",
+    "gate:fast": "pnpm typecheck && pnpm depcruise && pnpm lint && pnpm budget",
+    "check:public": "node scripts/check-public-content.mjs"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.11",
+    "dependency-cruiser": "^18.2.0",
+    "playwright": "1.58.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zc63463-cmyk/mindcanvas.git"
+  }
+}

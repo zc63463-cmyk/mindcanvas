@@ -1,0 +1,28 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "types": [],
+
+    // 包内自引用（tests 里 `from '@mindcanvas/react'`）走源码，不走自己的 dist ——
+    // 否则「先 build 再 typecheck」的先后依赖会在这里再出现一次。
+    // src 内部不使用包名自引用，故此映射不影响 tsconfig.build.json 的发布产物。
+    "paths": {
+      "@mindcanvas/react": ["./src/index.ts"]
+    }
+  },
+  "include": ["src", "tests", "vitest.config.ts"],
+
+  // 项目引用：让类型检查解析 kernel 的**源码产物**而非手build出来的 dist。
+  // 配合 `tsc -b`（build mode），依赖项目会自动按需重建 —— 新 clone 后
+  // 直接跑 typecheck 即可，不必先 pnpm build。
+  // 必须指向 kernel 的 build 配置：被引用的项目不允许 noEmit（TS6310）。
+  "references": [
+    { "path": "../kernel/tsconfig.build.json" },
+    { "path": "../free-canvas/tsconfig.build.json" }
+  ]
+}

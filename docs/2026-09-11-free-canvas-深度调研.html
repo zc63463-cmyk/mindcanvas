@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>自由画布开源生态深度调研 · 2026-09-11</title>
+<style>
+  :root{
+    --bg:#fbfaf8; --panel:#ffffff; --ink:#1b1b1f; --ink-2:#4a4a55; --ink-3:#7a7a88;
+    --line:#e6e3dd; --line-2:#d8d4cc;
+    --accent:#8a5a2b; --accent-soft:#f3ece2;
+    --blue:#2f6fb0; --blue-soft:#eaf1f8;
+    --green:#3f7d52; --green-soft:#ecf3ed;
+    --red:#b23c3c; --red-soft:#fbecec;
+    --purple:#6b4fa0; --purple-soft:#f0ebf8;
+    --radius:10px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    line-height:1.75; font-size:15px;
+  }
+  .wrap{max-width:1080px; margin:0 auto; padding:48px 28px 96px}
+  header.hero{border-bottom:2px solid var(--ink); padding-bottom:26px; margin-bottom:34px}
+  .kicker{font-size:12px; letter-spacing:.18em; color:var(--ink-3); text-transform:uppercase}
+  h1{font-size:34px; line-height:1.3; margin:12px 0 10px; letter-spacing:-.01em}
+  .sub{color:var(--ink-2); font-size:15px; margin:0}
+  .meta{margin-top:16px; font-size:13px; color:var(--ink-3); display:flex; gap:18px; flex-wrap:wrap}
+  .meta b{color:var(--ink-2); font-weight:600}
+
+  h2{font-size:23px; margin:52px 0 16px; padding-top:10px; border-top:1px solid var(--line); letter-spacing:-.01em}
+  h2 .num{color:var(--accent); font-weight:700; margin-right:10px}
+  h3{font-size:17px; margin:30px 0 10px; color:var(--ink)}
+  h4{font-size:15px; margin:20px 0 8px; color:var(--ink-2)}
+  p{margin:10px 0}
+  ul,ol{margin:10px 0; padding-left:22px}
+  li{margin:5px 0}
+  a{color:var(--blue); text-decoration:none; border-bottom:1px solid rgba(47,111,176,.28)}
+  code{background:#f1efe9; padding:1px 5px; border-radius:4px; font-size:13px; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+
+  .lead{background:var(--panel); border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:var(--radius); padding:18px 22px; margin:18px 0}
+  .lead h3{margin-top:0}
+
+  .cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; margin:18px 0}
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:16px 18px}
+  .card .tag{display:inline-block; font-size:11px; padding:2px 8px; border-radius:20px; margin-bottom:8px; font-weight:600}
+  .t-red{background:var(--red-soft); color:var(--red)}
+  .t-green{background:var(--green-soft); color:var(--green)}
+  .t-blue{background:var(--blue-soft); color:var(--blue)}
+  .t-purple{background:var(--purple-soft); color:var(--purple)}
+  .t-accent{background:var(--accent-soft); color:var(--accent)}
+  .card p{font-size:13.5px; color:var(--ink-2); margin:6px 0 0}
+
+  table{width:100%; border-collapse:collapse; margin:16px 0; font-size:13.5px; background:var(--panel)}
+  th,td{border:1px solid var(--line); padding:8px 10px; text-align:left; vertical-align:top}
+  th{background:#f5f2ec; font-weight:600; color:var(--ink-2); font-size:12.5px; letter-spacing:.02em}
+  tbody tr:nth-child(even){background:#fdfcfa}
+  td.num{text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap}
+  .yes{color:var(--green); font-weight:600}
+  .no{color:var(--red); font-weight:600}
+  .warn{color:var(--accent); font-weight:600}
+  .muted{color:var(--ink-3)}
+
+  .figure{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:16px; margin:20px 0; overflow-x:auto}
+  figcaption{font-size:12.5px; color:var(--ink-3); margin-top:10px; text-align:center}
+
+  .split{display:grid; grid-template-columns:1fr 1fr; gap:16px}
+  @media (max-width:820px){ .split{grid-template-columns:1fr} }
+
+  .box{border:1px solid var(--line); border-radius:var(--radius); padding:14px 18px; background:var(--panel)}
+  .box.ok{border-left:4px solid var(--green)}
+  .box.bad{border-left:4px solid var(--red)}
+  .box.info{border-left:4px solid var(--blue)}
+  .box h4{margin-top:0}
+  ul.tight li{margin:3px 0; font-size:14px}
+
+  .toc{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:16px 20px; font-size:13.5px; columns:2; column-gap:32px}
+  .toc a{display:block; padding:2px 0; border:none; color:var(--ink-2)}
+  .toc a:hover{color:var(--accent)}
+
+  footer{margin-top:64px; padding-top:20px; border-top:1px solid var(--line); font-size:12.5px; color:var(--ink-3)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="kicker">TECH RESEARCH · MINDCANVAS</div>
+  <h1>自由画布（Infinite / Free-form Canvas）开源生态深度调研</h1>
+  <p class="sub">从严格树形思维导图演进到自由画布：能不能抄、抄谁、以及什么时候换渲染器</p>
+  <div class="meta">
+    <span><b>调研日期</b> 2026-09-10 ~ 09-11</span>
+    <span><b>方法</b> Trending 双路 + topic 榜单 + 官方文档/源码 + 社区基准，五路并行交叉验证</span>
+    <span><b>对象</b> mindcanvas（.mm.md 事实源 · React/TS · SVG · kernel 纯布局）</span>
+  </div>
+</header>
+
+<div class="toc">
+  <a href="#s0">0 · TL;DR 五条结论</a>
+  <a href="#s1">1 · 生态全景：五层分类</a>
+  <a href="#s2">2 · 关键项目深度剖析</a>
+  <a href="#s3">3 · 技术维度对比矩阵</a>
+  <a href="#s4">4 · 性能与渲染专题</a>
+  <a href="#s5">5 · 趋势判断：真需求 vs 噪音</a>
+  <a href="#s6">6 · 对 mindcanvas 的落地建议</a>
+  <a href="#s7">7 · 未核实项与风险</a>
+</div>
+
+<div class="lead" style="margin-top:22px">
+  <h3>数据纪律</h3>
+  <p style="margin:0">所有数字标注来源与核实日期；无法核实的一律写「未核实」，不做推算填充。trending 脚本本轮因 GitHub API 匿名配额耗尽失败，改用 trending 页面直抓（不消耗 API）。</p>
+</div>
+
+<!-- ============ 0 ============ -->
+<h2 id="s0"><span class="num">0</span>TL;DR：五条结论</h2>
+
+<div class="cards">
+  <div class="card">
+    <span class="tag t-blue">趋势</span>
+    <h4>热点已从「画布」转到「AI Agent × 画布」</h4>
+    <p>本周 JS/TS trending 前排全是 agent 工具链，画布类零上榜。但 topic <code>infinite-canvas</code> 近一年新增高星项目（opencove 1.6k、horizon 705、thoughtdag 416、dim0 132）清一色是 agent 工作区。</p>
+  </div>
+  <div class="card">
+    <span class="tag t-green">卡位</span>
+    <h4>「纯文本事实源 + 自由摆放」几乎空白</h4>
+    <p>Markmap/Mermaid 纯文本但强制自动布局；Obsidian Canvas 自由摆放但事实源是 JSON；Excalidraw/tldraw 自由但事实源是自家快照。mindcanvas 的 <code>.mm.md</code> + 坐标覆盖正好落在这个空档。</p>
+  </div>
+  <div class="card">
+    <span class="tag t-red">选型</span>
+    <h4>不建议依赖任何白板 SDK</h4>
+    <p>tldraw 生产需商业许可（非 OSI + 强制水印）；Excalidraw SDK 344kB gzip 且有 breaking 史；xyflow 的分组/自动布局/撤销在 Pro 付费层。借鉴架构，不引依赖。</p>
+  </div>
+  <div class="card">
+    <span class="tag t-accent">性能</span>
+    <h4>SVG 还能撑很久，先别换渲染器</h4>
+    <p>实测临界点在「可见节点数千」量级（5000 节点 SVG ~150ms/帧 vs Canvas 12ms）。mindcanvas 已有裁剪 + LOD，真实可见数远低于此。先补四叉树与 transform-only。</p>
+  </div>
+  <div class="card">
+    <span class="tag t-purple">抄作业</span>
+    <h4>最值得抄的三处设计</h4>
+    <p>① Excalidraw：Elements 与 ViewState 分离 + version/nonce 合并；② tldraw：signals + record store + 剔除 + LOD；③ JSON Canvas：nodes/edges 两数组 + 纯 JSON 可 diff。</p>
+  </div>
+</div>
+
+<!-- ============ 1 ============ -->
+<h2 id="s1"><span class="num">1</span>生态全景：五层分类</h2>
+
+<div class="figure">
+<svg viewBox="0 0 900 330" width="100%" style="max-width:900px">
+  <defs>
+    <marker id="ar" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 z" fill="#7a7a88"/>
+    </marker>
+  </defs>
+  <!-- layers -->
+  <g font-family="-apple-system,Segoe UI,PingFang SC,Microsoft YaHei,sans-serif">
+    <rect x="150" y="14" width="600" height="46" rx="8" fill="#f3ece2" stroke="#d8d4cc"/>
+    <text x="166" y="36" font-size="12" font-weight="700" fill="#8a5a2b">L5 应用 / 产品</text>
+    <text x="166" y="52" font-size="11.5" fill="#4a4a55">tldraw.com · Excalidraw · Miro · FigJam · Obsidian Canvas</text>
+
+    <rect x="150" y="74" width="600" height="46" rx="8" fill="#f0ebf8" stroke="#d8d4cc"/>
+    <text x="166" y="96" font-size="12" font-weight="700" fill="#6b4fa0">L4 画布 SDK</text>
+    <text x="166" y="112" font-size="11.5" fill="#4a4a55">tldraw SDK（50k★，商业） · @excalidraw/excalidraw（131k★，MIT） · quickdraw（MIT v0.2） · Plait</text>
+
+    <rect x="150" y="134" width="600" height="46" rx="8" fill="#eaf1f8" stroke="#d8d4cc"/>
+    <text x="166" y="156" font-size="12" font-weight="700" fill="#2f6fb0">L3 节点图 / 图编辑</text>
+    <text x="166" y="172" font-size="11.5" fill="#4a4a55">xyflow（38k★） · AntV X6（6.5k★） · LogicFlow（11.5k★） · butterfly（停更）</text>
+
+    <rect x="150" y="194" width="600" height="46" rx="8" fill="#ecf3ed" stroke="#d8d4cc"/>
+    <text x="166" y="216" font-size="12" font-weight="700" fill="#3f7d52">L2 底层渲染引擎</text>
+    <text x="166" y="232" font-size="11.5" fill="#4a4a55">Konva · Fabric.js · PixiJS · leafer-ui（国产 4.4k★） · roughjs</text>
+
+    <rect x="150" y="254" width="600" height="46" rx="8" fill="#f5f2ec" stroke="#d8d4cc"/>
+    <text x="166" y="276" font-size="12" font-weight="700" fill="#4a4a55">L1 浏览器原语</text>
+    <text x="166" y="292" font-size="11.5" fill="#4a4a55">SVG DOM · Canvas 2D · WebGL / WebGPU · CSS transform</text>
+
+    <!-- arrows -->
+    <path d="M130,290 L130,50" stroke="#7a7a88" stroke-width="1.2" fill="none" marker-end="url(#ar)"/>
+    <text x="60" y="176" font-size="11" fill="#7a7a88" transform="rotate(-90 60 176)">抽象层级递增</text>
+
+    <!-- mindcanvas marker -->
+    <path d="M770,217 L862,217" stroke="#b23c3c" stroke-width="1.4" stroke-dasharray="4 3" fill="none"/>
+    <text x="790" y="209" font-size="11.5" font-weight="700" fill="#b23c3c">mindcanvas</text>
+    <text x="790" y="232" font-size="11" fill="#b23c3c">SVG + 自研 kernel</text>
+    <text x="790" y="245" font-size="10.5" fill="#7a7a88">（跨 L1–L3 自持）</text>
+  </g>
+</svg>
+<figcaption>图 1　自由画布生态分层。mindcanvas 目前自持 L1–L3（SVG 渲染 + kernel 纯布局 + 节点/连线模型），不依赖任何 L4 SDK。</figcaption>
+</div>
+
+<h3>1.1 GitHub topic <code>infinite-canvas</code> 实测榜单（2026-09-11 抓取）</h3>
+<table>
+<thead><tr>
+  <th style="width:24%">项目</th><th class="num">Star</th><th style="width:10%">语言</th><th style="width:12%">最近更新</th><th>定位</th>
+</tr></thead>
+<tbody>
+<tr><td>flxzt/rnote</td><td class="num">11.6k</td><td>Rust</td><td>2026-09-08</td><td>手写笔记 / 草图（gtk4）</td></tr>
+<tr><td>mbrlabs/Lorien</td><td class="num">6.8k</td><td>GDScript</td><td>2025-09-22</td><td>Godot 实现的无限画布白板</td></tr>
+<tr><td><b>leaferjs/leafer-ui</b></td><td class="num">4.4k</td><td>TypeScript</td><td>2026-09-04</td><td><b>国产</b> Canvas 引擎，"AI 时代的无限画布引擎"</td></tr>
+<tr><td>miroiu/nodify</td><td class="num">2k</td><td>C#</td><td>2026-06-10</td><td>WPF 节点编辑器控件</td></tr>
+<tr><td>serge-rgb/milton</td><td class="num">1.9k</td><td>C++</td><td>2023-06-04</td><td>OpenGL 无限画布绘画</td></tr>
+<tr><td>malbiruk/driftwm</td><td class="num">1.7k</td><td>Rust</td><td>2026-09-06</td><td>触控优先的 Wayland 合成器</td></tr>
+<tr><td><b>DeadWaveWave/opencove</b></td><td class="num">1.6k</td><td>TypeScript</td><td>2026-09-10</td><td><b>Agent 无限画布工作区</b>（Claude Code / Codex / 终端 / 任务 / 笔记）</td></tr>
+<tr><td><b>xiaoiver/infinite-canvas-tutorial</b></td><td class="num">1.1k</td><td>TypeScript</td><td>2026-08-19</td><td><b>WebGL/WebGPU 无限画布教程</b>（含 ECS 渲染引擎）</td></tr>
+<tr><td>peters/horizon</td><td class="num">705</td><td>Rust</td><td>2026-09-10</td><td>GPU 加速终端板（wgpu）</td></tr>
+<tr><td>ErrorAtLine0/infinipaint</td><td class="num">485</td><td>C++</td><td>2026-09-10</td><td>无限缩放协作绘画</td></tr>
+<tr><td><b>quickdrawjs/quickdraw</b></td><td class="num">451</td><td>JavaScript</td><td>2026-09-10</td><td><b>MIT 白板 SDK，tldraw 开源替代（v0.2.0）</b></td></tr>
+<tr><td><b>chenxiachan/thoughtdag</b></td><td class="num">416</td><td>TypeScript</td><td>2026-09-10</td><td>LLM 对话长成可编辑思维图（react-flow + local-first + MCP）</td></tr>
+<tr><td>blueberrycongee/termcanvas</td><td class="num">395</td><td>TypeScript</td><td>2026-05-31</td><td>终端可视管理的无限画布</td></tr>
+<tr><td><b>Sayhi-bzb/CharDesk</b></td><td class="num">334</td><td>TypeScript</td><td>2026-09-10</td><td><b>Unicode 画布：把图 / 界面 / 幻灯片画成可编辑文本</b></td></tr>
+<tr><td>vcmf/dim0</td><td class="num">132</td><td>TypeScript</td><td>2026-09-08</td><td>实时协作 AI 画布（含 mindmap、RAG、mini-apps）</td></tr>
+</tbody>
+</table>
+<p class="muted">来源：<a href="https://github.com/topics/infinite-canvas">github.com/topics/infinite-canvas</a>（2026-09-11 抓取）</p>
+
+<h3>1.2 Trending 侧写（本轮实测）</h3>
+<div class="split">
+  <div class="box info">
+    <h4>TS monthly / JS weekly 前排</h4>
+    <p style="font-size:14px;margin:0">cursor/plugins、OpenMAIC、openclaude、oh-my-pi、distilly、apache/maka……<b>画布类零上榜</b>，全部是 AI agent 工具链。</p>
+  </div>
+  <div class="box bad">
+    <h4>由此得到的两条结论</h4>
+    <ul class="tight">
+      <li>画布已从「新鲜概念」变成「基础设施」，热度上移到 AI 应用层。</li>
+      <li>靠 trending 发现画布项目已失效，必须走 topic + 定向搜索。</li>
+    </ul>
+  </div>
+</div>
+<p><b>工具提示</b>：<code>github-trending-cn</code> 脚本本轮因匿名配额耗尽（Rate limit，重置约 26 分钟）导致 50 个仓库详情全部打空；trending 页面本身可直接抓、不消耗 API。<b>建议给脚本配 <code>GITHUB_TOKEN</code></b>，否则默认 50 条必然触发限流。</p>
+
+<!-- ============ 2 ============ -->
+<h2 id="s2"><span class="num">2</span>关键项目深度剖析</h2>
+
+<h3>2.1 tldraw —— 画布 SDK 事实标准，但许可不友好</h3>
+<table>
+<thead><tr><th style="width:16%">维度</th><th>事实</th><th style="width:24%">来源 / 日期</th></tr></thead>
+<tbody>
+<tr><td>Star / 下载</td><td>50.2K★；npm 周下载 217.3K</td><td class="muted">tldraw.dev 首页，2026-09-11</td></tr>
+<tr><td>版本</td><td>v5.4.2（核实前 4 小时发布）；minor 月更且可能含 breaking</td><td class="muted">npmjs.com/package/tldraw</td></tr>
+<tr><td>体积</td><td>解压 <b>14.9 MB / 1881 文件</b>；依赖 TipTap、radix-ui</td><td class="muted">registry.npmjs.org</td></tr>
+<tr><td>许可</td><td><span class="no">tldraw License，非 OSI 开源</span>；生产环境（含 SaaS）需商业许可密钥，含强制水印技术措施；100 天试用；商业价未公开（第三方称 ~$6,000/年，<span class="warn">未核实官方</span>）</td><td class="muted">LICENSE.md / tldraw.dev</td></tr>
+<tr><td>渲染</td><td>形状走 HTML/SVG DOM + CSS transform；画笔 / 手柄 / 吸附等瞬态 overlay 走 Canvas 2D 以绕开 React reconciliation；minimap 是否 WebGL <span class="muted">未核实</span></td><td class="muted">tldraw.dev、deepwiki</td></tr>
+<tr><td>状态</td><td><code>@tldraw/state</code>（signals 细粒度响应式）+ <code>@tldraw/store</code>（TLRecord 记录库，事务批处理、自动迁移）</td><td class="muted">tldraw.dev</td></tr>
+<tr><td>扩展模型</td><td><code>ShapeUtil</code>（component / getGeometry / getIndicatorPath / props 校验器）+ <code>Binding</code> + <code>StateNode</code> 工具状态机</td><td class="muted">tldraw.dev</td></tr>
+<tr><td>性能</td><td><code>maxShapesPerPage=4000</code>；屏外形状 <code>display:none</code> 剔除（官方："10000 形状可能只渲染 50 个"）；几何缓存；<code>debouncedZoomThreshold=500</code>；<code>textShadowLod=0.35</code></td><td class="muted">tldraw.dev/performance、/culling</td></tr>
+<tr><td>协作</td><td><code>@tldraw/sync</code> 基于 Cloudflare Durable Objects，每 room 单例权威副本，WebSocket 做记录级 CRUD 中继；<b>生产必须自托管</b></td><td class="muted">tldraw.dev/docs/sync</td></tr>
+<tr><td>限制</td><td>不支持 SSR（须 <code>ssr:false</code> 动态导入）；仅 React（peerDep ^18.2‖^19.2）；v4.0 起 WCAG 2.2 AA</td><td class="muted">GitHub discussion #552、releases v4.0</td></tr>
+</tbody>
+</table>
+<p><b>坑</b>：许可合规（水印 + 生产付费）是最大风险；体积大；自定义形状须完整实现 ShapeUtil，DOM 测量类形状要关闭剔除否则出 bug。<br>
+<b>可借鉴</b>：signals + record store 细粒度响应式；视口剔除 + 空间索引 + 几何缓存；ShapeUtil 的「props 校验 / geometry / component」三分离；缩放防抖与 LOD 简化。</p>
+
+<h3>2.2 Excalidraw —— MIT，Canvas 双分层，最值得抄数据模型</h3>
+<table>
+<thead><tr><th style="width:16%">维度</th><th>事实</th><th style="width:24%">来源 / 日期</th></tr></thead>
+<tbody>
+<tr><td>Star</td><td>131,539（fork 15,197）</td><td class="muted">GitHub API，2026-09-10</td></tr>
+<tr><td>许可</td><td><span class="yes">仓库与 SDK 均 MIT，商用无限制</span></td><td class="muted">package.json / LICENSE</td></tr>
+<tr><td>版本</td><td>0.18.1（2026-04-21，修 Mermaid XSS CVE-2025-54881）；0.18.0 加 CJK 字体（2025-03）</td><td class="muted">winterflow.io releases</td></tr>
+<tr><td>渲染</td><td>双 Canvas：<b>StaticCanvas</b>（形状/文本/图像，仅场景变更重绘）+ <b>InteractiveCanvas</b>（选区、远程光标、吸附线，rAF 驱动）；手绘风 roughjs</td><td class="muted">deepwiki rendering-architecture</td></tr>
+<tr><td>数据模型</td><td>Element 含 <code>id/version/versionNonce/seed/index/isDeleted/groupIds/frameId/boundElements/containerId</code>；冲突靠 <code>version+versionNonce</code> 经 <code>reconcileElements</code> 合并 —— <b>不是完整 CRDT</b></td><td class="muted">plus.excalidraw.com scene-content-schema</td></tr>
+<tr><td>状态</td><td>React class <code>App</code>，<code>state = AppState</code>（70+ 字段）；轻量 UI 态用 <b>Jotai</b>；Scene 单独存 elements（<b>Elements 与 ViewState 严格分离</b>）</td><td class="muted">deepwiki state-management</td></tr>
+<tr><td>协作</td><td>浏览器生成 <b>128-bit AES-GCM</b> 密钥放 URL fragment（<code>#room=ID,KEY</code>，服务端不可见）；Socket.IO 中转密文；自托管需 room + storage-backend(PostgreSQL)，横向扩展要 sticky session / Redis</td><td class="muted">deepwiki、railway</td></tr>
+<tr><td>文件格式</td><td><code>.excalidraw</code> = <code>{type, version:2, elements, appState, files}</code>；迁移靠 <code>restoreElements</code> + migration 函数链</td><td class="muted">docs.excalidraw.com/json-schema</td></tr>
+<tr><td>性能</td><td>视口剔除 + <code>ShapeCache</code>（WeakMap 缓存 rough Drawable）+ 离屏 canvas + <code>getRenderableElements</code> 记忆化；<b>社区实测 ~8000 对象起 ~30fps（非官方基准）</b>；issue #10512 全景遍历致 pan/zoom 卡，PR #10514 用空间索引修（2025-12 未合入）</td><td class="muted">deepwiki、GitHub #10512/#10514</td></tr>
+<tr><td>SDK 体积</td><td>~1.1 MB min / <b>344.4 kB gzip</b>（@0.18.1）</td><td class="muted">Bundlephobia</td></tr>
+</tbody>
+</table>
+<p><b>坑</b>：SDK API 有过多次 breaking（0.17.0 移除 Ref 等）；文字绘进像素、不可被搜索引擎与读屏索引；E2EE 导致服务端无法检索与撤销；自托管协作三件套运维成本不低。<br>
+<b>可借鉴</b>：① Elements 与 ViewState 严格分离 + version/nonce 合并，天然适配纯文本事实源；② 文件带 <code>version</code> 字段 + migration 函数做向前兼容；③ 形状缓存 + 离屏复用 → 映射到 SVG 侧的「布局 / 文本测量缓存」；④ 反过来确认：<b>SVG 在中文文本、无障碍、可选中性上优于 Canvas，这是 mindcanvas 的差异化优势，不要为了追 Excalidraw 而丢掉</b>。</p>
+
+<h3>2.3 节点图 / 图编辑框架 —— 自由画布的中间形态</h3>
+<table>
+<thead><tr>
+  <th>项目</th><th class="num">Star</th><th>渲染</th><th>许可</th><th>维护</th><th>规模上限</th><th>最适合场景</th>
+</tr></thead>
+<tbody>
+<tr><td><b>xyflow</b><br>（React/Svelte Flow）</td><td class="num">~38K</td><td>HTML 节点 + SVG 边</td><td>MIT，<span class="warn">分组/对齐/自动布局/撤销在 Pro 付费层</span></td><td class="yes">活跃</td><td>数百流畅；数千需 <code>onlyRenderVisibleElements</code>；社区实测 1 万节点</td><td>React 通用节点编辑器、工作流</td></tr>
+<tr><td>AntV X6</td><td class="num">~6.5K</td><td>SVG + HTML</td><td class="yes">MIT（无付费墙/水印）</td><td class="yes">活跃（3.1.8，2026-08）</td><td><code>virtual:true</code> 视口裁剪；社区建议 ≤3000</td><td>企业级流程图 / ER / BPMN / DAG，跨框架</td></tr>
+<tr><td>LogicFlow（滴滴）</td><td class="num">~11.5K</td><td>SVG + HTML 覆盖层</td><td class="yes">Apache-2.0</td><td class="warn">较慢（2.1.11，2026-01）</td><td>虚拟化 3000 实测 OK</td><td>业务流程图 / BPMN / 审批流</td></tr>
+<tr><td>alibaba/butterfly</td><td class="num">~4.5K</td><td>DOM + SVG</td><td>MIT</td><td class="no">停滞（2023-08 后无提交）</td><td class="muted">未核实</td><td>血缘 / 调度（不建议新项目）</td></tr>
+<tr><td>Plait（worktile）</td><td class="num">~630</td><td>SVG(roughjs) + foreignObject</td><td>MIT</td><td class="warn">小众活跃（v0.91.0，2025-11）</td><td>1000+ 脑图流畅</td><td>一体化白板：mind / draw / flow 三模块</td></tr>
+<tr><td>JointJS</td><td class="num">~5.4K</td><td>SVG</td><td class="warn">MPL-2.0（高级功能商业）</td><td>活跃</td><td class="muted">未核实</td><td>SVG 图编辑器</td></tr>
+<tr><td>GoJS</td><td class="num">~6.1K<span class="muted">（较早数据）</span></td><td>Canvas</td><td class="no">商业（试用带水印）</td><td>商业维护</td><td>高</td><td>全功能商业图编辑器</td></tr>
+<tr><td>Cytoscape.js</td><td class="num">~11.2K</td><td>Canvas / WebGL</td><td>MIT</td><td>活跃</td><td>大网络优化</td><td>关系图分析，非编辑 UI</td></tr>
+<tr><td>Konva / Fabric / PixiJS</td><td class="num">11K / 29K / 44K</td><td>Canvas / WebGL</td><td>MIT</td><td>活跃</td><td>数千~万级</td><td>自研画布的底层原语</td></tr>
+</tbody>
+</table>
+<div class="box info">
+  <h4>判断</h4>
+  <p style="margin:0">从「严格树形」演进到「自由画布」，形态最接近的是 <b>xyflow</b>（任意坐标、自由连线、多父 DAG、自定义节点全部原生支持，且同为 React）。代价是分组/对齐/自动布局/撤销属付费层，超大图有 DOM 瓶颈需自研虚拟化。<b>X6</b> 无付费墙、插件最全，但不是白板范式。<b>Plait</b> 的「Slate 式插件 + mind/draw/flow 三件套」最贴合 mindcanvas 愿景（脑图 → 自由画布 → 白板），但 star 少、偏 Angular、节奏慢，<b>适合借鉴架构而非直接依赖</b>。Butterfly 停更、LogicFlow 偏流程，均不建议。</p>
+</div>
+
+<h3>2.4 思维导图类与「纯文本事实源」竞品</h3>
+<table>
+<thead><tr><th>项目</th><th class="num">Star</th><th>许可</th><th>渲染</th><th>事实源</th><th>自由摆放</th><th>维护</th></tr></thead>
+<tbody>
+<tr><td>wanglin2/mind-map</td><td class="num">~12.5K</td><td>MIT</td><td>SVG / Canvas</td><td>自有 JSON（可导入 MD / XMind）</td><td class="yes">支持自由节点 + 关联线</td><td class="warn">README 自述开源库进入低维护（闭源客户端仍在开发）</td></tr>
+<tr><td>markmap</td><td class="num">未核实</td><td>MIT</td><td>SVG(d3)</td><td>Markdown → 树</td><td class="no">否（自动层级布局，纯渲染非编辑器）</td><td>v0.18.12（2025-06）</td></tr>
+<tr><td>Freeplane</td><td class="num">~4.3K</td><td>GPL-2.0</td><td>Java / Swing</td><td><code>.mm</code> (XML)</td><td class="yes">支持自由浮动节点 / 自由定位</td><td class="yes">活跃，已加 AI chat + MCP server</td></tr>
+<tr><td>FreeMind</td><td class="num">—</td><td>GPLv2</td><td>Java</td><td><code>.mm</code></td><td class="yes">支持</td><td class="no">基本休眠（2023-11 后）</td></tr>
+<tr><td>Obsidian Canvas</td><td class="num">—（格式 MIT）</td><td>MIT</td><td>—</td><td><code>.canvas</code> JSON：根对象仅 <code>nodes</code>/<code>edges</code>，node 有 <code>x/y/width/height</code>，edge 有 <code>fromNode/toNode/fromSide/toSide/label</code></td><td class="yes">是</td><td>生态活跃</td></tr>
+<tr><td>markvault-js / @hediet/vite-plugin-mindmap</td><td class="num">—</td><td class="muted">—</td><td class="muted">—</td><td class="muted">—</td><td class="muted">—</td><td class="muted"><b>未核实</b>（搜索未命中可靠仓库）</td></tr>
+</tbody>
+</table>
+<div class="box ok">
+  <h4>关键发现</h4>
+  <p style="margin:0">「纯文本事实源 + 自由摆放」几乎是空白赛道 —— Markmap/Mermaid 是纯文本但强制自动布局；Obsidian Canvas 可自由摆放但节点文本内嵌 JSON，不是外部 <code>.md</code>。<b>mindcanvas 的 <code>.mm.md</code> + 坐标覆盖思路正好落在这个空档。</b></p>
+</div>
+
+<h3>2.5 新锐项目（值得持续观察）</h3>
+<ul>
+<li><b>quickdrawjs/quickdraw</b>（451★，MIT，v0.2.0）：明确对标"tldraw 的免费开源替代"，零运行时依赖、纯 ESM、框架无关（core / react / react-native 三包），<b>文档模型每次变更产出 JSON-safe diff，可接任意传输层</b>；自认年轻，缺首方多人服务、图层、frame、富文本。<b>若 mindcanvas 未来真要引入白板能力，这是许可上唯一无雷的选项，但 0.x 不能直接上生产。</b></li>
+<li><b>leaferjs/leafer-ui</b>（4.4K★，TS，国产）：Canvas 引擎，自称"AI 时代的无限画布引擎"，活跃度高，可作为未来切 Canvas 渲染时的国产备选。</li>
+<li><b>xiaoiver/infinite-canvas-tutorial</b>（1.1K★）：WebGL/WebGPU + ECS 的无限画布系统教程，<b>是切 WebGL 前最划算的预习材料</b>（含渲染引擎、拾取、文本、网格等专题）。</li>
+<li><b>thoughtdag</b>（416★）：LLM 对话 → 可编辑思维图（react-flow + local-first + MCP），"Wires are the context"，与 mindcanvas 的 AI 编写守则方向高度同构。</li>
+<li><b>CharDesk</b>（334★）：Unicode 画布，把图 / 界面 / 幻灯片<b>画成可编辑文本</b>，与 mindcanvas「纯文本优先」哲学最同频的极端形态，值得看它的交互取舍。</li>
+<li><b>OCIF（Open Canvas Interchange Format）</b>：CC BY-SA 4.0，2026-03 发布 v0.7 候选推荐，目标是跨工具无损互通 —— 画布界的通用交换格式正在成型，值得跟踪。</li>
+</ul>
+
+<!-- ============ 3 ============ -->
+<h2 id="s3"><span class="num">3</span>技术维度对比矩阵</h2>
+<table>
+<thead><tr>
+  <th style="width:14%">维度</th><th>tldraw</th><th>Excalidraw</th><th>xyflow</th><th>AntV X6</th><th>Plait</th><th style="width:15%">mindcanvas（现状）</th>
+</tr></thead>
+<tbody>
+<tr><td>渲染</td><td>DOM+SVG 为主，overlay 用 Canvas</td><td>双 Canvas 2D</td><td>HTML 节点 + SVG 边</td><td>SVG + HTML</td><td>SVG(roughjs)</td><td><b>SVG</b></td></tr>
+<tr><td>事实源</td><td>JSON 快照（store）</td><td><code>.excalidraw</code> JSON</td><td>宿主应用数据</td><td>宿主应用数据</td><td>自有模型</td><td><b><code>.mm.md</code> 纯文本</b></td></tr>
+<tr><td>坐标</td><td>页面/形状坐标 + CSS transform</td><td>场景坐标 + scrollX/Y/zoom</td><td>节点 x/y + viewport transform</td><td>cell position</td><td>有限画布模型</td><td>文档级坐标覆盖（设计中）</td></tr>
+<tr><td>状态</td><td>signals + record store</td><td>AppState + Scene 分离</td><td>Zustand（宿主）</td><td>自有</td><td>Slate 式插件</td><td>kernel 解析 + React</td></tr>
+<tr><td>视口裁剪</td><td><code>display:none</code> + 空间索引</td><td><code>isElementInViewport</code> + ShapeCache</td><td><code>onlyRenderVisibleElements</code></td><td><code>virtual:true</code></td><td class="muted">未核实</td><td class="yes"><b>已实现</b>（CULL_MARGIN=128）</td></tr>
+<tr><td>LOD</td><td>zoom 阈值降级（阴影/图案/几何）</td><td>网格按缩放跳过细线</td><td>无（靠虚拟化）</td><td class="muted">未核实</td><td class="muted">未核实</td><td class="yes"><b>已实现</b>（按总节点数）</td></tr>
+<tr><td>命中测试</td><td>几何系统 + 空间索引</td><td>视口过滤后遍历</td><td>DOM 事件</td><td>DOM / SVG 事件</td><td class="muted">未核实</td><td class="warn">O(N) 遍历（待加索引）</td></tr>
+<tr><td>协作</td><td>@tldraw/sync（DO，自托管）</td><td>E2EE + Socket.IO 中继</td><td>无（宿主负责）</td><td>无</td><td>无</td><td>无</td></tr>
+<tr><td>许可</td><td class="no">商业（生产付费 + 水印）</td><td class="yes">MIT</td><td class="warn">MIT + Pro 付费</td><td class="yes">MIT</td><td class="yes">MIT</td><td>自有</td></tr>
+<tr><td>文本可索引</td><td class="yes">好（DOM）</td><td class="no">差（绘进像素）</td><td class="yes">好</td><td class="yes">好</td><td class="yes">好（foreignObject）</td><td class="yes"><b>好</b>（SVG + 文本源）</td></tr>
+</tbody>
+</table>
+
+<!-- ============ 4 ============ -->
+<h2 id="s4"><span class="num">4</span>性能与渲染专题：SVG 的天花板与切换阈值</h2>
+
+<div class="figure">
+<svg viewBox="0 0 900 300" width="100%" style="max-width:900px" font-family="-apple-system,Segoe UI,PingFang SC,Microsoft YaHei,sans-serif">
+  <!-- axes -->
+  <line x1="90" y1="250" x2="860" y2="250" stroke="#d8d4cc"/>
+  <line x1="90" y1="20" x2="90" y2="250" stroke="#d8d4cc"/>
+  <text x="20" y="30" font-size="11.5" fill="#7a7a88">单帧渲染耗时</text>
+  <text x="20" y="46" font-size="10.5" fill="#7a7a88">（越低越好）</text>
+  <!-- gridlines -->
+  <g stroke="#eeece6">
+    <line x1="90" y1="200" x2="860" y2="200"/>
+    <line x1="90" y1="150" x2="860" y2="150"/>
+    <line x1="90" y1="100" x2="860" y2="100"/>
+    <line x1="90" y1="50" x2="860" y2="50"/>
+  </g>
+  <g font-size="10.5" fill="#7a7a88">
+    <text x="60" y="254">0</text><text x="58" y="204">50ms</text><text x="52" y="154">100ms</text>
+    <text x="52" y="104">150ms</text><text x="52" y="54">200ms+</text>
+  </g>
+  <!-- groups: 1k / 5k / 10k -->
+  <g>
+    <!-- 1k -->
+    <rect x="130" y="200" width="52" height="50" fill="#3f7d52" opacity="0.85"/>
+    <rect x="190" y="244" width="52" height="6" fill="#2f6fb0" opacity="0.85"/>
+    <text x="156" y="194" font-size="10.5" fill="#3f7d52" text-anchor="middle">25ms</text>
+    <text x="216" y="238" font-size="10.5" fill="#2f6fb0" text-anchor="middle">3ms</text>
+    <text x="186" y="266" font-size="11.5" fill="#4a4a55" text-anchor="middle">1,000 节点</text>
+
+    <!-- 5k -->
+    <rect x="330" y="100" width="52" height="150" fill="#3f7d52" opacity="0.85"/>
+    <rect x="390" y="232" width="52" height="18" fill="#2f6fb0" opacity="0.85"/>
+    <text x="356" y="94" font-size="10.5" fill="#3f7d52" text-anchor="middle">150ms</text>
+    <text x="416" y="226" font-size="10.5" fill="#2f6fb0" text-anchor="middle">12ms</text>
+    <text x="386" y="266" font-size="11.5" fill="#4a4a55" text-anchor="middle">5,000 节点（~35fps）</text>
+
+    <!-- 10k -->
+    <rect x="530" y="20" width="52" height="230" fill="#b23c3c" opacity="0.85"/>
+    <rect x="590" y="225" width="52" height="25" fill="#2f6fb0" opacity="0.85"/>
+    <text x="556" y="16" font-size="10.5" fill="#b23c3c" text-anchor="middle">&gt;400ms（&lt;3fps）</text>
+    <text x="616" y="219" font-size="10.5" fill="#2f6fb0" text-anchor="middle">25ms</text>
+    <text x="586" y="266" font-size="11.5" fill="#4a4a55" text-anchor="middle">10,000 节点</text>
+
+    <!-- webgl note -->
+    <rect x="720" y="238" width="52" height="12" fill="#6b4fa0" opacity="0.85"/>
+    <text x="746" y="232" font-size="10.5" fill="#6b4fa0" text-anchor="middle">2ms</text>
+    <text x="746" y="266" font-size="11.5" fill="#4a4a55" text-anchor="middle">10 万元素（WebGL）</text>
+  </g>
+  <!-- legend -->
+  <g font-size="11">
+    <rect x="130" y="285" width="11" height="11" fill="#3f7d52"/><text x="148" y="294" fill="#4a4a55">SVG</text>
+    <rect x="196" y="285" width="11" height="11" fill="#2f6fb0"/><text x="214" y="294" fill="#4a4a55">Canvas 2D</text>
+    <rect x="284" y="285" width="11" height="11" fill="#6b4fa0"/><text x="302" y="294" fill="#4a4a55">WebGL</text>
+    <rect x="364" y="285" width="11" height="11" fill="#b23c3c"/><text x="382" y="294" fill="#4a4a55">不可用区</text>
+  </g>
+</svg>
+<figcaption>图 2　渲染后端规模基准（blog.form.dev；svggenie 2025；chartts）。<b>注意：这是"总渲染节点"而非"可见节点"——mindcanvas 已裁剪，应对标可见数。</b></figcaption>
+</div>
+
+<h4>经验法则</h4>
+<p>静态 SVG ≤500–1000 元素安全，动态 &gt;2000 应考虑 Canvas（blog.vijayt.com）。Figma 的结论更本质：GPU 渲染成本按<b>像素</b>而非对象数计费，10 个与 5 万个形状开销相近；Miro 用 WebGL + 四叉树 + 实例化做到 10 万 widget 保 60fps。</p>
+
+<h3>4.2 无限画布的标准优化套路</h3>
+<ol>
+<li><b>视口裁剪 / 虚拟化</b>：tldraw 用空间索引 + <code>display:none</code>，"10000 形状可能只渲染 50 个"；Excalidraw <code>isElementInViewport</code>，&gt;500 元素就有明显收益。mindcanvas 的 <code>CULL_MARGIN=128</code> 属合理量级（最优值未实测）。</li>
+<li><b>LOD</b>：tldraw 缩小时图案转纯色、关文字阴影、简化几何；Excalidraw 网格 <code>actualGridSize&lt;10</code> 不画。</li>
+<li><b>空间索引</b>：四叉树 / R-tree / 网格，命中测试 O(N)→O(logN)。tldraw / Miro 均用四叉树。Excalidraw 直到 2025-12 才有 PR #10514 补（未合入），说明 <b>O(N) 在数千规模下确实会卡</b>。</li>
+<li><b>批处理 / 分层 / 离屏</b>：Excalidraw 静态层 + 交互层分离；脏矩形在 10–20% 区域变化时省 70–80% 渲染。</li>
+<li><b>绕开 React 重渲染</b>：tldraw 相机移动直接 <code>setProperty</code> 改 CSS transform；signals 只更新变更 shape。</li>
+<li><b>命中测试方案对比</b>：SVG 原生事件最省；几何检测（反序 + 包围盒）10,000 点 5–20ms；<code>isPointInPath</code> 10,000 次需 2000ms（仅适合 &lt;100 图形）；<b>拾色缓冲（color picking）0.1ms、O(1)</b>，Konva 采用，适合图形多且不常重绘。</li>
+</ol>
+
+<h3>4.3 平移 / 缩放的正确做法与坑</h3>
+<div class="split">
+  <div class="box ok">
+    <h4>做法</h4>
+    <ul class="tight">
+      <li>用 <b>transform 全局矩阵</b>，而非逐元素重排（Excalidraw 一次 <code>ctx.transform</code> 投影）。</li>
+      <li>Canvas 下按 <b>DPR</b> 放大缓冲区：<code>canvas.width = rect.width * dpr</code> + <code>ctx.scale(dpr,dpr)</code>。</li>
+    </ul>
+  </div>
+  <div class="box bad">
+    <h4>坑</h4>
+    <ul class="tight">
+      <li>CSS <code>translate</code> 位移上限约 <b>±10,000,000px</b>，超大画布会被截断。</li>
+      <li>缩放<b>必须重绘路径</b>，否则矢量拉伸模糊；DPR 处理不当 Retina 上文字发虚。</li>
+    </ul>
+  </div>
+</div>
+
+<h3>4.4 迁移路径（渐进，不要一次性重写）</h3>
+<div class="figure">
+<svg viewBox="0 0 900 190" width="100%" style="max-width:900px" font-family="-apple-system,Segoe UI,PingFang SC,Microsoft YaHei,sans-serif">
+  <defs><marker id="ar2" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#7a7a88"/></marker></defs>
+  <g>
+    <rect x="20" y="40" width="180" height="80" rx="9" fill="#ecf3ed" stroke="#3f7d52" stroke-width="1.6"/>
+    <text x="110" y="66" font-size="12.5" font-weight="700" fill="#3f7d52" text-anchor="middle">阶段 0 · 当下</text>
+    <text x="110" y="86" font-size="11.5" fill="#4a4a55" text-anchor="middle">SVG + 视口裁剪 + LOD</text>
+    <text x="110" y="104" font-size="11" fill="#b23c3c" text-anchor="middle">▲ mindcanvas 在此</text>
+
+    <rect x="240" y="40" width="180" height="80" rx="9" fill="#f3ece2" stroke="#8a5a2b" stroke-width="1.2"/>
+    <text x="330" y="66" font-size="12.5" font-weight="700" fill="#8a5a2b" text-anchor="middle">阶段 1</text>
+    <text x="330" y="86" font-size="11.5" fill="#4a4a55" text-anchor="middle">四叉树空间索引</text>
+    <text x="330" y="104" font-size="11.5" fill="#4a4a55" text-anchor="middle">+ transform-only 更新</text>
+
+    <rect x="460" y="40" width="180" height="80" rx="9" fill="#eaf1f8" stroke="#2f6fb0" stroke-width="1.2"/>
+    <text x="550" y="66" font-size="12.5" font-weight="700" fill="#2f6fb0" text-anchor="middle">阶段 2</text>
+    <text x="550" y="86" font-size="11.5" fill="#4a4a55" text-anchor="middle">混合渲染：结构/文本层 SVG</text>
+    <text x="550" y="104" font-size="11.5" fill="#4a4a55" text-anchor="middle">+ 海量层 Canvas</text>
+
+    <rect x="680" y="40" width="190" height="80" rx="9" fill="#f0ebf8" stroke="#6b4fa0" stroke-width="1.2"/>
+    <text x="775" y="66" font-size="12.5" font-weight="700" fill="#6b4fa0" text-anchor="middle">阶段 3</text>
+    <text x="775" y="86" font-size="11.5" fill="#4a4a55" text-anchor="middle">WebGL / WebGPU 瓦片化</text>
+    <text x="775" y="104" font-size="11" fill="#7a7a88" text-anchor="middle">（Figma 路线，成本最高）</text>
+
+    <path d="M204,80 L236,80" stroke="#7a7a88" fill="none" marker-end="url(#ar2)"/>
+    <path d="M424,80 L456,80" stroke="#7a7a88" fill="none" marker-end="url(#ar2)"/>
+    <path d="M644,80 L676,80" stroke="#7a7a88" fill="none" marker-end="url(#ar2)"/>
+
+    <text x="450" y="160" font-size="11.5" fill="#7a7a88" text-anchor="middle">触发条件：可见节点 &gt; 5000 且帧率 &lt; 30fps，或总节点 &gt; 20000</text>
+    <line x1="240" y1="140" x2="660" y2="140" stroke="#eeece6"/>
+  </g>
+</svg>
+<figcaption>图 3　渲染演进路径。tldraw 本身就是「DOM/HTML 结构层 + Canvas 瞬态层」的混合范例；Figma 彻底自研 WebGL + WASM（2018 重写提速 3x，2025 加 WebGPU）。成本量级（人日未核实）：SVG→Canvas 中等；Canvas→WebGL 高。</figcaption>
+</div>
+
+<!-- ============ 5 ============ -->
+<h2 id="s5"><span class="num">5</span>趋势判断：真需求 vs 噪音</h2>
+<div class="split">
+  <div class="box ok">
+    <h4>真实需求</h4>
+    <ul class="tight">
+      <li><b>AI 生成式画布</b>：tldraw Make Real（草图→HTML）、Flowith（非线性思考工作区）、Napkin / Gamma（文本→视觉资产）已跑通商业形态；本轮 topic 榜单里 opencove / thoughtdag / dim0 / horizon 全是这个方向。</li>
+      <li><b>协作 + CRDT / local-first</b>：tldraw-sync、Excalidraw E2EE、Yjs / Automerge 已成标配。</li>
+      <li><b>开放可 diff 格式</b>：JSON Canvas（MIT）已被 Obsidian 生态采用；OCIF（CC BY-SA 4.0，2026-03 v0.7 候选）正在做跨工具互通标准。</li>
+    </ul>
+  </div>
+  <div class="box bad">
+    <h4>噪音</h4>
+    <ul class="tight">
+      <li>大量"AI Agent 无限画布"只是 GPT 包装层，无数据模型创新；"无限 agent 步数 / 上下文"多为营销。</li>
+      <li>单纯"手绘风白板"赛道已极度内卷（Excalidraw 131k★ + tldraw 50k★ 双寡头），<b>新进入者没有差异化就别做</b>。</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ============ 6 ============ -->
+<h2 id="s6"><span class="num">6</span>对 mindcanvas 的落地建议</h2>
+
+<h3>P0 — 立刻可做、收益确定</h3>
+<ol>
+<li><b>不要把白板 SDK 作为依赖引入。</b> tldraw（生产付费 + 水印）、Excalidraw SDK（344kB gzip + breaking 史）、xyflow（核心能力在 Pro 付费层）都不划算；继续自研 kernel + SVG。若未来必须引入，唯一无许可雷的是 quickdraw（MIT，但 v0.2.0，只作观察对象）。</li>
+<li><b>加空间索引：</b>命中测试与可见性查询从 O(N) 换成四叉树 / 网格 O(logN)。触发阈值：总节点 &gt; 1000 或可见节点 &gt; 300 时启用。</li>
+<li><b>transform-only 更新：</b>平移 / 缩放一律走 CSS transform / <code>setProperty</code>，禁止逐节点 React 重渲染；节点 &gt; 500 时禁用逐节点 state 更新。</li>
+</ol>
+
+<h3>P1 — 短期（1–2 个迭代）</h3>
+<ol start="4">
+<li><b>LOD 判定改为「zoom 分级 + 平移期冻结」：</b>当前按总节点数判定会导致平移时整体跳变；改为按屏幕尺寸（节点 &lt; 24px 或 zoom &lt; 0.3 降级），并在手势期间锁定等级、手势结束再重算。</li>
+<li><b>裁剪 margin 自适应：</b><code>CULL_MARGIN=128</code> 保持默认，当可见节点 &gt; 2000 且帧率 &lt; 50fps 时动态扩大 margin，减少进出抖动导致的反复挂载。</li>
+<li><b>对齐 JSON Canvas 作为交换格式（只做导入导出，不改事实源）：</b><code>.mm.md</code> 仍是唯一事实源，额外支持导出 <code>.canvas</code>（nodes/edges 两数组），直接吃下 Obsidian 生态，把既有的「自由连线 + 多中心升格」成果变成可互操作资产。</li>
+<li><b>文件格式版本化：</b>学 Excalidraw 的 <code>version</code> 字段 + migration 函数链，为 <code>.mm.md</code> 的 note 协议（v1.4）升级做准备，避免将来靠 parse 兜底。</li>
+</ol>
+
+<h3>P2 — 中期（需要摩擦驱动，不要提前做）</h3>
+<ol start="8">
+<li><b>AI 只做"薄生成层"：</b>让 AI 以「追加可 diff 的 <code>.mm.md</code> 文本片段」方式生成导图，先在内存预览再落盘（与既有"AI 改动先进预览再确认"一致）。不要现在就做画布内多模态生成或长链路 agent 管线。</li>
+<li><b>协作：</b>若出现 ≥2 条跨文档真实摩擦再启动；届时优先 Yjs（local-first），不要自造同步后端。</li>
+<li><b>渲染器切换：</b>只有同时满足「可见节点 &gt; 5000 且帧率 &lt; 30fps」或「总节点 &gt; 20000」时才启动混合方案评估；WebGL 之前先读 xiaoiver/infinite-canvas-tutorial。</li>
+</ol>
+
+<div class="box bad">
+  <h4>明确不做</h4>
+  <ul class="tight">
+    <li>❌ 为追 Excalidraw 的手绘风切 Canvas —— 会丢掉中文文本、无障碍、可选中、可 diff 的差异化优势。</li>
+    <li>❌ 依赖 tldraw / xyflow Pro 等带付费或水印的组件。</li>
+    <li>❌ 现在上协作、上 AI agent 画布 —— 没有真实摩擦驱动就是治理动作。</li>
+  </ul>
+</div>
+
+<!-- ============ 7 ============ -->
+<h2 id="s7"><span class="num">7</span>未核实项与风险</h2>
+<table>
+<thead><tr><th style="width:46%">项</th><th>状态</th></tr></thead>
+<tbody>
+<tr><td>tldraw 商业授权官方价格</td><td class="warn">未核实（仅第三方 ~$6,000/年）</td></tr>
+<tr><td>tldraw 空间索引具体结构（四叉树 / R-tree）</td><td class="warn">未核实（官方只说"维护 spatial index"）</td></tr>
+<tr><td>tldraw minimap 是否 WebGL</td><td class="warn">未核实</td></tr>
+<tr><td>markmap 精确 star 数</td><td class="warn">未核实（页面未取到计数）</td></tr>
+<tr><td>markvault-js / @hediet/vite-plugin-mindmap</td><td class="warn">未核实（未命中可靠仓库）</td></tr>
+<tr><td>Plait 的嵌套 / frame 分组能力</td><td class="warn">未核实</td></tr>
+<tr><td>各渲染基准的浏览器 / 硬件条件</td><td class="warn">未核实（来源环境不统一，只能看量级）</td></tr>
+<tr><td>butterfly、GoJS 最新 star</td><td class="warn">较早数据</td></tr>
+<tr><td>国产 flowmix / 腾讯·字节系开源画布</td><td class="warn">未核实（无可靠开源仓库）</td></tr>
+</tbody>
+</table>
+<p><b>风险提示</b>：本轮 GitHub API 匿名配额已耗尽，<code>github-trending-cn</code> 脚本的仓库详情抓取全部失败，trending 数据改用网页直抓；引用 star 数以各来源标注日期为准，可能随时间漂移。</p>
+
+<footer>
+  mindcanvas · 自由画布生态深度调研 · 2026-09-11 · 数据与结论以各来源标注日期为准
+</footer>
+
+</div>
+</body>
+</html>

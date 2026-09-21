@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="4aoeCULaOi0gNH0YLpkl3l">
+<head data-page-node-id="PqQzwW87GiOcDdW2V3UozX">
+<meta charset="UTF-8" data-page-node-id="NYcswOKAYIBsHqtNID5Zdf">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="Gc9aOZDp4cFYYBiTGeH5jB">
+<title>Project Graph 深度调研 · mindcanvas 减法设计</title>
+<style>
+:root{
+  --bg:#faf9f7; --card:#ffffff; --ink:#1c1917; --ink2:#57534e; --ink3:#8a8580;
+  --line:#e7e5e4; --line2:#d6d3d1;
+  --brand:#4338ca; --brand-soft:#eef2ff;
+  --green:#047857; --green-soft:#ecfdf5; --green-line:#a7f3d0;
+  --blue:#0369a1; --blue-soft:#f0f9ff; --blue-line:#bae6fd;
+  --red:#b91c1c; --red-soft:#fef2f2; --red-line:#fecaca;
+  --amber:#b45309; --amber-soft:#fffbeb; --amber-line:#fde68a;
+  --radius:14px;
+  --shadow:0 1px 2px rgba(28,25,23,.04),0 4px 16px rgba(28,25,23,.06);
+  --shadow-lg:0 4px 12px rgba(28,25,23,.08),0 16px 40px rgba(28,25,23,.10);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:var(--bg);color:var(--ink);
+  font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:15px;line-height:1.7;-webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1160px;margin:0 auto;padding:0 24px}
+code{font-family:"SF Mono",Consolas,"Cascadia Code",monospace;font-size:.87em;
+  background:#f5f5f4;padding:2px 6px;border-radius:5px;color:#7c3aed}
+
+/* ---------- Hero ---------- */
+.hero{padding:64px 0 40px;border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg,#fff 0%,var(--bg) 100%)}
+.hero .eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--brand);
+  background:var(--brand-soft);padding:6px 14px;border-radius:999px;font-weight:600}
+.hero h1{font-size:40px;line-height:1.25;margin:22px 0 8px;letter-spacing:-.02em;font-weight:700}
+.hero h1 .sub{color:var(--ink3);font-weight:400}
+.hero .meta{color:var(--ink3);font-size:13.5px;margin-bottom:28px}
+
+.verdict{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--brand);
+  border-radius:var(--radius);padding:24px 28px;box-shadow:var(--shadow);margin-bottom:22px}
+.verdict .lbl{font-size:12px;font-weight:700;color:var(--brand);letter-spacing:.06em;margin-bottom:10px}
+.verdict p{font-size:18px;line-height:1.75;color:var(--ink)}
+.verdict strong{background:linear-gradient(180deg,transparent 62%,#fde68a 62%);font-weight:700}
+
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  padding:18px 20px;box-shadow:var(--shadow)}
+.kpi .n{font-size:28px;font-weight:700;letter-spacing:-.02em;line-height:1.2}
+.kpi .n small{font-size:14px;font-weight:600;color:var(--ink3);margin-left:2px}
+.kpi .t{font-size:12.5px;color:var(--ink3);margin-top:4px}
+.kpi.up .n{color:var(--green)} .kpi.down .n{color:var(--red)}
+.kpi.neutral .n{color:var(--brand)}
+
+/* ---------- Tabs ---------- */
+.tabbar{position:sticky;top:0;z-index:50;background:rgba(250,249,247,.88);
+  backdrop-filter:blur(12px);border-bottom:1px solid var(--line);margin-bottom:36px}
+.tabbar .wrap{display:flex;gap:4px;overflow-x:auto}
+.tab{appearance:none;background:none;border:none;cursor:pointer;font:inherit;
+  padding:16px 18px;color:var(--ink3);font-size:14.5px;font-weight:600;white-space:nowrap;
+  border-bottom:2.5px solid transparent;transition:all .18s}
+.tab:hover{color:var(--ink2)}
+.tab[aria-selected="true"]{color:var(--brand);border-bottom-color:var(--brand)}
+.panel{display:none;padding-bottom:72px;animation:fade .34s ease}
+.panel.on{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+h2.sec{font-size:24px;font-weight:700;letter-spacing:-.01em;margin:0 0 6px}
+p.lead{color:var(--ink2);font-size:15px;margin-bottom:26px;max-width:800px}
+h3{font-size:17px;font-weight:700;margin:32px 0 12px;display:flex;align-items:center;gap:9px}
+h3::before{content:"";width:3px;height:16px;background:var(--brand);border-radius:2px}
+h3:first-of-type{margin-top:0}
+
+/* ---------- Table ---------- */
+.tbl{width:100%;border-collapse:collapse;background:var(--card);
+  border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;
+  box-shadow:var(--shadow);font-size:14px}
+.tbl th{background:#faf9f7;text-align:left;padding:12px 16px;font-weight:700;
+  font-size:12.5px;color:var(--ink2);letter-spacing:.03em;border-bottom:1px solid var(--line)}
+.tbl td{padding:11px 16px;border-bottom:1px solid #f5f5f4;vertical-align:top}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tbody tr:hover{background:#fdfdfc}
+.tbl .num{font-variant-numeric:tabular-nums;font-weight:600}
+.tbl .win{color:var(--green);font-weight:700}
+.tbl .lose{color:var(--red);font-weight:700}
+
+/* ---------- Bar ---------- */
+.bars{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  padding:24px 26px;box-shadow:var(--shadow)}
+.bar-row{display:grid;grid-template-columns:132px 1fr 96px;align-items:center;
+  gap:14px;padding:9px 0}
+.bar-lbl{font-size:13px;color:var(--ink2);text-align:right;font-weight:600}
+.bar-track{height:26px;background:#f5f5f4;border-radius:6px;overflow:hidden;display:flex}
+.bar-fill{height:100%;border-radius:6px;display:flex;align-items:center;
+  padding-left:10px;color:#fff;font-size:11.5px;font-weight:700;
+  transition:width 1s cubic-bezier(.2,.7,.3,1)}
+.bar-fill.pg{background:linear-gradient(90deg,#6366f1,#818cf8)}
+.bar-fill.mc{background:linear-gradient(90deg,#0d9488,#2dd4bf)}
+.bar-val{font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--ink3)}
+.bar-val b{color:var(--ink);font-weight:700}
+.legend{display:flex;gap:18px;margin-top:16px;padding-top:14px;border-top:1px solid var(--line);
+  font-size:12.5px;color:var(--ink2)}
+.legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+
+/* ---------- Flip cards ---------- */
+.cols3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-bottom:28px}
+.col{border-radius:var(--radius);padding:18px 18px 20px;border:1px solid var(--line)}
+.col.g{background:var(--green-soft);border-color:var(--green-line)}
+.col.b{background:var(--blue-soft);border-color:var(--blue-line)}
+.col.r{background:var(--red-soft);border-color:var(--red-line)}
+.col h4{font-size:15px;font-weight:700;margin-bottom:3px;display:flex;align-items:center;gap:8px}
+.col.g h4{color:var(--green)} .col.b h4{color:var(--blue)} .col.r h4{color:var(--red)}
+.col .cnt{font-size:12px;color:var(--ink2);margin-bottom:14px}
+.col .cnt b{font-weight:700;color:var(--ink)}
+
+.flip{perspective:1200px;margin-bottom:10px}
+.flip .inner{position:relative;transform-style:preserve-3d;transition:transform .55s cubic-bezier(.3,.8,.3,1);min-height:92px;cursor:pointer}
+.flip.on .inner{transform:rotateY(180deg)}
+.face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;
+  background:var(--card);border:1px solid var(--line);border-radius:11px;padding:13px 15px;
+  box-shadow:var(--shadow);display:flex;flex-direction:column;justify-content:center}
+.face.back{transform:rotateY(180deg);background:#fffdf7;border-color:var(--amber-line)}
+.face .tag{font-size:10.5px;font-weight:700;letter-spacing:.06em;color:var(--ink3);margin-bottom:5px}
+.face .ttl{font-size:13.5px;font-weight:700;line-height:1.45}
+.face .dsc{font-size:12.5px;color:var(--ink2);line-height:1.6;margin-top:6px}
+.face.back .dsc{color:#78350f}
+.face .ev{font-size:11px;color:var(--ink3);margin-top:8px;font-family:"SF Mono",Consolas,monospace}
+.hint{font-size:11.5px;color:var(--ink3);text-align:center;margin-top:2px}
+
+/* ---------- Callout ---------- */
+.callout{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  padding:22px 26px;box-shadow:var(--shadow);margin:22px 0}
+.callout.gold{border-left:4px solid var(--amber);background:var(--amber-soft)}
+.callout.info{border-left:4px solid var(--blue)}
+.callout .cl{font-size:11.5px;font-weight:700;letter-spacing:.06em;margin-bottom:9px}
+.callout.gold .cl{color:var(--amber)} .callout.info .cl{color:var(--blue)}
+.callout p{font-size:15px;line-height:1.8}
+.callout p+p{margin-top:10px}
+.big{font-size:17px;font-weight:600;line-height:1.7}
+
+/* ---------- Compare block ---------- */
+.vs{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--line);
+  border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);background:var(--card)}
+.vs>div{padding:20px 24px}
+.vs .l{border-right:1px solid var(--line);background:#fdfcfb}
+.vs h5{font-size:13px;font-weight:700;letter-spacing:.04em;margin-bottom:12px;
+  padding-bottom:8px;border-bottom:1px solid var(--line)}
+.vs .l h5{color:var(--ink3)} .vs .r h5{color:var(--green)}
+.vs ul{list-style:none;font-size:13.5px;line-height:1.85}
+.vs li{padding-left:18px;position:relative;color:var(--ink2)}
+.vs li::before{content:"–";position:absolute;left:0;color:var(--ink3)}
+.vs .r li::before{content:"✓";color:var(--green);font-weight:700}
+.vs .r li{color:var(--ink)}
+.vs li b{color:var(--ink);font-weight:700}
+
+/* ---------- Steps ---------- */
+.step{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  padding:22px 26px;margin-bottom:14px;box-shadow:var(--shadow)}
+.step .hd{display:flex;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap}
+.step .no{width:28px;height:28px;border-radius:8px;background:var(--brand);color:#fff;
+  display:grid;place-items:center;font-size:13px;font-weight:700;flex-shrink:0}
+.step .no.g{background:var(--green)} .step .no.a{background:var(--amber)}
+.step h4{font-size:16px;font-weight:700}
+.pill{font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;letter-spacing:.03em}
+.pill.p0{background:var(--red-soft);color:var(--red);border:1px solid var(--red-line)}
+.pill.p1{background:var(--amber-soft);color:var(--amber);border:1px solid var(--amber-line)}
+.pill.p2{background:var(--blue-soft);color:var(--blue);border:1px solid var(--blue-line)}
+.pill.no{background:#f5f5f4;color:var(--ink3);border:1px solid var(--line)}
+.step p{font-size:14px;color:var(--ink2);line-height:1.75}
+.step p+p{margin-top:8px}
+.step .warn{margin-top:12px;padding:11px 14px;background:var(--amber-soft);
+  border-left:3px solid var(--amber);border-radius:0 8px 8px 0;font-size:13px;color:#78350f;line-height:1.7}
+.step .warn b{color:#7c2d12}
+
+ul.plain{list-style:none;font-size:14px;line-height:1.85;color:var(--ink2)}
+ul.plain li{padding-left:20px;position:relative}
+ul.plain li::before{content:"";position:absolute;left:4px;top:11px;width:5px;height:5px;
+  border-radius:50%;background:var(--line2)}
+ul.plain li b{color:var(--ink);font-weight:700}
+
+/* ---------- Roadmap ---------- */
+.road{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+  overflow:hidden;box-shadow:var(--shadow)}
+.road-row{display:grid;grid-template-columns:56px 1fr 92px 82px;align-items:center;
+  gap:14px;padding:14px 22px;border-bottom:1px solid #f5f5f4}
+.road-row:last-child{border-bottom:none}
+.road-row:hover{background:#fdfdfc}
+.road .gid{font-weight:700;font-size:13px;color:var(--brand);
+  font-family:"SF Mono",Consolas,monospace}
+.road .gname{font-size:14px}
+.road .gname small{display:block;color:var(--ink3);font-size:12px;margin-top:1px}
+.road .geff,.road .gpri{font-size:12.5px;color:var(--ink2);font-variant-numeric:tabular-nums}
+
+footer{border-top:1px solid var(--line);padding:30px 0 50px;color:var(--ink3);font-size:12.5px}
+footer b{color:var(--ink2)}
+
+@media(max-width:900px){
+  .cols3{grid-template-columns:1fr}
+  .kpis{grid-template-columns:repeat(2,1fr)}
+  .vs{grid-template-columns:1fr}
+  .vs .l{border-right:none;border-bottom:1px solid var(--line)}
+  .bar-row{grid-template-columns:96px 1fr 76px}
+  .hero h1{font-size:30px}
+  .road-row{grid-template-columns:44px 1fr;row-gap:4px}
+}
+</style>
+</head>
+<body data-page-node-id="BnFloLIIGXNmrsDcWLi99e">
+
+<header class="hero" data-page-node-id="iLTbHH15r4HB5zNzdjedTJ">
+  <div class="wrap" data-page-node-id="sgnJ099eXCkHBCdBQ1ROVx">
+    <span class="eyebrow" data-page-node-id="oZRV4FYV8C93ZDiGJz9VA7">深度调研 · 2026-09-05</span>
+    <h1 data-page-node-id="A6ChKUn6SKwZjdyBO8PwAu">Project Graph 解剖与 mindcanvas 的减法<br data-page-node-id="HkDhr7bGFhootNVQ0PYLw9"><span class="sub" data-page-node-id="XwX7EoEGxEIiIkyrHCLGRZ">站在 115,024 行上，决定 20,382 行该长成什么样</span></h1>
+    <p class="meta" data-page-node-id="Ew98SKF2cr4MaDacgyTaCm">调研对象：<code data-page-node-id="rtDxBkeKueVa8ZPQNWO5iO">github.com/graphif/project-graph</code> · 全量 clone 4,387 commits · 五路并行取证</p>
+
+    <div class="verdict" data-page-node-id="k84eTPF93wWjW46UNlpT1N">
+      <div class="lbl" data-page-node-id="XQOmofSQ8F4QwnQFCobCpG">核心结论</div>
+      <p data-page-node-id="c7djdYjR1DMMkS5H7eiVwV">不要羡慕 PG 的 115,024 行。它的复杂度里，<strong data-page-node-id="XaRX9dv8tFeF9BRFUoB9E2">约一半是问题域强加的，四分之一是自己长出来的赘肉，只有约四分之一是真金</strong>。而 mindcanvas 因为选了「树 + 纯文本」，天然免疫了前一半。真正该做的不是加法，是<strong data-page-node-id="WETy1oitK9lCp6K0rywz7k">确认边界 + 补三个真缺口</strong>。</p>
+    </div>
+
+    <div class="kpis" data-page-node-id="1VAPB0yHimYaMJGu9bpHEC">
+      <div class="kpi down" data-page-node-id="pUFDt17umMZH64rYglQ2jl"><div class="n" data-page-node-id="qQFfCVxEXIBoHszIIHdDp6">5.6<small data-page-node-id="VhaOTUoG5tWwqYKfTVMmkS">×</small></div><div class="t" data-page-node-id="SDfnrlgj9L1ZDlg2kiemdV">代码量差距（PG 更大）</div></div>
+      <div class="kpi up" data-page-node-id="F2KvdkGurhyORTVwDFOMeX"><div class="n" data-page-node-id="1PP47kmXABX45PDopDERru">15<small data-page-node-id="m8TMeUHE5aCmAnCoEauICN">×</small></div><div class="t" data-page-node-id="EmHaeMQSnyhZTkStgHKOMK">测试密度优势（我们更密）</div></div>
+      <div class="kpi neutral" data-page-node-id="qFwdyT1NWbDM2Ohm1Aa0VF"><div class="n" data-page-node-id="Va8KBlKU76crqUlfx77cjd">4</div><div class="t" data-page-node-id="GwvYNvHgvVAm8cfLpnGFEo">值得学（抄设计不抄代码）</div></div>
+      <div class="kpi down" data-page-node-id="JScS9jga5WKKNKe9KUqQrv"><div class="n" data-page-node-id="MN9tBRPMZyzuTW84eQE7rB">8</div><div class="t" data-page-node-id="NBWDJ1wffsSP5wpBWsEYKs">明确拒绝（问题域不同）</div></div>
+    </div>
+  </div>
+</header>
+
+<nav class="tabbar" data-page-node-id="sdZHDW5bUTm0pbHBp44piF">
+  <div class="wrap" data-page-node-id="Z71eDi5ihDxPUa9cXIdaHW">
+    <button class="tab" aria-selected="true" data-t="t1" data-page-node-id="ULUfAZQOC945LklGK542hp">全景对照</button>
+    <button class="tab" aria-selected="false" data-t="t2" data-page-node-id="Is2cUnA81CbkP1896h5bBK">PG 能力解剖</button>
+    <button class="tab" aria-selected="false" data-t="t3" data-page-node-id="JOkRhG9El7bYAQitzhk05W">减法矩阵</button>
+    <button class="tab" aria-selected="false" data-t="t4" data-page-node-id="T0QGUm1VCWI4EzOy8Sz0IK">三个真缺口</button>
+    <button class="tab" aria-selected="false" data-t="t5" data-page-node-id="rqUuyYOUs3a0oW87230BWP">落地路线</button>
+    <button class="tab" aria-selected="false" data-t="t6" data-page-node-id="IkOnG9TrYd8HvaWk3Yitw0">反面教材</button>
+  </div>
+</nav>
+
+<main class="wrap" data-page-node-id="a66AhlCmOqc00v4GuyGAlm">
+
+<!-- ============ TAB 1 ============ -->
+<section class="panel on" id="t1" data-page-node-id="CrqEUarOVv7vSJB8644k7T">
+  <h2 class="sec" data-page-node-id="rOKY1MBf7RTPJ5lcwP4lT0">全景对照</h2>
+  <p class="lead" data-page-node-id="HPGqUEDmSS3DI9YUPqsbIm">两个项目不在同一个问题域：PG 是「任意图 + 自由画布」，mindcanvas 是「树 + 纯文本」。规模差 5.6 倍，但测试密度差 15 倍且方向相反——这不是巧合，是两种工程哲学的分野。</p>
+
+  <h3 data-page-node-id="BGmnNBeO2lPC2PnqB0lrAS">硬数据</h3>
+  <table class="tbl" data-page-node-id="ovoHBJLSBnqD4IfgOqNp3A">
+    <thead data-page-node-id="Eu0e05GFECpZPFpwHYt2uq"><tr data-page-node-id="ThAfpjepgtzmyrQFiSnh1l"><th style="width:24%" data-page-node-id="V1lmCdMpSDJc6Tgh0mITlh">维度</th><th style="width:24%" data-page-node-id="D7MrXksIJgFT9UhWWblXqr">Project Graph</th><th style="width:24%" data-page-node-id="7r91kxE3zc4arWbJEkO6HA">mindcanvas</th><th data-page-node-id="rmrEduklkP3n0SNXkzpRcR">倍数</th></tr></thead>
+    <tbody data-page-node-id="pDMvpi7MZ6KRN0MGYlPFFR">
+      <tr data-page-node-id="ygIxCQhtbXio7C8vBc7RDo"><td data-page-node-id="hQRFsMVWcuagSGhWPGAKwL">代码行数（TS/TSX）</td><td class="num" data-page-node-id="SFTqhwc36rOCwtvbh8w7TS">115,024</td><td class="num" data-page-node-id="d2vKnDdf0DDYruYHLaTGkF">20,382</td><td class="num" data-page-node-id="ucpR933H3XINcXK1HW9q3y">5.6×</td></tr>
+      <tr data-page-node-id="BXkPZA1Z2SNdtCdHve8waG"><td data-page-node-id="saH5YhqufVYQ0GptCWXp5Y">文件数</td><td class="num" data-page-node-id="KaAuZB2S8EVhsYObev6t8K">647</td><td class="num" data-page-node-id="Lo3wBdwotF612Apv131iHn">128</td><td class="num" data-page-node-id="y5qqpvFAxNdS8SPrdEB10g">5.1×</td></tr>
+      <tr data-page-node-id="U7t8hhYHru3fVXauGg7Oax"><td data-page-node-id="R5c6WEnoml5FP8HsTAr5uy">提交数</td><td class="num" data-page-node-id="uqdqBhreHZqZ82XKBWehco">4,387</td><td class="num" data-page-node-id="TU7ebHsSdsLTQBLh5V7UTg">59</td><td class="num" data-page-node-id="6jsCJm5RkEHPCCYzecSbRU">74×</td></tr>
+      <tr data-page-node-id="jEzMhk3GwrZRRwTYy7Trxd"><td data-page-node-id="Y6zWJwEH9nmIyW5eQTyKTe">开发时长</td><td data-page-node-id="9WMau6M7dUcxupD7scHcFZ">2 年（2024-08-21 起）</td><td data-page-node-id="7VREI8BZ0CabYxircnWM0r">约 30 天</td><td data-page-node-id="CrBYqLrZj1osppfPQyNvAG">—</td></tr>
+      <tr data-page-node-id="3DMuiG6YcL5G8keJTiiC3A"><td data-page-node-id="dH7ZGk7vPem2tLmLk8iVXp">贡献者</td><td data-page-node-id="Ir2EuzkkwhXbar2nnvNkeM">约 30 人（2 主力占 3,903 提交）</td><td data-page-node-id="dJtZFRDt6CsVAZTWfsuUvV">1（+AI 结对）</td><td data-page-node-id="QjEiSrKsVoMQs8jwE1uo40">—</td></tr>
+      <tr data-page-node-id="GR9cBooMc4ewFWFUA4NhG9"><td data-page-node-id="w235Ld4e8C6UJogwjgPyfy">测试文件</td><td class="num" data-page-node-id="wQqnURBpjaPXSz5zrsHdM3">50</td><td class="num" data-page-node-id="80pL1gG4db8G8G2Vo2bSGs">133（794 条）</td><td class="win" data-page-node-id="dmmEfUw2uyfjRczOVPwZZu">2.7×</td></tr>
+      <tr data-page-node-id="f8QkfH7BuM4Cy0MQlr91uC"><td data-page-node-id="yomE4Dp8dnDWnq5mCamPSL"><b data-page-node-id="DevBWRL92P4XefD86SqAat">测试密度</b></td><td class="num" data-page-node-id="eyKpr0H4nsb2FSu7iFJ6mH">50 文件 / 115k 行</td><td class="num" data-page-node-id="vOQ4SEd9RKGQ24sPmjCcRx">133 文件 / 20k 行</td><td class="win" data-page-node-id="iGSIgFlOhOthJP3IegKkRz">15×</td></tr>
+      <tr data-page-node-id="ayCFU1KjKJ5By0KowaBwoS"><td data-page-node-id="hoDbC0WWomWThZDr7EErBR">最大文件</td><td class="num" data-page-node-id="dqMFSZcFQXBW9mGmA1zRUe">9,945 行（类型声明）</td><td class="num" data-page-node-id="wzB5QSVz71o7nE41ioHAwj">1,573 行</td><td class="num" data-page-node-id="f7jbjlwsoObJ8ClbFlEjic">6.3×</td></tr>
+      <tr data-page-node-id="2BgA0pmA3oWto3WHQm6IHp"><td data-page-node-id="KBRoeQChAWLWfI5oJUj70K">快捷键</td><td class="num" data-page-node-id="w5tGWFstVy6ylu3NnX41s7">347 条（注册文件 4,538 行）</td><td class="num" data-page-node-id="NofBX5h7r6xsj8nmdgB0rD">keys.ts 100 行</td><td class="lose" data-page-node-id="O2NA61CMgM0msr0lszT0Xk">约 35×</td></tr>
+      <tr data-page-node-id="4cHFvYgdItQ0vIg0kL8XVb"><td data-page-node-id="n4fCDrpIB3KQlL1YfZOF4T">服务数</td><td class="num" data-page-node-id="rOPCqfjl6O0Adx4nA1ls1J">约 90 个（手写 DI 容器）</td><td data-page-node-id="eoeYYoRKVD9xe6UYEI1lOT">无服务层</td><td data-page-node-id="iw3ZjXok4B0T4CANLYNfGl">—</td></tr>
+      <tr data-page-node-id="ykWgQ9xrvT9FgHP6FwuDo9"><td data-page-node-id="Wdc8ob4GIPeLUarVjdfdW6">交互控制器</td><td data-page-node-id="FAhZ40DAXkHoq1GvWIcIaI">19 个插件 Class</td><td data-page-node-id="tOG0MNakr46vO6SGjL5lX2">controller.ts 单文件</td><td data-page-node-id="aFNY07EXTqEYHoIU9SIFNN">—</td></tr>
+      <tr data-page-node-id="LG8ix1fuUtvbkHlVFWYnGx"><td data-page-node-id="zdkQZgSnT0l3mDKjUKAcLT">事实源格式</td><td data-page-node-id="ZpZ43VUFdQhmRRnK2qzSr6"><code data-page-node-id="NAPfq12FXwgBJs8REOrgJ2">.prg</code> = zip + msgpack（<b data-page-node-id="Wt0L69mvhkorgThkhr61l4">二进制</b>）</td><td data-page-node-id="AI2pdDQmrPPoVhhJyJCIZL"><code data-page-node-id="OPSA4uKImg7cJSxsYmKimC">.mm.md</code> 纯文本</td><td class="win" data-page-node-id="9GvWj3HaNiMZoWcTR1DREH">—</td></tr>
+      <tr data-page-node-id="Xv0VJbyOHLFKQsoUQkKVds"><td data-page-node-id="89JKWgE9EpnnmLOzMZyupA">连线避障</td><td class="lose" data-page-node-id="z8zH9PBnJPblMBRYRKfY1m">无</td><td class="win" data-page-node-id="Q7GXaf5OqiCZpAbqwuvIQZ">有（自研评分路由 1,151 行）</td><td class="win" data-page-node-id="5U9lr7FTh6R0mnFq88JKEo">独家</td></tr>
+    </tbody>
+  </table>
+
+  <h3 data-page-node-id="XOtQImSLNTDfJvrGZhvjPf">规模可视化</h3>
+  <div class="bars" data-page-node-id="yKICwV0jZwBzOxyy1ZaLQc">
+    <div class="bar-row" data-page-node-id="bFbMZg09gCxNcHcW1G0HF9">
+      <div class="bar-lbl" data-page-node-id="vdeOSDt0nW8tPyOq6NHBvp">代码行数</div>
+      <div class="bar-track" data-page-node-id="jAeKeunSpxqj4HPsca8rIc"><div class="bar-fill pg" style="width:100%" data-page-node-id="uxe7Lj3b02cYmCEalYX29H">115,024</div></div>
+      <div class="bar-val" data-page-node-id="NUcsklCS0Q9YSmDK7kpdLh"><b data-page-node-id="AUJTd7K33tCpcsYiSxN2An">5.6×</b></div>
+    </div>
+    <div class="bar-row" data-page-node-id="rdhmgVRB5TRBd0Fh1ulLq8">
+      <div class="bar-lbl" data-page-node-id="JosQxzgaSWmY3U4WMKAGS4">mindcanvas</div>
+      <div class="bar-track" data-page-node-id="Lzysj3FVWWfq1SQ0ZZde3t"><div class="bar-fill mc" style="width:17.7%" data-page-node-id="3mDIDxJtpkVUebDUmBSskC">20,382</div></div>
+      <div class="bar-val" data-page-node-id="ME8RpyO12qbhxvvBDlOzAG">—</div>
+    </div>
+    <div class="bar-row" data-page-node-id="Dv9TsE0ssk7EpTS3C0GMrX">
+      <div class="bar-lbl" data-page-node-id="LhA7QhL8pMFMCQSQyFPioo">测试文件</div>
+      <div class="bar-track" data-page-node-id="segK9BBmb0haJDYACyBYs1"><div class="bar-fill pg" style="width:37.6%" data-page-node-id="1vaQrkmMiKIdBmD3HQDqV2">50</div></div>
+      <div class="bar-val" data-page-node-id="aRadY9eJ5mFLGY2GH4JhbE"><b data-page-node-id="3mKGC1yYVyaUrE7irgMOHS">2.7×</b></div>
+    </div>
+    <div class="bar-row" data-page-node-id="EoeZWG4bTD9KyQJlJNOzOb">
+      <div class="bar-lbl" data-page-node-id="WjTdyv7J2y7HSMb92F597Q">mindcanvas</div>
+      <div class="bar-track" data-page-node-id="hhKaQEArMIFyzghdzx1lla"><div class="bar-fill mc" style="width:100%" data-page-node-id="iBAJ2PqKHDmNX8eZynodzM">133（794 条测试）</div></div>
+      <div class="bar-val" data-page-node-id="DsOd2E9Fvb0t9R5uVFcXel">—</div>
+    </div>
+    <div class="legend" data-page-node-id="Hj59Ff80IyRChbLZB62H02">
+      <span data-page-node-id="H52QZJah0aM72AXjC2quCM"><i style="background:linear-gradient(90deg,#6366f1,#818cf8)" data-page-node-id="6R6IBbd91GsfDxYeJF70Xl"></i>Project Graph</span>
+      <span data-page-node-id="K7MfTfEzXcFCmQUfsMPnw0"><i style="background:linear-gradient(90deg,#0d9488,#2dd4bf)" data-page-node-id="n3nD5P3fYfU0E5JU3oIAfX"></i>mindcanvas</span>
+    </div>
+  </div>
+
+  <div class="callout info" data-page-node-id="TZjfJGCwCsc2xkOKdtAl3I">
+    <div class="cl" data-page-node-id="DToqNhkpatbMLc80rq8mHq">关键读数</div>
+    <p class="big" data-page-node-id="El6cQ1ewXjsOIzCQPlTGEU">代码量差 5.6 倍，测试密度差 15 倍——<b data-page-node-id="n85QH4AscXAYLYJmvDfnq6">方向相反</b>。PG 靠人力堆功能覆盖面，mindcanvas 靠测试锁契约正确性。对一个「事实源是纯文本、写错就丢内容」的工具来说，后者才是对的投资。</p>
+  </div>
+</section>
+
+<!-- ============ TAB 2 ============ -->
+<section class="panel" id="t2" data-page-node-id="e9xGzd3FylHc8dqoLFA1p7">
+  <h2 class="sec" data-page-node-id="0TOKc3GeyRLDsh0Z2W8R6h">PG 能力解剖（13 层）</h2>
+  <p class="lead" data-page-node-id="mEQ44bxxQirH3usW6WFIBY">逐层拆开它 115k 行都花在哪。每张卡片都附了源码位置，可回查。</p>
+
+  <table class="tbl" data-page-node-id="66yHfmbv20YAmxM1CycA6u">
+    <thead data-page-node-id="9YgkJ2Lb018aXlbQ54RUXj"><tr data-page-node-id="iXeGiF3gML2pGghTT8k358"><th style="width:4%" data-page-node-id="gtD7qYgqqKCyKEdEyCTwig">#</th><th style="width:14%" data-page-node-id="TxIVO1LyRHHyqPGjDaCgQc">层</th><th data-page-node-id="MfUfhj1IA5s430tWolCR7n">实现要点</th><th style="width:26%" data-page-node-id="4OOnTNPlVgH44eXqtxmeor">证据</th></tr></thead>
+    <tbody data-page-node-id="2IoWBk5AY2SvbNWcWSmSZv">
+      <tr data-page-node-id="7J6NBDv6FR0KiQErfk7sEx"><td data-page-node-id="65Dpeay9bZlkdoKwPLUqhz">1</td><td data-page-node-id="I2s8aElLpAUgu6HcJ428KC">数据模型</td><td data-page-node-id="aEmIM7dzea2n9msd2Eav5M"><code data-page-node-id="6JaM6qwwdgD1Jieu5Vspa4">StageObject</code>→<code data-page-node-id="skGfUJBZZRQpX0dRQHMvP1">Entity</code>→<code data-page-node-id="Fh1kaelDQryCRVhRAadFFs">ConnectableEntity</code>→<code data-page-node-id="y0rkBdF3Iy5otNJEmOcgKc">TextNode</code>/<code data-page-node-id="sz3EZLTCpPdX2FDaOMGcsh">Section</code>；边 <code data-page-node-id="7dBA0T3Q8OS4zhaiSbU7bU">Association</code>→<code data-page-node-id="p7CysLknKqANSvunm8y5je">Edge</code>。<b data-page-node-id="phQ1mZHgwG1IC6uR6WjX8R">既有任意图，又有 Section 树嵌套</b></td><td data-page-node-id="rhvQMVCwoN6a8e5eHyjo8O"><code data-page-node-id="B2Aumg7QRxYtihxM3Hv6uY">StageObject.tsx:18,21</code><br data-page-node-id="No9g4Pax2SWAFvvsDnCDbo"><code data-page-node-id="QMx11wpfWDonAyNFIAK9uo">Section.tsx:70-71</code></td></tr>
+      <tr data-page-node-id="Mok8EVtWkK3vcMQYrCvocV"><td data-page-node-id="vQ3kF7f8itPXOzybS0hUeM">2</td><td data-page-node-id="HdjAVGwVq6bsUSc9vFAazC">持久化</td><td data-page-node-id="46VIDsBzEAgcp5b6Kl8kuH"><code data-page-node-id="KjISN5XGvITWt0aAYIfAaQ">.prg</code> = <b data-page-node-id="Qq7xesDU6nqrtnTVPvfxu4">zip + msgpack</b>。自研 <code data-page-node-id="71ValrTEj1gCMk0euOHtYq">@serializable</code>/<code data-page-node-id="IZCWEr8Y2LaohK0Om4NFBt">@id</code> 装饰器，带引用去重 <code data-page-node-id="X1If0IrXglaiJC7Fdk752G">{$:"路径"}</code></td><td data-page-node-id="YJnuq4yzRx52Ug6YrvCi6x"><code data-page-node-id="9m9W4FAA5awDYccETSAfMh">Project.tsx:382-386</code></td></tr>
+      <tr data-page-node-id="f26fffK7H4r3FX3gNHGv5z"><td data-page-node-id="C8DHBDr4veVKZmGic7Kvuu">3</td><td data-page-node-id="JblYv5CKKWOA92WY8y7JhA">撤销重做</td><td data-page-node-id="gb5LaJxUlUgxlSAPelbINR"><b data-page-node-id="zSTHcPjDGGTczc7WnXHDBp">双实现可切换</b>：快照式（整图 serialize）+ 增量式（jsondiffpatch）。上限条数截断</td><td data-page-node-id="U1E06QBPFjhgix2yT2gVwk"><code data-page-node-id="zpvlr02ZKOCPfBmooWkTkJ">StageHistoryManager.tsx:44-57, 247-255</code></td></tr>
+      <tr data-page-node-id="AnlJTAJAo3FpXgLGmuJDzH"><td data-page-node-id="w46IoJpIaILyNxQhwawPC5">4</td><td data-page-node-id="iEwtzCnwdqQdXsch05QMRf">渲染</td><td data-page-node-id="cFcZkuRKQq7QyZG40nTWvu">纯 <b data-page-node-id="LLdMAMOjm7bFsR9mEB5cjW">Canvas 2D</b>，<b data-page-node-id="8YaVypRovEPZpD8qN0ZvGz">rAF 常驻全量重绘</b>（每帧 clearRect），无脏矩形优化</td><td data-page-node-id="5cQTyU5xngmqqi49DXCEPO"><code data-page-node-id="MxIPHKowisOUmL7AvYDNKi">renderer.tsx:763, 86-95</code></td></tr>
+      <tr data-page-node-id="xDbrQH6smhDQjHnXZVRKVJ"><td data-page-node-id="6DZZRE7sfntTLVSlAKTaVB">5</td><td data-page-node-id="6eyEVWntnMXC19gB5dcOXn">相机</td><td data-page-node-id="CCf3d5uSLSRejlNoWh9F0y"><b data-page-node-id="NRGk9x90rhmnj3ftC6QHhE">物理模型</b>：速度 + 摩擦（<code data-page-node-id="dw1zBaHBMyHpCd4MAed14H">frictionExponent=1.5</code>）+ lerp 缩放</td><td data-page-node-id="T5DDniBgO2GGplWTSjGLxS"><code data-page-node-id="D3bta5KijGsZckcXJp1Ejd">Camera.tsx:28, 299-321</code></td></tr>
+      <tr data-page-node-id="06D8yRXfXo58AZQ8Idbxnz"><td data-page-node-id="hXDJqbNZSyKyo9RFdWCiM9">6</td><td data-page-node-id="dZSX8yOaFu4Y9qSq63GY6Y">视口裁剪</td><td data-page-node-id="yhCdTde7unrXFFOIiBjQAp"><code data-page-node-id="fCob1VrEEqrEY4eFWLypGk">getCoverWorldRectangle()</code> + 逐实体 <code data-page-node-id="h6YxlAB0b8LpsdUCecX4Ay">isOverView()</code> 跳过</td><td data-page-node-id="hpC9dOheAaRm5YFe6obq4R"><code data-page-node-id="B8ByVj9ZtsJlKtFWrpqYQ7">renderer.tsx:937-940</code></td></tr>
+      <tr data-page-node-id="6rQNRwFEcfRQ3EPq2yMFQg"><td data-page-node-id="8jxP5mbRswV1nbF3ZG0NeD">7</td><td data-page-node-id="eFWGHZeJJE6WCjlYpMdiCI">LOD</td><td data-page-node-id="SMAyFv5Yek5fgmjOT5KYMy"><b data-page-node-id="sjX84E7zQNnQ069UnM1AdX">仅按缩放</b>：文字 &lt;5px 不画、Section 大标题 scale&gt;0.45 跳过。<b data-page-node-id="5GiYLrEykGi75ChqVe8d0W">无节点数维度</b></td><td data-page-node-id="o423XVvMOHZ3o1Tn5aadc5"><code data-page-node-id="lETP4nEz6Ob75jnaoMF7sq">TextNodeRenderer.tsx:88</code></td></tr>
+      <tr data-page-node-id="twewlxqmNNSdDnBG0O1SYg"><td data-page-node-id="lOZCOqKiiT9hwxcUdtZSWo">8</td><td data-page-node-id="gmN4BT0ZAUs8g9B7JaM0aS">交互</td><td data-page-node-id="0do6mAazeTtWg2G4EfVRVk">19 个控制器插件，统一绑定 pointer/key/wheel，<code data-page-node-id="Og38A7OD4w3GBLIHwaHnQw">toViewEvent</code> Proxy 转世界坐标</td><td data-page-node-id="ttOzhxKpsDnN5sRJ1wYNYh"><code data-page-node-id="cz264Pv0FfAQ0Dszqz13jJ">Controller.tsx:124-132</code></td></tr>
+      <tr data-page-node-id="QjIQvLhGYWn0AoCsuRHsY2"><td data-page-node-id="isGq2Gvlg3kaxo8eqQaADf">9</td><td data-page-node-id="QuC1bvq7GbzIKw4G983NNg">快捷键</td><td data-page-node-id="XS51n1tBgccqkawTwrvdoH">单一数组 <code data-page-node-id="pMoAppQlEMPSBexSxbyggN">allKeyBinds</code>，<b data-page-node-id="5AtHaHUhw7er1GJIEmfmIC">347 条</b>，靠 <code data-page-node-id="7sbXs4BUKHHN7LkdVIqfmr">when</code> 谓词做上下文门控</td><td data-page-node-id="8mrN8yNZQvDbdT1bTxrpYl"><code data-page-node-id="C3KVR6TMafOLOo4QRfsfrQ">shortcutKeysRegister.tsx:277-290</code></td></tr>
+      <tr data-page-node-id="gHLwgDJ5EL9ic50iyBLIlF"><td data-page-node-id="EzQOoeoImHu4h9IXM7ikDk">10</td><td data-page-node-id="3BwKp6jzvD7YATrPsHiBub">右键菜单</td><td data-page-node-id="0CcftzhUVvWDPHF6Ny1BHK"><b data-page-node-id="fEo0WJVLP0xROFGAefo6QW">配置驱动</b>，直接复用快捷键的 <code data-page-node-id="mhlCbIEnqG8uiEIFrvwRkf">onPress</code>/<code data-page-node-id="LXFK7dtUVzISxP0MpdJEQI">icon</code>/<code data-page-node-id="RSqPUpI9nnMtVnv1gpw5uK">when</code>——一处定义三处消费</td><td data-page-node-id="fzFMOz7tcJs6xiooHJcl1Y"><code data-page-node-id="JqfYFbDAzLWjOtgPHVEC5K">context-menu-content.tsx:113-147</code></td></tr>
+      <tr data-page-node-id="c23AwjHv36n35Iw13yFiMx"><td data-page-node-id="39EYuV6jvnmun9SBT5MzTR">11</td><td data-page-node-id="sxyDn7NG1zHjmDqIuUJ2SA">算法</td><td data-page-node-id="A8G9bGG8c5G1NvtwSG5p5t">DAG 分层（Kahn 拓扑排序）+ 快速树布局（子树外接矩形）+ 凸包 + 对齐吸附。<b data-page-node-id="Y4W8nz2Ctzhzr9x2QvXQfm">无连线避障</b></td><td data-page-node-id="g8Zilpe9nN7pGcHkr02gKC"><code data-page-node-id="mgs0lG6cafIDp3W2feGXFP">mainTick.tsx:165-240</code></td></tr>
+      <tr data-page-node-id="RTBI9JWVyD0BTglB4ahxBF"><td data-page-node-id="ekbsml45EPE7QjFra1aoIC">12</td><td data-page-node-id="KrPsqQHwBFvqH6t86f9dMZ">扩展</td><td data-page-node-id="QXWSUGtFWn5d9at8eZFwIP"><code data-page-node-id="nbZZoixDCoFPFH4jn0TDLC">extprg</code> = Worker + Comlink，可 <code data-page-node-id="KdfRJaQlvVXePshxg4uSGe">shell_execute</code>、自定义实体与渲染。<b data-page-node-id="RiMGi093QvqkxhB8WoaskM">非安全沙箱</b></td><td data-page-node-id="RHArVB9Fhm0hqtQJWfd3kx"><code data-page-node-id="aTEJ6KHKWpWGDUD44RsimN">ExtensionRuntime.tsx:10-33</code></td></tr>
+      <tr data-page-node-id="oHPkGBBRGo5rjzmWjpNAAB"><td data-page-node-id="gIBmv0AgD6sk93sUedulJ3">13</td><td data-page-node-id="AW2NT5ZAzJz3c3W8RpLw3Y">AI / CLI</td><td data-page-node-id="YGUH3SwXyh6OoYAGa2yze9">Vercel AI SDK，约 30 个 function calling 工具；CLI 暴露 <code data-page-node-id="yqJKKbhEN4eAqhLBjNcjRT">tool list/describe/invoke</code> 给 Agent</td><td data-page-node-id="eFemywGPFeXgHWCuo46YAF"><code data-page-node-id="vAYM8eGnXym1Heze0yBp3N">BuiltInToolExecutors.tsx:113-809</code></td></tr>
+    </tbody>
+  </table>
+
+  <h3 data-page-node-id="lXfdDmrSfzGAx7UqXmzqfZ">它对纯文本的态度（关键判断）</h3>
+  <div class="vs" data-page-node-id="HWC2dsLY0H9BNmsPCAqqNi">
+    <div class="l" data-page-node-id="ihOFlZl1EaZhDH27GnOuqB">
+      <h5 data-page-node-id="h5ilFb7e7zxBefmAzc0lm6">做到了</h5>
+      <ul data-page-node-id="j1fQC4ShA2tuxkjd5nnJMG">
+        <li data-page-node-id="GG5mtYOMYVnm8WV4avkpHP">Markdown / Mermaid / 纯文本 / SVG / PNG <b data-page-node-id="5DeM40ft3CMNGRk7Qdnx8p">双向</b>导入导出，是真能用</li>
+        <li data-page-node-id="cJhO4KUu3X4qlzxXLftd2R">粘贴纯文本<b data-page-node-id="0ipQCG6eh9xfLt8jcxGPMY">自动建节点</b>并智能识别：SVG 串 / URL / <code data-page-node-id="pVxNhfETh84CXgCBHJUGqs">[text](url)</code> / 绝对路径 / 超 3000 字→details</li>
+        <li data-page-node-id="55VzPZe4E8UQIYD7IwjhlT">全文搜索覆盖 <code data-page-node-id="C0TSQUMBFiST5MFNccIFpC">text + details + section + url + edge.text</code></li>
+        <li data-page-node-id="erfvckODXTzm80d2mPvx6F">keyboardOnly 完整纯键盘流（对标 Xmind）</li>
+      </ul>
+    </div>
+    <div class="r" data-page-node-id="w8cwOCIN2PuDKo2JwS2ry0">
+      <h5 data-page-node-id="lovyzflxpLteYOw8tEi7OK">没做到</h5>
+      <ul data-page-node-id="vVwWkqrwgFIow3miPHKCKE">
+        <li data-page-node-id="im9OJ3dnfdWTzNIjcQ4FU7">节点标题在画布上是纯文本，<b data-page-node-id="n4hUzHP21QPjSHtJ2gLOYR">不解析 Markdown</b></li>
+        <li data-page-node-id="0RdVfD6upSzyuBEFQ8bbaa"><code data-page-node-id="1Re64iA4INJIMUQ1Vze3ZX">details</code> 是 PlateJS 富文本，但画布上只当多行纯文本画——<b data-page-node-id="qQNszlvHN7hLQZEljJdKQs">格式在画布丢失</b></li>
+        <li data-page-node-id="rCVSC0GsaRQXXESFd5u0J9"><b data-page-node-id="5qIvu0zJXovTFOzaJSEmyz">没有人类可读的事实源</b>：存储是二进制 <code data-page-node-id="oTBNfHEMTA84RDWnxdEyDW">.prg</code>，无法 git diff、无法外部编辑器打开</li>
+        <li data-page-node-id="a6TxHOlpN7py1mJi3TZYz5"><code data-page-node-id="u30RhnYsdJfGZO6JynoN0Z">vditor-panel.tsx</code> 全仓库零引用（死代码残留）</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout" data-page-node-id="gB3mD4Z4rKHBRmtIZzkHJ9">
+    <div class="cl" data-page-node-id="WfDpMiEYGXgXvwZrgFNwwA">判断</div>
+    <p data-page-node-id="qqTImttZiDBsbgEqyDSXbL">文本是它「输入 / 输出 / AI / 剪贴板」的<b data-page-node-id="s2SoBAoIaH6AAYujCZpuAz">一等公民</b>，但不是「人类可编辑的事实源」。这正是 mindcanvas 与它最根本的分野——也是 mindcanvas 最难被抄走的部分。</p>
+  </div>
+</section>
+
+<!-- ============ TAB 3 ============ -->
+<section class="panel" id="t3" data-page-node-id="4MCS9cVIgv7w7gqCvDFn90">
+  <h2 class="sec" data-page-node-id="b1kDiqdUswxC7ZdOFHUywl">减法决策矩阵</h2>
+  <p class="lead" data-page-node-id="zK3NZ46mEPOywYbLrGRyG1">三分类：<b style="color:var(--green)" data-page-node-id="gp0d8oFeLElwna6jqkUYkw">学</b>（抄设计不抄代码）/ <b style="color:var(--blue)" data-page-node-id="RwyLRFTpur9maxjvoH7g1l">守</b>（已领先，别自贬）/ <b style="color:var(--red)" data-page-node-id="yiKzL8LY91hrXMJpvllQkE">拒</b>（问题域不同或是赘肉）。<b data-page-node-id="R5Q2sH8iuqYb8k6mzEiEoF">点击卡片翻面看依据。</b></p>
+
+  <div class="cols3" data-page-node-id="U4TmYMusI1mG1oV2HAYAxc">
+    <!-- 学 -->
+    <div class="col g" data-page-node-id="CV1YMaPhas0nuyM77o8c93">
+      <h4 data-page-node-id="OuSKlqAW9cTyXhoPRH6i33">🟢 学 · 4 件</h4>
+      <div class="cnt" data-page-node-id="dal6lHc6rsE6FVY86vPuV0">抄设计决策，不抄代码</div>
+
+      <div class="flip" data-page-node-id="fxvLHrcu7K5AL9fmaodvy8"><div class="inner" data-page-node-id="cRlGeNAJsQzxaCimvDzTVS">
+        <div class="face" data-page-node-id="jGyuHDejsAqkajD5iQdJ0G"><div class="tag" data-page-node-id="eBPNpx5FajxMU4DYxuCImN">L1 · 代价低</div><div class="ttl" data-page-node-id="7RRz6nrna0u8fYTSGdAcjJ">视口裁剪</div>
+          <div class="dsc" data-page-node-id="JYWxmE82b6DymLHVPmdj1R">只渲染可见区域，大图性能的关键</div></div>
+        <div class="face back" data-page-node-id="P9X6uKpUijmpg2OPJzIhzv"><div class="tag" data-page-node-id="4hMp80TMZFgTWgC2fyEgAC">依据</div>
+          <div class="dsc" data-page-node-id="UyUesJvn26oqO7oJgBj4Rj">PG <code data-page-node-id="bJ0d1Zkl4Hf74a5HP7uobG">renderer.tsx:937-940</code> 的 <code data-page-node-id="9PWDDlAhv0VYSWo6qMv9M2">getCoverWorldRectangle</code> + 逐实体 <code data-page-node-id="HIskIgdNcPkgjFsBUMkvUy">isOverView</code>。mindcanvas <b data-page-node-id="umoi96Ls1soESmyIL5G0EG">grep 全仓无裁剪</b>，SVG 渲染全部节点——这是真缺口。</div>
+          <div class="ev" data-page-node-id="6lcUnOgJPwLFjnDMGC6SId">MapView.tsx 渲染循环</div></div>
+      </div></div>
+
+      <div class="flip" data-page-node-id="9O0gK1sg7GWafx0PPmycA8"><div class="inner" data-page-node-id="nWxlTDfVk83DGt7UmFvZPy">
+        <div class="face" data-page-node-id="xlEpHyUzWt2qABXUgDVRNZ"><div class="tag" data-page-node-id="j2mBZNHeQJqmHJhfBe7sIg">L2 · 代价低</div><div class="ttl" data-page-node-id="f0h90Ts2GHhPl8QfMUY8Qe">粘贴即建节点</div>
+          <div class="dsc" data-page-node-id="bNNhOs5G7VcZP37BlgvWrx">文本优先工具的标志性能力</div></div>
+        <div class="face back" data-page-node-id="Q79FHbSw1tjCEXSXQBvqgA"><div class="tag" data-page-node-id="jdSx2jMCTEsDgM6J2Istzo">依据</div>
+          <div class="dsc" data-page-node-id="cbPyChkL5X0JUAqxHaCA6W">PG <code data-page-node-id="6bb6JvxMNBSbIHjrbHEDcK">copyEngineText.tsx:23-179</code> 智能识别内容类型建节点。mindcanvas <code data-page-node-id="Kw4qcn5eorzEfNEZ1QtERP">MapView.tsx:780</code> 的 <code data-page-node-id="TP9K3XeoIkqcBIBRlXmatq">onPaste</code> <b data-page-node-id="xQPmCMvXe1tq7giD685l8Z">只处理 files（图片），文本分支缺失</b>。且这条正中纯文本哲学。</div>
+          <div class="ev" data-page-node-id="shud7bkM3hQNlXE3sffTF4">MapView.tsx:780</div></div>
+      </div></div>
+
+      <div class="flip" data-page-node-id="6l3UsgOB9CCqyWbylgqf63"><div class="inner" data-page-node-id="kVYbHyK20DyTfWyu3SAywd">
+        <div class="face" data-page-node-id="5BWjvmo7RH6beTNNztKX4z"><div class="tag" data-page-node-id="YXbQ5WP2P3bARa6KpcCg37">L3 · 代价中</div><div class="ttl" data-page-node-id="PwcojTIkg1fE8HdrnKFkWK">快捷键单一数据源</div>
+          <div class="dsc" data-page-node-id="Doq8j2dG4LpuXP8R4oMyZc">数据 + when 谓词 → 三处消费</div></div>
+        <div class="face back" data-page-node-id="lzVEHevMtHhbj14K5AgbSa"><div class="tag" data-page-node-id="t54Vpyi357pgmBgEV4xD3I">依据</div>
+          <div class="dsc" data-page-node-id="Y4kpW8xs4CGYaDNUgKLM5G">PG 最漂亮的架构决策：菜单 / 设置 / 提示共用同一份 <code data-page-node-id="ecskGdEFWhPlpWN75F0IQ1">allKeyBinds</code>。mindcanvas 现 <code data-page-node-id="bRSO7RHj5wuxdhTTi4eJnJ">keys.ts</code>(100 行) 与 <code data-page-node-id="C5vTZrMotIaDDpyFNDqHnd">ContextMenu</code> 分离，改一处要动两边。</div>
+          <div class="ev" data-page-node-id="f9yLJORyy8lqsUOYjxfE0z">context-menu-content.tsx:113-147</div></div>
+      </div></div>
+
+      <div class="flip" data-page-node-id="8M6qLFBO0iRBLl5r9M8r0Y"><div class="inner" data-page-node-id="2hbWpN3DzzotWV1avqa9WU">
+        <div class="face" data-page-node-id="Bfp8C5WxvYbZfyTzJSb8Me"><div class="tag" data-page-node-id="4xRDkdlKSDprRNMISyLeb0">L4 · 优先级最低</div><div class="ttl" data-page-node-id="2M0LMEVLw8G67RfPhBbLBV">文字测量双层 LRU</div>
+          <div class="dsc" data-page-node-id="xBxgLGnuo3dCfCTkh19YSj">宽度缓存 + 换行缓存</div></div>
+        <div class="face back" data-page-node-id="CvPBSXBYBa3E5fqbbBlVtC"><div class="tag" data-page-node-id="iLbGgO0CfQ4KWdho0VuKqX">依据</div>
+          <div class="dsc" data-page-node-id="gxC4aMuOtaUYVjdJDP8G5M">PG <code data-page-node-id="Z8J1Dsbd6kPymBp9ZKkwDb">MaxSizeCache(10000)</code> 测宽 + <code data-page-node-id="DZDOC8Ab5fMQigVimcRerg">LruCache(1000)</code> 换行。mindcanvas 已有 <code data-page-node-id="dva46PHzpGux2oEVEW5T9D">LayoutCache</code> 与 <code data-page-node-id="dTg50eQuAxMPDN0AdDJsLo">__subtreeHeightCache</code> 兜底，<b data-page-node-id="j2U0ssVHaxJUK4SFNADQd8">不是真缺口</b>，排最后。</div>
+          <div class="ev" data-page-node-id="JdKrHgEHzQWfpUqB819ByQ">font.tsx:7 / textRenderer.tsx:441</div></div>
+      </div></div>
+    </div>
+
+    <!-- 守 -->
+    <div class="col b" data-page-node-id="IVVTPGf5QKnKcrgBTGNU1R">
+      <h4 data-page-node-id="EIkyEkU7lejkFATyrmaONa">🔵 守 · 5 件</h4>
+      <div class="cnt" data-page-node-id="xcPU1qIcz1MIOxF5Odhr95">已是护城河，不要自贬</div>
+
+      <div class="flip" data-page-node-id="Yu7s3ELpRf0OutNeL5PO2g"><div class="inner" data-page-node-id="s5zXIEwoxM04tPl4O6us4m">
+        <div class="face" data-page-node-id="z2vPPZF6J7QMTby1L8hKAH"><div class="tag" data-page-node-id="PAHpDEuhNubhTbrLzrBWzl">K1 · 独家技术</div><div class="ttl" data-page-node-id="EsR5nBNC0keBTn7FbDeaWi">避障边路由</div>
+          <div class="dsc" data-page-node-id="bETqhBOKuAYI48A0sVNf4a">PG 完全没有，唯一反向领先项</div></div>
+        <div class="face back" data-page-node-id="0TCOMy793uNIGJJhOP6Ofg"><div class="tag" data-page-node-id="MBb9EOmPSrqh5DMRVud5u1">依据</div>
+          <div class="dsc" data-page-node-id="f4EqYdAFyAZuAiwWAJhpXr">PG 边端点只取 <code data-page-node-id="Gl5YwskAGvCMXfDIYEg31n">collisionBox</code> 几何交点，<b data-page-node-id="JDBKRlObOajCKvM2Gz9RZC">无任何 obstacle 查询或寻路</b>。mindcanvas 的 <code data-page-node-id="TBkO8amzxBwcaMFY1eLIbu">edgeRouting.ts</code>（1,151 行）带 crossings/inward/tightRatio 评分、三层障碍集。<b data-page-node-id="657azrodmynnvb9CIXdxmM">绝对不能为了对齐 PG 而简化它。</b></div>
+          <div class="ev" data-page-node-id="GBzb8bYDG8W1z2Kuz7dgtC">StraightEdgeRenderer.tsx:60</div></div>
+      </div></div>
+
+      <div class="flip" data-page-node-id="QSnRNYjLJDplA72x2LtkMe"><div class="inner" data-page-node-id="x22gk8CJkt4XAdGHOoZhwC">
+        <div class="face" data-page-node-id="VnpBmdG4vYnm3juEyOZKHj"><div class="tag" data-page-node-id="WlpYRovMnePGD8Z78miSSD">K2 · 根本分野</div><div class="ttl" data-page-node-id="ZVvh2Cg4GvtnAANUHR1hjM">纯文本 .mm.md</div>
+          <div class="dsc" data-page-node-id="UhT325yE8OLbN1AmxKBXP4">PG 是二进制 .prg（zip+msgpack）</div></div>
+        <div class="face back" data-page-node-id="8KHqzMYFJEZa4sAJB5kRno"><div class="tag" data-page-node-id="zYvi3LUjxWWieI7ydCNTUp">依据</div>
+          <div class="dsc" data-page-node-id="SLKfAkkpSLCelNGMSHHzkf"><b data-page-node-id="Lup5yx2e4fXjJLFfBkaOnK">正因 PG 是二进制，它才要造 CLI + 30 个 AI 工具来"曲线救国"。</b>mindcanvas 的 .mm.md 本身就是 Agent 接口——这个能力是免费的。详见「三个真缺口」页。</div>
+          <div class="ev" data-page-node-id="zZ0BlDv4n2pGCAJ46ZLL8M">Project.tsx:382-386</div></div>
+      </div></div>
+
+      <div class="flip" data-page-node-id="sIjbDOeTjOsuDF4pf5C4p4"><div class="inner" data-page-node-id="jKd8LqEj1q5VukGoAEn6kb">
+        <div class="face" data-page-node-id="WZamz7jA3TRI5BhguQ3pTe"><div class="tag" data-page-node-id="CucbKRAxJegDczOxzymlHQ">K3 · 细节领先</div><div class="ttl" data-page-node-id="ExuqOShVmJ7XTBFcvutaXC">LOD 双因子</div>
+          <div class="dsc" data-page-node-id="sG28jPVtqjMYK6WcVzn2Ww">缩放 + 节点数，PG 只有缩放</div></div>
+        <div class="face back" data-page-node-id="5k0covS32wi1dMBBlAl5XX"><div class="tag" data-page-node-id="mUW94sNBopDQRY54UurFOV">依据</div>
+          <div class="dsc" data-page-node-id="54bIl6DXD4TtfJJyC2nkzY"><code data-page-node-id="VL07L7J6rAoeCfxbXaHAez">MapView.tsx:454</code> 的 <code data-page-node-id="V0mr86OwchaQ57lr6HJoRH">lodFor(viewport.transform.k, layout.nodes.length)</code> 同时考虑两个维度。PG 的降级完全由 <code data-page-node-id="9BvfzwKJJwffcQ65Bjzr4l">currentScale</code> 驱动，<b data-page-node-id="qClMdcGRf7UxAzs5MwTIUY">无节点数维度</b>。</div>
+          <div class="ev" data-page-node-id="aWM5EJIZh7akaUUa4F9tEF">MapView.tsx:454</div></div>
+      </div></div>
+
+      <div class="flip" data-page-node-id="UGlxNGxzS9rA4JxnqbWlYI"><div class="inner" data-page-node-id="kCEtUg5WPZDwVI3CRsbP7L">
+        <div class="face" data-page-node-id="W34nwmYi1QJ2ntJsaYiK0w"><div class="tag" data-page-node-id="ueLAAnv7fu4KhLLw6hjv20">K4 · 15 倍</div><div class="ttl" data-page-node-id="VCbeW7KpLOi6q6XwbPQ5Zy">测试密度</div>
+          <div class="dsc" data-page-node-id="fR4j2TKLA5Da0ZW50apr1Y">794 测试 / 20k 行</div></div>
+        <div class="face back" data-page-node-id="6wLCLRYYaJxldgO9URftiC"><div class="tag" data-page-node-id="Ty0pzZOB8s3BpIy5iUW8k4">依据</div>
+          <div class="dsc" data-page-node-id="AGOmO7k92EEvCqLCoP1ANF">PG 仅 50 个测试文件覆盖 115k 行，且无 e2e、无依赖约束工具。mindcanvas 有 gate（typecheck + test + depcruise + lint + budget）五道门禁。<b data-page-node-id="jD1RmPB3HEAq0Tw3tnN4mL">这是"纯文本事实源"必须付的保险费。</b></div>
+          <div class="ev" data-page-node-id="1iBPcCzFQtN9x8E4Ppysk2">vitest.config.ts:23-26</div></div>
+      </div></div>
+
+      <div class="flip" data-page-node-id="GB4HPhabOvU58lVCc4yKeY"><div class="inner" data-page-node-id="jrbNCOxJZXBdibL4I0WQ7N">
+        <div class="face" data-page-node-id="A2qOSAik7ivXBiUhjICTdH"><div class="tag" data-page-node-id="dHsMSamoiAXWoR46h1L5Te">K5 · PG 无等价物</div><div class="ttl" data-page-node-id="tGM3WoaAcyrnKd2A5GqDhX">往返无损契约</div>
+          <div class="dsc" data-page-node-id="PXigM8e7eZVBdEIJtfekrp">parse → serialize → parse 无损</div></div>
+        <div class="face back" data-page-node-id="oVYvobXGZRlxg2MaPKuvl5"><div class="tag" data-page-node-id="ZwTGCPbG8dqQNqFhekA3zw">依据</div>
+          <div class="dsc" data-page-node-id="wAhojc4du7gUUVaSRUHH9G"><code data-page-node-id="jAeaY1k110qjdzHd35x7Ju">verifyRoundTrip</code> + <code data-page-node-id="YOIIs5T6J1FzYSFALYhJtB">stableStringify</code> + 真实内容诊断脚本。PG 没有这套契约保障。<b data-page-node-id="fprc9XXq1JSRsL3hz7DIGV">记住：往返无损 ≠ 内容不丢</b>——测"手写内容会不会丢"必须拿原始文本比。</div>
+          <div class="ev" data-page-node-id="9kKeSF7dcEJqVzSAFTZybw">diag-real-content.mts</div></div>
+      </div></div>
+    </div>
+
+    <!-- 拒 -->
+    <div class="col r" data-page-node-id="UIiILZg270ma5Cjd2qBkiV">
+      <h4 data-page-node-id="FQPpPRofhTMJBzNe9OaIqG">🔴 拒 · 8 件</h4>
+      <div class="cnt" data-page-node-id="0svnpLXtuCg4urCoSdtGmm">A = 问题域强加 · B = 自长赘肉</div>
+
+      <div class="flip" data-page-node-id="GMO0YNgvANWFi5DIl0rTHz"><div class="inner" data-page-node-id="krppfgXMA2o4jJYCXotVln">
+        <div class="face" data-page-node-id="oYKWdWj9RONmioLvP9uZaY"><div class="tag" data-page-node-id="DUREcCohHYwqvevzpYGV3c">A1</div><div class="ttl" data-page-node-id="b5JZeU76GE9CGlwrQiQIAw">Canvas 2D + rAF 常驻重绘</div>
+          <div class="dsc" data-page-node-id="jvzgkDfq8DaThSMUEgkHNV">每帧全量 clearRect 重画</div></div>
+        <div class="face back" data-page-node-id="XYXtDZK3LC3QnmDlHAFKDm"><div class="tag" data-page-node-id="ZmZcGbSSypbx4mh0LIy9wh">为什么拒</div>
+          <div class="dsc" data-page-node-id="tJByLSLCBO1Vh67a9HoQYa">SVG 声明式渲染<b data-page-node-id="O5wr4OjNBn66JENIMN99wC">天然增量</b>，无需主循环、无需脏矩形。PG 每帧全量重绘是 Canvas 的代价，不是优点。</div></div>
+      </div></div>
+
+      <div class="flip" data-page-node-id="nJim3pxdFM5dxowU4vcwI1"><div class="inner" data-page-node-id="8wgb09bDPSNm2LLaGT9tHa">
+        <div class="face" data-page-node-id="MKEJXsBiDBaWRXRZL0BxFe"><div class="tag" data-page-node-id="gKUtlaYtWJqyrGnAJ6AETF">A2</div><div class="ttl" data-page-node-id="m1tlEmQArsmzLB1eKqNKAG">相机物理模型</div>
+          <div class="dsc" data-page-node-id="ANmOoPlcRhSot0iN3wbKnB">速度 + 摩擦 + lerp 缩放</div></div>
+        <div class="face back" data-page-node-id="ibOfESFdjZ5MZRzJAoL7t0"><div class="tag" data-page-node-id="XqbPrLbshEwMATLSlTZd9g">为什么拒</div>
+          <div class="dsc" data-page-node-id="JKROoUpcX2g3lXQYsRFeYX"><code data-page-node-id="jEroSunRKa5pgPlcHcD52h">frictionExponent=1.5</code> / <code data-page-node-id="NeQQa6BNuaJtPFpQ9rfHox">scaleExponent=0.11</code> 这类参数是自由画布的手感调优，<b data-page-node-id="vorGqYlYvk2lUnDJ5ZeQ7A">树布局用不上</b>。过度设计。</div></div>
+      </div></div>
+
+      <div class="flip" data-page-node-id="X38QYXhcraVCMrzNbZVHxR"><div class="inner" data-page-node-id="OqKQs8uUIPxA0HrkbBHVcz">
+        <div class="face" data-page-node-id="9QtdDrQgjw9zwheGDyFWBA"><div class="tag" data-page-node-id="qcaHB7IGqe17S326h7WHGS">A3</div><div class="ttl" data-page-node-id="ztykJoKiAUVZagrVLLiPQW">几何进持久化</div>
+          <div class="dsc" data-page-node-id="GAeP8uVspYgk1yfsuqjTqX">CollisionBox / Vector / Section</div></div>
+        <div class="face back" data-page-node-id="HLt0ZO6E8ezMO8GiTsx0oZ"><div class="tag" data-page-node-id="u9AdBKebW9PfPSGVOHsV6g">为什么拒</div>
+          <div class="dsc" data-page-node-id="3Vphsm7fdLtbZ9F9rdfjjk">自由画布必须存坐标（用户摆哪就是哪）。<b data-page-node-id="oObaAKqOLcyxOsKD48Xfqh">.mm.md 的树结构即布局</b>，几何是渲染时算出来的，不该进事实源。</div></div>
+      </div></div>
+
+      <div class="flip" data-page-node-id="rEfTDEGTPLS9wZyxIBHvXA"><div class="inner" data-page-node-id="CykFjWQ2xgL8uhkyASq92s">
+        <div class="face" data-page-node-id="c7wL4d4MNktl8vDFWwt18a"><div class="tag" data-page-node-id="SADPc6RApUgtoJkfmO4nrL">A4</div><div class="ttl" data-page-node-id="l17FIElsQXtbIwJhCGZDGV">5 种边型 + 5 种箭头</div>
+          <div class="dsc" data-page-node-id="cVFD7Odcl56LWU0cWdyEkz">直线/贝塞尔/折线/弧/CR 样条</div></div>
+        <div class="face back" data-page-node-id="RT8dh90ovcJkYcchciG2zQ"><div class="tag" data-page-node-id="xNjB3kYmOv6C2eBdl1g1kh">为什么拒</div>
+          <div class="dsc" data-page-node-id="yPjKIbCbCc5TlFCmOzWEbv">自由图才需要线型样式表来表达不同关系。<b data-page-node-id="9KEA3paVaZJI2TI46nREax">树只要一种</b>，把预算花在避障路由上更值。</div></div>
+      </div></div>
+
+      <div class="flip" data-page-node-id="iNUzNNb9aFROYzkidlcXzC"><div class="inner" data-page-node-id="bW26jBdRK3Ni8j9SYwmZf5">
+        <div class="face" data-page-node-id="05oCERIB3zYN7rvpkW6fa1"><div class="tag" data-page-node-id="HXsUAi0ISLawCDAWBFyGpn">A5</div><div class="ttl" data-page-node-id="FvXlSFCE8TUIKVgihndOH7">自研序列化装饰器</div>
+          <div class="dsc" data-page-node-id="APyGPpsj1T2Tht35yweWDW">@serializable + 引用去重</div></div>
+        <div class="face back" data-page-node-id="vy7ly1c9yprLUZShnHwEoY"><div class="tag" data-page-node-id="DCpXrDbTuYWlx8ORQudyx6">为什么拒</div>
+          <div class="dsc" data-page-node-id="7G3jLRZzWyOUt7BMAG2Hkd">纯文本不需要对象图序列化与引用去重（<code data-page-node-id="q7U3krrHX5oYWu7EP59sGc">{$:"路径"}</code>）。这套复杂度是<b data-page-node-id="8yCFDziXyymP9IQVn766C5">二进制存储强加的</b>。</div></div>
+      </div></div>
+
+      <div class="flip" data-page-node-id="3Y4xtqys14RymNkmkajEM6"><div class="inner" data-page-node-id="2kz56c3tJTmbIgqilI3wN8">
+        <div class="face" data-page-node-id="VKwL2WzGTIAkRVFBVs4TF6"><div class="tag" data-page-node-id="wbcXIFyyZj8tr5okLkkI16">B1 · 警惕</div><div class="ttl" data-page-node-id="P7OqwFZ98MGf3IqL06uFdT">90 个服务 + 手写 DI</div>
+          <div class="dsc" data-page-node-id="ZzJvbLHa8sjGDhdL3Uzkpz">分两批初始化管理依赖顺序</div></div>
+        <div class="face back" data-page-node-id="quBEfDkqltMVVSm3HQYDSB"><div class="tag" data-page-node-id="HXamQl5a6wp583zrmHBzqU">为什么拒</div>
+          <div class="dsc" data-page-node-id="2uUBVnWlf14kEjzUafG9CT">20k 行项目用不上。更关键：<code data-page-node-id="BpkCc9LFTRR9DicPg8H4iH">loadAllServicesBeforeInit</code>/<code data-page-node-id="80PGoKTuHVpLe257v8OrBs">AfterInit</code> 的存在说明<b data-page-node-id="tmbXWWPEgu66ev31RoTZKL">依赖已复杂到需要人工排序</b>——这是脆弱信号，不是成熟标志。</div></div>
+      </div></div>
+
+      <div class="flip" data-page-node-id="KQHGhYs4LMhargm9acCosi"><div class="inner" data-page-node-id="3VtjxxfoxZ1GLxZFfGaDAd">
+        <div class="face" data-page-node-id="yFM5GfrFAIZbtxq5tjBfuO"><div class="tag" data-page-node-id="dNb0OFPAdW2f5nrqsGXPF7">B2 · 警惕</div><div class="ttl" data-page-node-id="CLqfLGQyp5MeaQzPgoLD6j">347 条快捷键</div>
+          <div class="dsc" data-page-node-id="6KVjPguV2fKJOPIPecABX5">单个注册文件 4,538 行</div></div>
+        <div class="face back" data-page-node-id="Lt5QDqWL6Zc1Ki0FE5SqK1"><div class="tag" data-page-node-id="wXlnJopnS4AGFWQBjsASQi">为什么拒</div>
+          <div class="dsc" data-page-node-id="Wji5MvnnXdgru1ARLJp6bg">心智负担。而且<b data-page-node-id="uKqcXqyiYfjK3NoGR1DBON">单文件 4.5k 行本身就是坏味道</b>——这面镜子照的是 mindcanvas 的 <code data-page-node-id="J69BosEPtt2OzQk8D3WGMj">MindmapStage.tsx</code>（1,573 行），拆分已有进展，别停。</div></div>
+      </div></div>
+
+      <div class="flip" data-page-node-id="OAEQ4KxHxKsuMH8gOwV3MB"><div class="inner" data-page-node-id="pekvcQEiMcy1z7hww8Fvf1">
+        <div class="face" data-page-node-id="g7T1nE0e14Mukwsh2NwVO6"><div class="tag" data-page-node-id="XlxyWMQxDHNaEDnpXL8a98">B3</div><div class="ttl" data-page-node-id="ACBxge2Jv9Ted5ExFmEoaS">扩展插件系统</div>
+          <div class="dsc" data-page-node-id="tqM3hxtLaVKtd3sPbsfFwB">Worker + Comlink + shell_execute</div></div>
+        <div class="face back" data-page-node-id="NFVlxDuWRcqSmKiwvnxgf7"><div class="tag" data-page-node-id="eUKFG5qWggPR6paxSLu6vR">为什么拒</div>
+          <div class="dsc" data-page-node-id="m6RrECPNO3NeEUxOF05MNV">扩展能 <code data-page-node-id="o5NMcJL0MVMtWNHG7gcekN">shell_execute</code> 执行系统命令、读写大部分设置，<b data-page-node-id="7nFTNqF9fZAuSkMSMHRpZR">仅拦截 2 个 key</b>（aiApiKey/aiApiBaseUrl）。安全面巨大，收益未验证。</div></div>
+      </div></div>
+
+      <div class="flip" data-page-node-id="J1uNftvjE3IlW1YLhuYCXO"><div class="inner" data-page-node-id="sDthFGsmHExE7z0ViYpLi6">
+        <div class="face" data-page-node-id="JKuHY2CP17UVP8OAhzE7ZI"><div class="tag" data-page-node-id="ZvxUlUgXTJJRHwnQWsyD0A">B4</div><div class="ttl" data-page-node-id="bo62qhEkN2OaqiIBlaUVCG">30 个 AI function calling 工具</div>
+          <div class="dsc" data-page-node-id="8pnAZSWsl0vT9RHGnqQCjW">create_node / delete_node / …</div></div>
+        <div class="face back" data-page-node-id="cPVJNd2FE2hqiGbHce1AMZ"><div class="tag" data-page-node-id="PjrDGn1guY1RPzsywkD7xH">为什么拒</div>
+          <div class="dsc" data-page-node-id="3EWblnNVqAggL82BGaACde">这些工具的存在是为了绕开二进制 .prg。<b data-page-node-id="NZq7v5VlxBGCqnBDJFP5Ws">mindcanvas 不需要</b>——Agent 直接读写 .mm.md 文本即可，0 行代码。</div></div>
+      </div></div>
+    </div>
+  </div>
+  <p class="hint" data-page-node-id="LUE7FLMhtHppWYY2fUjABs">↑ 点击任意卡片翻面查看源码依据</p>
+</section>
+
+<!-- ============ TAB 4 ============ -->
+<section class="panel" id="t4" data-page-node-id="oRemE9YFrRpQDD1EAE80GE">
+  <h2 class="sec" data-page-node-id="0qybbpOKT9c3d2lgqV7Vkd">三个真缺口与一个免费能力</h2>
+  <p class="lead" data-page-node-id="a1yFNmrJq0x954DVL0D2RE">全仓 grep 核实后，mindcanvas 相对 PG 的<b data-page-node-id="W4BalkEdvYacgkXJuyXibJ">真</b>缺口只有 3 个。以及一个 PG 花大力气造、而我们免费拥有的能力。</p>
+
+  <div class="callout gold" data-page-node-id="2odrg100EPpyHHQr4g14DP">
+    <div class="cl" data-page-node-id="whVCZFh7FPSekuS5cQDinW">★ 全场最值钱的一个洞察</div>
+    <p class="big" data-page-node-id="DvnA6dNmgPTKHJs6g5tjus">PG 花大力气造 CLI 和 30 个 AI 工具，是为了让 Agent 能操作它的二进制 <code data-page-node-id="qhEcsGpmLnsTWVy06ITQLH">.prg</code>。<br data-page-node-id="B11H0SgVyoEPnvv8yDVJlG">
+    <b data-page-node-id="PiHHdp86Q7Qxm7ePioy8C9">mindcanvas 的 <code data-page-node-id="YVHe0XDa5Hnf5jfMi10EIX">.mm.md</code> 本身就是 Agent 可直接读写的接口——这个能力是免费的，不需要造任何 CLI。</b></p>
+  </div>
+
+  <table class="tbl" style="margin-bottom:30px" data-page-node-id="mxZEfRHNrr8EPbPCSraFxH">
+    <thead data-page-node-id="XcHKPGgZaMtgk7JviFmba3"><tr data-page-node-id="FhdqcWcPv42KLUmoet2HGv"><th style="width:22%" data-page-node-id="MQXMPO4AFWtztd5eO8lIgT">场景</th><th style="width:39%" data-page-node-id="33tPGpe7CisBuwvwBiOua5">Project Graph</th><th data-page-node-id="sTeAufKMDuQY0eu5X3UBxx">mindcanvas</th></tr></thead>
+    <tbody data-page-node-id="EnSXzpj8kJ6dQSQJarGccX">
+      <tr data-page-node-id="1UMY16fCW5PtM8MbsjStRV"><td data-page-node-id="jloi8nHxHJLC9KWXyTdVo6">Agent 想读图</td><td data-page-node-id="KLIFFQOv0lFD2bvMU5ykx5">必须走 CLI <code data-page-node-id="uhonM95NsQVUYb9VPpMSFx">tool invoke</code> 或 MCP</td><td class="win" data-page-node-id="4VLiYgzb5KKGMPKvSVFAt9">直接 <code data-page-node-id="N3yACG6teFWSYzsso6lUwz">cat</code> 文件</td></tr>
+      <tr data-page-node-id="R0AiZDfqnpCwIpl0Ryr5yh"><td data-page-node-id="EBl8GmB3MNS7UC9mW0w7Bh">Agent 想改图</td><td data-page-node-id="iko5ayjeIH1621qXPvxHKI">调 30 个 function calling 工具</td><td class="win" data-page-node-id="LeY2MXESI9uHGJN9OWfno6">直接编辑文本</td></tr>
+      <tr data-page-node-id="wBqzFnnYrhZoBRCMB0gY23"><td data-page-node-id="3ohaPWlnvTdmpTdYPneDXH">冲突合并</td><td data-page-node-id="cHxMIo9oxQLC2mM8DvddFt">二进制，无法 merge</td><td class="win" data-page-node-id="rxgoZEY8rUfUW75Tby07z9"><code data-page-node-id="gKskpGrXKPSmM7WMT70ie7">git merge</code> 原生可用</td></tr>
+      <tr data-page-node-id="C83zcvCTQErR1vG7pYvqHU"><td data-page-node-id="QWvu0PvZXH8hAO9KhS9b1J">版本历史</td><td data-page-node-id="0isXfqC1P3YlreHtTIHDHo">自研备份策略（按 mtime 删旧）</td><td class="win" data-page-node-id="GIvlFvoI0fErUZf5OpzuGg"><code data-page-node-id="3oUnuXxyWLurxsXDIVvbhq">git log</code></td></tr>
+      <tr data-page-node-id="cJFDUipvSkvDza0BtBKKgF"><td data-page-node-id="OOc00Oe7UOMHF57RGtee1Z"><b data-page-node-id="HTkECOG98YBQ4bCuTqYs3b">成本</b></td><td data-page-node-id="kyAOgYWebr3CgphJkmZGx7">CLI 包 + 工具注册表 + 进程契约（数千行）</td><td class="win" data-page-node-id="Q6KZXl0b6FGawarbNpHDs0"><b data-page-node-id="85DZD04SueWGYT2dydpJEC">0 行</b></td></tr>
+    </tbody>
+  </table>
+
+  <div class="step" data-page-node-id="Kzn2W0kN9tnceeMFgcVmYh">
+    <div class="hd" data-page-node-id="FcLsbyXyArklczGzzm9ke7"><div class="no g" data-page-node-id="bkp1jFEQxQ0AKuph9YmXS1">G1</div><h4 data-page-node-id="MDyWnuJG6pMuz6GCbwTpJJ">.mm.md AI 编写守则</h4><span class="pill p0" data-page-node-id="AnCiJnAlPBuEDOARgJCXGr">P0</span><span class="pill no" data-page-node-id="mCCO8mVjJau8FZEH1sP6BA">1 小时 · 0 代码</span></div>
+    <p data-page-node-id="Z65KvLneyyiq2I57JeMzYe">该做的<b data-page-node-id="FbfQuMgmnp6rDCYQdmK43I">不是造 CLI，是写一份契约说明</b>（1 页文档），让 Agent 知道怎么写才不破坏往返无损。</p>
+    <p data-page-node-id="AN1EFHJ2Hh3XYpHTjUz9nI">已有资产可复用：<code data-page-node-id="hYApoiDTrR2uvvcSNZHW7G">docs/specs/2026-09-02-mm-md-protocol.md</code> 已覆盖协议 v1.3.1，<b data-page-node-id="GdDCbkhjTI2NvKT8umkEv9">补一节「AI 编写守则」即可</b>。</p>
+    <div class="warn" data-page-node-id="3CV6ahgzLvCDsjwzwqlwaN"><b data-page-node-id="amV89m8Ljf3Z1qgq5U2iTZ">守则必须写清的三个坑</b>（都是本项目真实踩过的）：① 标题下直接写描述（<code data-page-node-id="RvQS0EaLulst9CxSliS3CO">W-STRAY-LINE</code>）第一次解析就丢；② 空行必须插在笔记块<b data-page-node-id="BaxcZJg1xeDA8tOvC1A90X">之前</b>（笔记归属其后的节点）；③ 分支之间保留一个空行。违反这三条，往返仍报"无损"但内容已丢。</div>
+  </div>
+
+  <div class="step" data-page-node-id="zgBUkdhCufU47pngJsEoWf">
+    <div class="hd" data-page-node-id="OMihbbenscLrT1EhzJZMEP"><div class="no" data-page-node-id="RdPqrdXkLtxnk8amGEgpA1">G2</div><h4 data-page-node-id="V7kidV9K1MXTAlZqHEVo04">视口裁剪</h4><span class="pill p1" data-page-node-id="8qlcNbNigfQlOeXGycjAA9">P1</span><span class="pill no" data-page-node-id="zg82CiLC5HrEJwEX3ByT3p">0.5–1 天</span></div>
+    <p data-page-node-id="CYLAnfO7ovWWW26LyjXbTB"><b data-page-node-id="uqPDRyeuGR5ECbDZoho0Sf">现状</b>：<code data-page-node-id="oCsMXkS2KTpEul3NTAd4i5">MapView.tsx</code> 渲染全部 <code data-page-node-id="U7dJ9vh6kTFiJ5XsUCDXte">layout.nodes</code>，grep 全仓无 cull / viewport 裁剪。</p>
+    <p data-page-node-id="5WBFI6GTlc2fOUbvM8Bmr1"><b data-page-node-id="hATGk4ruvBKeL2w58PjVwi">做法</b>：① <code data-page-node-id="a02fbtpS6UBq3cmuAb8EyF">viewport.ts</code> 已有 <code data-page-node-id="lMiU4YbEpT9hs9lTGhhutA">ViewportController</code> 与 <code data-page-node-id="W5dthVH6Dz7UWBZqRhMZTm">transform</code>，补 <code data-page-node-id="Na0dEwvhKmViba3Q1xvceH">coverWorldRect(frame, transform)</code>；② 渲染循环前过滤 <code data-page-node-id="4wigTv1xibVFnoXXFqXzxj">nodes.filter(n =&gt; intersects(n.box, cover))</code>；③ <b data-page-node-id="EO74vESBJXeKczB4prrHsr">保留 1 屏缓冲</b>（PG 无缓冲，快速平移会露白）。</p>
+    <div class="warn" data-page-node-id="PYvCCR829a0WNuUD1Ye0rD"><b data-page-node-id="05ZrqJEmGGOg4bfUXyb9CH">三条硬约束</b>：① 裁剪<b data-page-node-id="aTkHlLrMDi6n3TVO5kc29C">只影响渲染，不能影响布局</b>——布局必须全量，否则树会散；② 边要单独判断：两端点都在视口外但边穿过视口的情况必须保留，<b data-page-node-id="8zCr5aQ4HkBkRXSmJo5qh9">要用边的包围盒判，不能用两端点</b>；③ <code data-page-node-id="lcfPqgB4ZSr9dZd4HoAGTa">lodFor(scale, nodeCount)</code> 的 <code data-page-node-id="EblI0oBqdwCDr18xcJRZds">nodeCount</code> 应改用<b data-page-node-id="jCrWgSLT6TnHXPKmUJFFcD">可见</b>节点数而非总数。</div>
+  </div>
+
+  <div class="step" data-page-node-id="QPCFzENaUuAi7Vs7GAqY1q">
+    <div class="hd" data-page-node-id="lSrzohztB68yu6iHWoykUl"><div class="no" data-page-node-id="JAl1Oo33d6xBK3pDT74AQG">G3</div><h4 data-page-node-id="JNWEIy2ynG4IZfrvwWZyJv">粘贴即建节点</h4><span class="pill p1" data-page-node-id="m2EdZSEH2jtTlxWEGfHalw">P1</span><span class="pill no" data-page-node-id="bGDzWbwh0CfkTPrrBZDLfH">0.5 天 · 需你拍板语义</span></div>
+    <p data-page-node-id="ptbVzS7jahwhAzE22prZTy"><b data-page-node-id="D1AIzwVEmQ4tVRDSSloXqK">现状</b>：<code data-page-node-id="ctjS8WOeAepmBabG6kKHSA">MapView.tsx:780</code> 的 <code data-page-node-id="HCba4mUdzCIGTF3GSp87vo">onPaste</code> 只处理 <code data-page-node-id="27tDYqcuVzYsynM3A8FDSz">clipboardData.files</code>（图片），<b data-page-node-id="caYwtGCsGTklMnzk5AGewM">文本分支缺失</b>。</p>
+    <p data-page-node-id="MNFPlEWqaS6DJg1c0XxEJA"><b data-page-node-id="G4KBwBVCXABWiXPr9a0cUu">待你决策</b>——多行文本粘进来建什么？</p>
+    <table class="tbl" style="margin-top:12px;box-shadow:none" data-page-node-id="QrynxprumHnAGjbhwIDl1V">
+      <thead data-page-node-id="yIi9IcO4SZldLI8ZQyLf1s"><tr data-page-node-id="JbDg0PYI2afJvA1D6t0mwV"><th style="width:16%" data-page-node-id="BzsieaC6dDjrwAYLGJwNhw">方案</th><th style="width:34%" data-page-node-id="8rw6bM7EZ8GCLFtBIdC4gq">语义</th><th data-page-node-id="wQr8y3F1mQcQOpRAPiEvBu">适合</th></tr></thead>
+      <tbody data-page-node-id="jqIaBFL5jBWAw4f3IZ3m5g">
+        <tr data-page-node-id="Z1UgtUFlZkNYGK5m9rs81D"><td data-page-node-id="mK7kV2milC7Rz3H4r1NlbM">A 缩进感知</td><td data-page-node-id="x0ZCjtfX6WANAhK5EU99ga">按缩进 / Tab 层级建子树</td><td data-page-node-id="cyzc18pEqIDMp7ycf6uZVn">从大纲粘贴</td></tr>
+        <tr data-page-node-id="yYF9gy8GTpeyhrAUE3ohCY"><td data-page-node-id="xtHBSpB0nrU1cqHKmtlyGB">B 平铺兄弟</td><td data-page-node-id="YaGSRMQGgm74BSXtlOQhvu">每行一个兄弟节点</td><td data-page-node-id="CnEE0zg8LLxeOB0CZpwqmV">从列表粘贴</td></tr>
+        <tr data-page-node-id="Caf0vjEQp7VSUiSiUHwJmX"><td data-page-node-id="11Q1fFUHocFsJTt1ILknW9"><b data-page-node-id="fB8xzGEtG7rxoUnIBXrkbD">C 单行即节点</b></td><td data-page-node-id="dGfd1tugVLp26lVZVmnoT9">多行才走 A，单行直接建一个</td><td class="win" data-page-node-id="uCsXi159SDVf17Ruz2l7H1"><b data-page-node-id="oaz4gHZ1R8AAkkybDCnge4">推荐</b>：行为可预测</td></tr>
+      </tbody>
+    </table>
+    <div class="warn" data-page-node-id="JToOq1IHgsRsZ9N7CVpDzr">PG 的做法是「整段进一个节点的 details」——那是<b data-page-node-id="f5zx3gUSy1wSXpHWla6uwJ">自由图</b>的语义。<b data-page-node-id="8lU7r7XNzYciLtEjiibNBJ">树工具应该让多行展开成结构</b>，这才是纯文本思维导图的本分。<br data-page-node-id="tsnsEljcpdQpnvWK23lghF">另：必须走 controller 的 <code data-page-node-id="BZLi4CiU5066GsEIzQr4mz">pushHistory</code>（现有 <code data-page-node-id="od68V87zQlcOXo21d2NFrU">History&lt;T&gt;</code> 55 行，<code data-page-node-id="J8HWrqr1ZywjaYcd9Tmr8R">limit=100</code>），保持不可变树语义。</div>
+  </div>
+
+  <div class="step" data-page-node-id="MCHIud74DUaDwHPdAXEtE5">
+    <div class="hd" data-page-node-id="Op3d96XJpkifb0JDfohwx7"><div class="no a" data-page-node-id="fleCvgKU6NtN5TL5lBAy1A">G4</div><h4 data-page-node-id="1ovuyhjGDNnllpgl56bEhm">快捷键单一数据源</h4><span class="pill p2" data-page-node-id="G7qZpNpBeo5hyWb1btrmNG">P2</span><span class="pill no" data-page-node-id="Ham5LGXMwbeGcpfJvvEcdT">1 天 · 重构非新增</span></div>
+    <p data-page-node-id="ZcEk7J0JPJer8OuQk61ehW">把 <code data-page-node-id="FHOxOyqgL8Xisfv4rWMBQ5">edit/keys.ts</code> 升级为 <code data-page-node-id="RiGi6qUJbffCln09OrVMuf">KeyBind[]</code>，每项 <code data-page-node-id="MsOOvhZMfbgh3gidAIqAi5">{ id, keys, when, run, icon? }</code>；<code data-page-node-id="HuJP0XLvBR3b8Vf390gDYA">ShortcutHelpPanel</code> / <code data-page-node-id="cQfHhrWVzC8cwMorY9ntjv">ContextMenu</code> / 右键菜单共用同一份。<code data-page-node-id="ctmt84g19Nvd9ZSB9mu1Zc">contextMenuItems.ts</code> 改为引用 <code data-page-node-id="xyTKoXGpDfPvnEOuSwUzIe">id</code>。</p>
+    <div class="warn" data-page-node-id="RNZlhjEKVJaqbhpXy0o1SO"><b data-page-node-id="FX03t2wRQ9qF8K20RpbBCY">这是重构不是新增</b>，需在 F 自用周（摩擦记录）之后再动，避免为重构而重构。</div>
+  </div>
+
+  <div class="step" data-page-node-id="73130SZx0QPqJMD7v8iz01">
+    <div class="hd" data-page-node-id="vJtWHdLLH8kqpCNPWg41BQ"><div class="no a" data-page-node-id="E87p8PehmKoSnxVQTVwLqy">G5</div><h4 data-page-node-id="d8xppwcAA2B81S1dqQBeLN">Mermaid 导出</h4><span class="pill p2" data-page-node-id="UfpEscRIJNFeFPeuRZyfNJ">P2</span><span class="pill no" data-page-node-id="ZIcSswgJJ2RqtaDyQNXBUb">0.5 天</span></div>
+    <p data-page-node-id="5cdPe3sg1KLOmKujTwfU9J">PG 双向都能用（<code data-page-node-id="40yjrWlb7SSd33efsOAvLG">MermaidExporter.tsx:150-226</code>），mindcanvas 目前无。</p>
+    <div class="warn" data-page-node-id="f2hNZYMrgIotmOWYLXX3FB"><b data-page-node-id="fRGxNxr08m2yTv6o9cFz3i">只做导出，不做导入</b>——导入需手写 Mermaid 解析器（PG 花了 372 行），而 .mm.md 才是事实源，导入 Mermaid 属低频需求。</div>
+  </div>
+</section>
+
+<!-- ============ TAB 5 ============ -->
+<section class="panel" id="t5" data-page-node-id="oCbUHJIxqplOzMXtkuQzjm">
+  <h2 class="sec" data-page-node-id="GEpGwrwn721wcfQzRBvqSW">落地路线（G 批）</h2>
+  <p class="lead" data-page-node-id="hYtPmrSca2xmR4TIz9Hn5q">按投入产出排序。G1 是一小时换一个战略能力，应当立刻做。</p>
+
+  <div class="road" data-page-node-id="uwdHbmGZh0q6OJJKoKzB8w">
+    <div class="road-row" data-page-node-id="h6QfclMMxuUgTXNfsBHv2s"><div class="gid" data-page-node-id="TOFPFqXJauUpi4S7tlvKXd">G1</div>
+      <div class="gname" data-page-node-id="5DPpMm1KOjQ5VwTzR9XF5c">.mm.md AI 编写守则<small data-page-node-id="2a9wgOKYNLyaNxnaALC6T1">1 页文档，补齐协议文档缺失的一节</small></div>
+      <div class="geff" data-page-node-id="uCWpmN9cZhQRbZGJB2BPuT">1h</div><div class="gpri" data-page-node-id="OSG2Bftp99Agom3UC2KBkP"><span class="pill p0" data-page-node-id="qpSOEFigcUnpT13ueuxIFU">P0</span></div></div>
+    <div class="road-row" data-page-node-id="DFG62ZSvqIZuqyWoCwPcZ3"><div class="gid" data-page-node-id="gw46MuCtbTfuAsZCDW6Sj9">G2</div>
+      <div class="gname" data-page-node-id="nD1nwgXFEE1FJwM1AytU0J">视口裁剪<small data-page-node-id="5jibPOnpdFgBudBAUVCBq1">含 1 屏缓冲 + 边包围盒判断</small></div>
+      <div class="geff" data-page-node-id="qjCWuhaWbUblKow3txVViC">0.5–1d</div><div class="gpri" data-page-node-id="iRlNSe0wGIYn6eS7e2qYBF"><span class="pill p1" data-page-node-id="0a0Y7PHNFNJBZpijH9WBKt">P1</span></div></div>
+    <div class="road-row" data-page-node-id="8ArqPBsDBVHA1JvSK6ssbz"><div class="gid" data-page-node-id="z6x7Q2M8DP8fPZgosj5WAu">G3</div>
+      <div class="gname" data-page-node-id="YJ25qeRGi4gPHgHnnxAHvh">粘贴即建节点<small data-page-node-id="xFtMoK9Vv8ZCdFV24zdPaX">先按方案 C（单行即节点，多行按缩进）</small></div>
+      <div class="geff" data-page-node-id="j1YDJcujzNpgRezWsUUEP4">0.5d</div><div class="gpri" data-page-node-id="8CmCzR2XIP643ZHGXoqvmE"><span class="pill p1" data-page-node-id="yBFX03d17MGpq71kR7dUKJ">P1</span></div></div>
+    <div class="road-row" data-page-node-id="F2uz1PMCCreFBuMOuY0Wcr"><div class="gid" data-page-node-id="ERpeVyV8xMDISfAGtohXGe">G4</div>
+      <div class="gname" data-page-node-id="cF8i1NNIs74FjXlA5XseKo">快捷键单一数据源<small data-page-node-id="5rI3uhTG0bhmaX5mLzrzxK">F 自用周之后再动</small></div>
+      <div class="geff" data-page-node-id="nj42ZONUEMYYPSzENLMlDb">1d</div><div class="gpri" data-page-node-id="5OFSbs5hECeuQUWkZ4ZmGl"><span class="pill p2" data-page-node-id="cbN2BCn3pXdYJCK2YQnrn8">P2</span></div></div>
+    <div class="road-row" data-page-node-id="Ee7fJY3F6p8btXishlOn1z"><div class="gid" data-page-node-id="ypr1WFACwc8TXDKDGmZ4Hh">G5</div>
+      <div class="gname" data-page-node-id="lOyKreEH54meIuUKFu381w">Mermaid 导出<small data-page-node-id="SVE2tCipFeDBAcF79G4uWR">仅导出，不导入</small></div>
+      <div class="geff" data-page-node-id="nGG03Hcw0AxORpHCb1IAsr">0.5d</div><div class="gpri" data-page-node-id="ERFM14BBUbDk2cduc1vito"><span class="pill p2" data-page-node-id="vke75amufwotKiRmxX7New">P2</span></div></div>
+  </div>
+
+  <h3 data-page-node-id="ZiDCaf48eRam1Pa0aB0EZv">明确不做（写在墙上，防止以后心动）</h3>
+  <div class="callout" data-page-node-id="wgdD0lLvkoPnyHmcUofwrx">
+    <ul class="plain" data-page-node-id="ZsFOc3iJ73H024MDjkVgNT">
+      <li data-page-node-id="6tz2iV5JKhMB3iPBowN48h"><b data-page-node-id="BTNdPPgwdW7jGwPDCpqeqA">CLI</b> —— .mm.md 文本本身就是 Agent 接口，造 CLI 是重复劳动</li>
+      <li data-page-node-id="4hgHDqBELc88gM9eiAFJAG"><b data-page-node-id="vUAwmD668xbnQc12sQnCvE">AI function calling 工具集</b> —— 同上，0 行代码已具备同等能力</li>
+      <li data-page-node-id="5t2KHNqLc7yHhbvNsrsmje"><b data-page-node-id="4pjtOjWLgp3Dlz9VoOLmrl">扩展插件系统</b> —— Worker + shell_execute 的安全面不值当，且需求未验证</li>
+      <li data-page-node-id="OLg2BltMJ9zwtc4cModvJw"><b data-page-node-id="WeX88WGUDQ4Eub9zGiMh3P">Canvas 渲染重写</b> —— SVG 声明式天然增量，重写是纯负债</li>
+      <li data-page-node-id="HQPrFr4l3V856rlccE1mCv"><b data-page-node-id="cI7iBV7bICPC5CDnJM9nF5">服务层 DI</b> —— 20k 行项目不需要；「分两批初始化」是复杂度信号不是成熟标志</li>
+      <li data-page-node-id="RYCqQsEnmmoO0jIfqygAnl"><b data-page-node-id="J1cucRLoZtNsxO0oskspks">多标签 / 协作</b> —— 与 local-first 单文档定位冲突</li>
+    </ul>
+  </div>
+
+  <div class="callout info" data-page-node-id="KW4jHQl75KvSVobF8oI5lY">
+    <div class="cl" data-page-node-id="sBFWdlRklmZynII0AajTU1">与现有待办的关系</div>
+    <p data-page-node-id="L5gnWmvlJBU2MkqSy7uDow">本批与记忆中的 <b data-page-node-id="cFhVI0F8uJ7lZCQ2XXw3uF">F 自用周（7 天零开发只记摩擦）</b> 并行不冲突：G1 是文档（1 小时，立刻做），G2/G3 是功能缺口（等 friction-log 印证后再动更稳）。<br data-page-node-id="FeyfmDRb8XYba86a3zh5qY">
+    <b data-page-node-id="il0FhSEoznkm8iUwHBD7dO">建议顺序</b>：G1 立刻 → F 周收摩擦 → 若摩擦记录中出现「大图卡顿」则优先 G2，出现「想批量录入内容」则优先 G3。</p>
+  </div>
+</section>
+
+<!-- ============ TAB 6 ============ -->
+<section class="panel" id="t6" data-page-node-id="h8QtSFGUZPxURxZ9cnXLf8">
+  <h2 class="sec" data-page-node-id="LvR5b1v42rEgaUL4udUJo2">反面教材：从 PG 身上学到的三件事</h2>
+  <p class="lead" data-page-node-id="9cOrBmWI52qXVcuOvcDsGp">它做对的我们抄，它长歪的地方更要记住——因为那正是 20k 行项目未来的样子。</p>
+
+  <div class="step" data-page-node-id="bHKOxGd5nkTf32Dk2I5zmM">
+    <div class="hd" data-page-node-id="hIe3i7dtnFHH7FxE91ciFW"><div class="no" data-page-node-id="MPPwdCIkx2bxZFzx0RhBwm">1</div><h4 data-page-node-id="yJLESDOVqygF2SwTVz0e1X">单文件 4,538 行是危险信号</h4></div>
+    <p data-page-node-id="2oHxchiZJ4CL3fs45n0I4m"><code data-page-node-id="8WAytCZQfJz1RmzBKRu1HY">shortcutKeysRegister.tsx</code> 一个文件塞了 347 条快捷键。这不是"功能丰富"，是<b data-page-node-id="OECsSwKRcM8eTwVhmLleKA">拆分失败的证据</b>。</p>
+    <div class="warn" data-page-node-id="peBHPvpnfJuk25ClYtElkQ">这面镜子照的是 <b data-page-node-id="1jBDiqJo1IuKkaTuQBbDyE">mindcanvas 的 <code data-page-node-id="zHXrClZIc4XGhCyO6dvZLB">MindmapStage.tsx</code>（1,573 行）</b>。拆分已有进展（从 1,741 降到 1,573，−9.7%），<b data-page-node-id="iJmTi3xd1fKzEIR0UPWc5e">别停在这里</b>。剩余两块：玻璃翻卡（约 107 行，依赖 8 个 props）、主函数交互层。</div>
+  </div>
+
+  <div class="step" data-page-node-id="5AqV8y8vYfhNQaP3VBmY77">
+    <div class="hd" data-page-node-id="75oDNOBcg2FML7xSfzSAw5"><div class="no" data-page-node-id="gs7ZnDOaaVcJDDmjlE51Bw">2</div><h4 data-page-node-id="xus5WVPoO5kHsEWcdaNXgQ">"分两批初始化服务"是脆弱信号</h4></div>
+    <p data-page-node-id="wY4EOU6ZAV5Zpx64vpQ7HZ"><code data-page-node-id="U0EGHWFv6yKNmOb9N1nVxY">loadAllServicesBeforeInit</code> 与 <code data-page-node-id="utXpXK04FpublJcc4NoL6n">loadAllServicesAfterInit</code> 的存在（后者专门延迟注册 HistoryManager、CollaborationService），说明<b data-page-node-id="qO67DryTGuBIbxDByqeiJE">依赖关系已经复杂到需要人工排序</b>。</p>
+    <div class="warn" data-page-node-id="vDBGNrvS0VtaSG9NaJJ3tS">这是架构开始失控的早期征兆，却被当成"成熟的设计"写进代码。<b data-page-node-id="ijTrpxfPcA02NwvhMqJPDZ">mindcanvas 别引入服务层</b>——现在的 <code data-page-node-id="tbErvD1TOLLFvaacTqzVhv">edit/controller.ts</code> 单文件（11.5KB）完全够用，不要为了"看起来专业"而加 DI。</div>
+  </div>
+
+  <div class="step" data-page-node-id="V842bcjNDytg4zMbtAbKwQ">
+    <div class="hd" data-page-node-id="EB11hfWiwbGce9G6NgGki9"><div class="no" data-page-node-id="jX2WQGFwZZ3kbCzZis09jg">3</div><h4 data-page-node-id="f9DIPB5d4Ql8B7WGlNWv8i">死代码和空文档会一直留在仓库里</h4></div>
+    <p data-page-node-id="Dwy7sAke7mO8dODgb9JVDk"><code data-page-node-id="9LJGCbUdvcrODde51ysN4T">vditor-panel.tsx</code> 是全仓库<b data-page-node-id="Wvzlon7nCvt1iCueLy0fn8">零引用</b>的 Markdown 编辑器组件，仍在代码中；根目录 <code data-page-node-id="aXwZ2i0kfay5jhWrnV18ZD">TODO.md</code> 是 <b data-page-node-id="yWpvJ6wdBCxoWHaAvnG4RF">0 字节空文件</b>。</p>
+    <div class="warn" data-page-node-id="Ckp86YiLW6s6vBpcurYoBz">这就是为什么项目铁律第一条是「<b data-page-node-id="YmOLzpuqodkAezj12f4w4X">别信文档里的状态描述，规划前先 grep 源码确认</b>」——文档和代码都会腐化，而且腐化得悄无声息。PG 的 README 也没写它的存储是二进制，那是读源码才知道的。</div>
+  </div>
+
+  <div class="callout gold" data-page-node-id="afA08nqvUZv33wxF1hzQPn">
+    <div class="cl" data-page-node-id="ETPNwCXj8uaaxXCgBNG1o7">最后一句</div>
+    <p class="big" data-page-node-id="Cx6BldNkmwrI537CJB3C8Z">mindcanvas 用 <b data-page-node-id="w9pmQFSPPXaGysCHzpJp6K">1/5.6 的代码</b>换来了 <b data-page-node-id="lHtPrQd4DDjvM8dc5hrS2K">15 倍的测试密度</b>、<b data-page-node-id="fYAkmNvG6uexCZNw09QacA">独家避障路由</b>和 <b data-page-node-id="OPne8VPk9nhNd8tM2L7HN5">Agent 原生可读的事实源</b>。这次调研最大的收获不是"该加什么"，而是<b data-page-node-id="eZlzD2VqDJoPceAaGw4zJY">确认了哪些东西不必加</b>。</p>
+  </div>
+</section>
+
+</main>
+
+<footer data-page-node-id="6e1FAFDphWGDe01BtGEyBm">
+  <div class="wrap" data-page-node-id="7SzleCEH0efjx08S3y3W3V">
+    <b data-page-node-id="TR64eB5NwUPiRrJcJvUYiq">调研方式</b>：全量 clone（4,387 commits）+ 五路并行源码取证（数据模型 / 渲染管线 / 服务架构 / 算法扩展 / 文本互操作），每条结论附源码位置。<br data-page-node-id="eA0edWDYGYcBtXcAPegqoR">
+    <b data-page-node-id="z0k09zbvb4o3FmGoXQ9nYB">配套文档</b>：<code data-page-node-id="5niiXOewWU1gXHHJNFADNB">docs/2026-09-05-project-graph-调研与减法设计.md</code>（Markdown 版，含完整表格）<br data-page-node-id="MUNT5vgy5tBTooV7vySg9X">
+    <b data-page-node-id="e0gxG4IDJKmyOCyMxvxUvl">生成时间</b>：2026-09-05
+  </div>
+</footer>
+
+<script>
+(function(){
+  var tabs = document.querySelectorAll('.tab');
+  var panels = document.querySelectorAll('.panel');
+  tabs.forEach(function(t){
+    t.addEventListener('click', function(){
+      tabs.forEach(function(x){ x.setAttribute('aria-selected','false'); });
+      t.setAttribute('aria-selected','true');
+      panels.forEach(function(p){ p.classList.remove('on'); });
+      var el = document.getElementById(t.dataset.t);
+      if(el) el.classList.add('on');
+      window.scrollTo({top:0, behavior:'smooth'});
+    });
+  });
+  document.querySelectorAll('.flip').forEach(function(f){
+    f.addEventListener('click', function(){ f.classList.toggle('on'); });
+  });
+})();
+</script>
+</body>
+</html>

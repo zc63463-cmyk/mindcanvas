@@ -1,0 +1,28 @@
+{
+  "name": "@mindcanvas/kernel",
+  "version": "1.7.0",
+  "description": "mindcanvas headless 内核：实体契约 / 六注册表 / 插件基类 / 最小协议骨架（零运行时依赖）",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "typecheck": "tsc -b tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11"
+  }
+}
