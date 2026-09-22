@@ -30,15 +30,28 @@ const STUBS = {
   onClose: vi.fn(),
 };
 
-/** 最小 controller 桩：搜索分支只读 root（对象长寿命，编辑时 root 换引用） */
-function makeController(root: ReturnType<typeof makeTextNode>): EditorController {
-  return { root } as EditorController;
+/**
+ * 最小 controller 桩：搜索分支只读 root（对象长寿命，编辑时 root 换引用）。
+ * `root` 在真实 `EditorController` 上是只读的 —— 这里用**闭包可变槽**模拟
+ * 「同一个 controller 对象、其 root 换成新引用」，而不是去改写只读属性。
+ */
+function makeController(root: ReturnType<typeof makeTextNode>): {
+  controller: EditorController;
+  setRoot: (next: ReturnType<typeof makeTextNode>) => void;
+} {
+  const slot: { root: ReturnType<typeof makeTextNode> } = { root };
+  return {
+    controller: slot as unknown as EditorController,
+    setRoot: (next) => {
+      slot.root = next;
+    },
+  };
 }
 
 describe('SidePanels · 搜索面板编辑后自动刷新（P6 回归修复）', () => {
   it('面板开着、query 不变，编辑（root 换引用）→ 结果自动重算', () => {
     const rootV1 = makeTextNode('根', [makeTextNode('甲')]);
-    const controller = makeController(rootV1);
+    const { controller, setRoot } = makeController(rootV1);
     const { container, rerender } = render(
       <SidePanels panel="search" controller={controller} {...STUBS} />,
     );
@@ -48,7 +61,7 @@ describe('SidePanels · 搜索面板编辑后自动刷新（P6 回归修复）',
 
     // 模拟编辑：controller 对象不变、root 换引用（kernel 纯函数，编辑产出新 root），query 不变
     const rootV2 = makeTextNode('根', [makeTextNode('乙')]);
-    controller.root = rootV2;
+    setRoot(rootV2);
     rerender(<SidePanels panel="search" controller={controller} {...STUBS} />);
 
     // 修复前：searchFn 闭包未失效 → memo 不重算 → 仍 1 条（陈旧「甲」）；修复后 → 0 条

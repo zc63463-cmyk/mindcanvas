@@ -123,6 +123,29 @@ describe('FreeCanvasView（FC-C 整卡 3D 翻面 + 添加背面 + 面编辑）',
     expect(container.querySelector('[data-fc-editor]')).toBeNull();
   });
 
+  it('背面编辑：组合输入失焦不提交候选串，组合结束后写入确认文字', () => {
+    const seen: McCanvasDocument[] = [];
+    const { container } = render(
+      <Harness initial={docWithCard({ withBack: true, face: 'back' })} onDoc={(d) => seen.push(d)} />,
+    );
+    const card = container.querySelector('[data-fc-card]') as HTMLElement;
+    fireEvent.doubleClick(card); // 当前面 = back
+    const ta = container.querySelector('[data-fc-editor]') as HTMLTextAreaElement;
+
+    fireEvent.compositionStart(ta);
+    fireEvent.change(ta, { target: { value: '尚未确认的背面候选' } });
+    // 原生焦点转移（= 真实浏览器里点工具栏造成的失焦）
+    const away = document.createElement('button');
+    document.body.append(away);
+    away.focus();
+    away.remove();
+    expect(seen).toHaveLength(0); // 候选串不得进模型
+
+    fireEvent.change(ta, { target: { value: '已确认的背面' } });
+    fireEvent.compositionEnd(ta, { data: '已确认的背面' });
+    expect(seen.at(-1)?.placements[0]?.back?.body).toBe('已确认的背面');
+  });
+
   it('背面编辑 Shift+Enter 提交（写 patchBack）', () => {
     const seen: McCanvasDocument[] = [];
     const { container } = render(

@@ -394,6 +394,69 @@ sections:
 **折叠**：复用节点级会话态 `collapsedIds`（不落盘；D2 裁决）。
 折叠后隐藏成员无盒 → AABB 收缩只余 root，徽标转 `+N`。
 
+### 6.5 节点级 `summary_of`（XMind 式概要 · v1.12 候选 / 待版本号）
+
+写在**摘要节点自身**的笔记块内。摘要 S 覆盖「同一父 P 下的**连续兄弟区间**
+[成员A … 成员C]」，区间**含两端**（单成员摘要 = `from == to`，合法）。
+
+```yaml
+summary_of:
+  from: cid:c2        # 区间起点（含）
+  to: cid:c5          # 区间终点（含）
+```
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `from` | string | 起点成员锚。**写入一律 `cid:`**；读取兼容 `node:` 路径锚 |
+| `to` | string | 终点成员锚，同上 |
+
+**锚语义**：`cid:` 是稳定身份（成员改名/移动不失效）；`node:` 是路径锚（位置提示）。
+两字段**必须成对且非空字符串**，否则视为坏形态（原值透传不丢，读侧判 `stale`）。
+
+**锚解析三态**（`resolveSummaries`）：
+
+| 状态 | 含义 | 布局/渲染行为 |
+|---|---|---|
+| `well-formed` | 两锚唯一命中、同父、顺序正确、且 S 不在区间内 | 摘要节点**从布局树摘除**为成员带外侧**卫星**，画方括号括线 |
+| `dangling` | 锚失效（成员被删 / 移出同父 / 倒序 / S 与成员不同父 / S 落在自己的区间内） | **留普通流内可见**，无括线；产出 `W-SUMMARY-DANGLING` |
+| `stale` | 锚语法非法 / 不可解析 | 同上 |
+
+**数据无损纪律**：dangling/stale 的 `summary_of` 元数据**绝不静默删除**，
+保留在文档中并产出诊断，由用户显式清理（与 `W-ORPHAN-NOTE` / `W-SECTION-DANGLING`
+同一哲学）。
+
+**嵌套摘要不实现**（v1.12 候选）：成员区间含**另一个摘要节点**时不摘除该摘要
+（`nestedSkip`），留普通流内可见、不画括线 —— 宁可无括线，也不让节点消失。
+
+**支持边界（重要）**：卫星摘除只在两条布局路径承诺 —— `layoutMindmap`
+（单树主干，含无 `note.dir` 的逐像素回退）与 `layoutLogic`（森林左/右岛）。
+`layoutOrg`（down/up 岛）、显式 `note.dir` 分叉路径、框内路径**不承诺**：
+这些路径下摘要**留在普通流内可见**（无括线）。这是设计承诺边界，**不是 bug**。
+
+**括线渲染（S4）**：卫星侧绘制方括号 + stem。几何唯一口径 = 成员**子树**并集 + 对
+kernel 常量（`SUMMARY_BRACKET_GAP` / `SUMMARY_STEM_GAP`）；左右严格镜像。
+渲染层**只消费** `LayoutResult.satellites`（摘除判定）与 `buildSatellitePlan().specs`
+（成员区间）—— 不重解析 `summary_of` 字面量。
+
+**两条层序契约不同（S4-R2 更正，勿混用）**：
+
+| 面 | 顺序 | 依据 |
+|---|---|---|
+| 画布 DOM（SVG 层 z-order，自下而上） | `sections` → `island-overview`（IO-1 条件层：`k < K_OVERVIEW` 且有中心岛才挂） → **`summaries`** → `tree-links` → `free-edges` → `nodes` → `edge-labels` → `ghosts` → `drag` | `MapView.tsx` 的 `<SummaryLayer>` 挂在 `tree-links` 层**之前**；`island-overview` 钉在 `sections` 之后、`tree-links` 之前（`MapView.tsx` SectionLayer/IslandOverviewLayer/SummaryLayer/tree-links 挂载序，层序契约 `packages/react/tests/mapview-layer-order.test.tsx` 的 CONTRACT 数组同序；S5-R2 补记——首版表遗漏该条件层） |
+| SVG 导出（字符串发射序） | 背景 `rect` → 树线 `path` → 跨岛补线 `boundaryLinks`（虚线）→ **摘要括线** → 节点卡 | `chrome/exportSvg.ts` 的 `parts.push` 次序 |
+
+两点须注意：
+
+1. **导出不画框边界** —— Section 框属画布侧 chrome，不进 SVG 导出；
+   旧文本写的「框边界」导出层**并不存在**（误把跨岛补线当成了框）。
+2. **括线相对树线的位置在两面上相反**：画布上括线在树线**之下**（z-order 更低），
+   导出上括线在树线**之后**（后写 = 后覆盖）。两者不是同一契约，各自被测试钉死
+   （`mapview-layer-order.test.tsx` 与 `summary-export-svg.test.ts`）。
+
+**锚迁移**：`summary_of.from` / `summary_of.to` 已登记进 `cutAttach` 的锚字段解析
+（形态 `summary_of.from` / `summary_of.to`）—— 改名/移动时 `cid:` 锚原样保留即
+正确迁移；`node:` 路径锚按 nodeId 重建。
+
 ---
 
 ## 七、结构装配
@@ -424,6 +487,7 @@ sections:
 | `W-NOTE-SHADOWED` | W | 前一未绑定笔记被遮蔽 | 前一笔记丢弃 |
 | `W-STRAY-LINE` | W | 杂散行 | 忽略该行 |
 | `W-SECTION-DANGLING` | W | Section 子树根锚失效/歧义（v1.5.0） | **元数据保留**，渲染幽灵态 |
+| `W-SUMMARY-DANGLING` | W | 摘要 `summary_of` 锚失效/歧义（v1.12 候选） | **元数据保留**，摘要留普通流内可见、无括线 |
 
 > ⚠️ **级别 ≠ 数据保留**。`E` 与 `W` 都只表示「解析时发生了容错调整」，
 > 上表「后果」列写明「丢弃 / 忽略」的**都会丢失原内容**。
@@ -513,6 +577,7 @@ cd apps/canvas && npx vite-node scripts/diag-roundtrip-real.mts     # 真实文�
 
 | 版本 | 变更 |
 |---|---|
+| v1.12 候选（**待版本号**） | 节点级 `Note.summary_of`（XMind 式概要：同父连续兄弟区间 + `cid:` 锚 + `W-SUMMARY-DANGLING` 数据无损；卫星摘除 + 方括号括线渲染）。**尚未定号**——S1–S5 已实现并验证（S5 首版 REJECT、S5-R2 返修收口），发版批次统一编号 |
 | v1.11.0 | `Note.beamAt` 共享梁比例位（逐方向 0..1；缺省 = 0.5/中点，与旧几何逐位兼容；≈0.5 不落盘——写侧删键。零 parser/serializer 改动） |
 | v1.10.0 | `Note.frame` 子树框编辑的持久框标记（`version: 1` + `depth` 有限整数 ≥ 1；成框/拆框 = 写/删该键，零 parser/serializer 改动） |
 | v1.7.0 | `Note.lens`（逐方向组缺省层距）/ `Note.hub`（出线枢纽共享竖梁）；布局侧四向分叉碰撞消解与连线避障（不改协议语义） |

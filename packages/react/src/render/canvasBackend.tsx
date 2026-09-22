@@ -4,9 +4,14 @@
  * render(scene) 返回 <CanvasSurface> React 元素——useEffect 用 2D ctx 执行 drawScene。
  *
  * 边界（诚实标注）：
- * - 未接入 MapView 主渲染循环（接入含命中检测/动画/文本布局重构 = 独立专项）
+ * - **已接入 MapView**：后端由 `resolveBackend(forceBackend, layout.nodes.length)` 选择——
+ *   显式 `?backend=canvas`，或未强制 SVG 且**布局节点总数 > CANVAS_AUTO_NODES(50000)** 时自动降级
+ *   （口径是布局节点总数，不是视口可见节点数）；含中心/自由边的文档由产品壳强制 SVG，不走本后端。
+ *   命中检测不走 DOM：MapView 的 pointer 命中按坐标（`nodeHitTest`）读同一份布局盒。
+ * - **路径几何（DF-R4 已修）**：`tracePath` 支持场景构造器实际产出的 `M`/`L`/`Q`/`C`/`Z`
+ *   绝对指令，树线、组织图梁线与 hub 箭头三角都会落笔；未产出的相对指令与其它命令**不落笔**（有界解析）。
  * - 文本字体 family 取 ctx 默认（TextDraw 未携带 family）；drop-shadow 做简版解析
- * - 资产 image 绘制需异步加载——骨架版跳过；>50K 自动切换在主循环接入后才生效
+ * - 资产 image 绘制需异步加载——仍跳过（资产密集文档请走 SVG 后端）
  */
 import { useEffect, useRef, type ReactElement } from 'react';
 import type {
@@ -25,6 +30,18 @@ export interface Ctx2D {
   translate(x: number, y: number): void;
   scale(x: number, y: number): void;
   beginPath(): void;
+  /**
+   * 路径几何指令（DF-R4：连线/箭头**落笔**必需）。
+   *
+   * 与场景构造器实际产出的 SVG 指令一一对应：
+   * `compactBezier`/`bezierPath` 的 `M … C …`、`orthogonalPath` 的 `M … L … Q …`、
+   * `hubArrowTip` 的 `M … L … L … Z`。真 `CanvasRenderingContext2D` 天然满足本接口。
+   */
+  moveTo(x: number, y: number): void;
+  lineTo(x: number, y: number): void;
+  quadraticCurveTo(cx: number, cy: number, x: number, y: number): void;
+  bezierCurveTo(c1x: number, c1y: number, c2x: number, c2y: number, x: number, y: number): void;
+  closePath(): void;
   roundRect(x: number, y: number, w: number, h: number, rx: number): void;
   fill(): void;
   stroke(): void;
@@ -120,12 +137,59 @@ function applyShadow(ctx: Ctx2D, filter?: string): void {
   ctx.shadowColor = parts[3] ?? 'rgba(0,0,0,0.2)';
 }
 
-/** SVG path 指令（M/L/Q/C/Z）→ ctx 路径调用（骨架：M 开路径，坐标绘制留主循环接入时补全） */
+/** 指令 → 参数个数（有界解析只认场景构造器实际产出的绝对指令；其余 = 0 参数且不落笔） */
+function pathArity(cmd: string): number {
+  if (cmd === 'M' || cmd === 'L') return 2;
+  if (cmd === 'Q') return 4;
+  if (cmd === 'C') return 6;
+  return 0;
+}
+
+/**
+ * SVG path 指令 → ctx 路径调用（DF-R4）。
+ *
+ * 修复背景：本函数此前只对 `M` 调 `beginPath()`、不产出任何几何指令，于是
+ * `drawScene` 的 `case 'path'` 对**空路径** `stroke()` —— Canvas 后端
+ * （显式 `?backend=canvas`，或未强制 SVG 时布局节点数 > 50000 的自动降级）**看不到树线/箭头**。
+ *
+ * 有界解析：只覆盖场景构造器实际输出的 `M` / `L` / `Q` / `C` / `Z`
+ * （`compactBezier` / `bezierPath` 的 `M … C …`、`orthogonalPath` 的 `M … L … Q … L …`、
+ * `hubArrowTip` 的 `M … L … L … Z`），分隔符同时接受空格与逗号。
+ * **未知指令不落笔也不抛错**：宁可少画一段，也不能因一条异常指令打断整帧绘制。
+ */
 function tracePath(ctx: Ctx2D, d: string): void {
-  const tokens = d.match(/[MLQCZmlqcz][^MLQCZmlqcz]*/g) ?? [];
-  for (const t of tokens) {
-    const cmd = t[0];
-    if (cmd === 'M' || cmd === 'm') ctx.beginPath();
+  const tokens = d.match(/[A-Za-z]|-?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?/g);
+  if (tokens === null) return;
+  let cmd = '';
+  let args: number[] = [];
+  const emit = (): void => {
+    if (cmd === 'M') ctx.moveTo(args[0] ?? 0, args[1] ?? 0);
+    else if (cmd === 'L') ctx.lineTo(args[0] ?? 0, args[1] ?? 0);
+    else if (cmd === 'Q') ctx.quadraticCurveTo(args[0] ?? 0, args[1] ?? 0, args[2] ?? 0, args[3] ?? 0);
+    else if (cmd === 'C') {
+      ctx.bezierCurveTo(
+        args[0] ?? 0,
+        args[1] ?? 0,
+        args[2] ?? 0,
+        args[3] ?? 0,
+        args[4] ?? 0,
+        args[5] ?? 0,
+      );
+    } else if (cmd === 'Z') ctx.closePath();
+    args = [];
+  };
+  for (const token of tokens) {
+    if (token.length === 1 && token >= 'A' && token <= 'Z') {
+      cmd = token;
+      args = [];
+      if (pathArity(cmd) === 0) emit(); // Z（以及未知指令）立即结算
+      continue;
+    }
+    if (token.length === 1 && token >= 'a' && token <= 'z') {
+      continue; // 相对指令：场景构造器不产出 → 有界解析不支持（少画一段好过画错）
+    }
+    args.push(Number(token));
+    if (args.length === pathArity(cmd)) emit(); // 同指令连续参数组 = 隐式重复
   }
 }
 

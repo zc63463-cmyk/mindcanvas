@@ -20,6 +20,7 @@ import type { Dispatch, RefObject, SetStateAction } from 'react';
 import type { EditableNode, Entity, EntityRef } from '@mindcanvas/kernel';
 import type { EditorController, EntityHost, MapViewApi, MindDoc } from '@mindcanvas/react';
 import { buildEntities } from '@mindcanvas/react';
+import type { DocumentSaveSession } from './useDocumentSaveSession.js';
 
 export interface DocumentSwitchOptions {
   doc: MindDoc;
@@ -32,6 +33,11 @@ export interface DocumentSwitchOptions {
   controllerRef: RefObject<EditorController | null>;
   /** S2G：同步标记（写点：首挂同源跳过 / reset 后置位；供保存侧守卫读） */
   syncedSourceRef: RefObject<string | null>;
+  /**
+   * SAVE-LIFECYCLE：保存会话（可选）。`doc.source` 变化（= 显式文档替换）时兜底推进会话
+   * 令牌 —— 主入口是 `applyDoc` 的同步推进；此处覆盖不经 applyDoc 的替换路径。
+   */
+  session?: DocumentSaveSession;
   setEntities: Dispatch<SetStateAction<Map<string, Entity>>>;
   setExpandedQaId: Dispatch<SetStateAction<string | null>>;
   apiRef: RefObject<MapViewApi | null>;
@@ -46,6 +52,7 @@ export function useDocumentSwitch({
   gatewayTitles,
   controllerRef,
   syncedSourceRef,
+  session,
   setEntities,
   setExpandedQaId,
   apiRef,
@@ -56,9 +63,13 @@ export function useDocumentSwitch({
   const firstDocEffectRef = useRef(true);
   // biome-ignore lint/correctness/useExhaustiveDependencies: 纯搬迁段——deps 刻意保持 [doc.source]（原 eslint-disable 注释），行为由 useDocumentSwitch.test 判别
   useEffect(() => {
-    if (!editable) return;
     const isFirst = firstDocEffectRef.current;
     firstDocEffectRef.current = false;
+    // SAVE-LIFECYCLE 兜底：source 变化 = 文档被替换 → 推进保存会话令牌并同步换目的地
+    // （幂等：主入口已推进）。放在 editable 早退之前 —— 解析失败也不能让旧会话的迟到回调
+    // 回填新文档。
+    if (!isFirst) session?.beginDocument(doc.handle);
+    if (!editable) return;
     // N1：文档内实体引用登记进候选宿主（首挂与切换都登记 → 跨文档可复用）
     entityHost.remember(
       refs

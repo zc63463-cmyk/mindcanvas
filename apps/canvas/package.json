@@ -1,6 +1,6 @@
 {
   "name": "canvas",
-  "version": "1.7.0",
+  "version": "1.12.0",
   "private": true,
   "type": "module",
   "description": "mindcanvas 应用组合入口（= kernel + react 渲染器 + 插件）",
@@ -9,7 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc -b tsconfig.json",
+    "typecheck": "tsc -b tsconfig.json && tsc -p tsconfig.test.json --noEmit",
     "diag:anchors": "node scripts/diag-anchors.mjs",
     "diag:render": "node scripts/diag-render.mjs",
     "diag:dup": "node scripts/diag-dup.mjs",

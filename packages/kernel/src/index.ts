@@ -23,6 +23,13 @@ export {
   upsertSection,
 } from './protocol/section.js';
 
+// 摘要节点（XMind 式概要）S1：summary_of 范围锚的读写访问器
+export {
+  removeSummaryOf,
+  summaryOf,
+  upsertSummaryOf,
+} from './protocol/summary.js';
+
 // 子树框编辑（FO-A1/A2）：成框 = 写 note.frame 元数据，不新增 EditableNode.type
 export {
   canCreateFrame,
@@ -47,6 +54,7 @@ export type {
   FrameSpec,
   SectionColor,
   SectionSpec,
+  SummarySpec,
 } from './protocol/types.js';
 
 export type { FrameDenyReason } from './protocol/frame.js';
@@ -270,7 +278,21 @@ export type {
   LinkBuilder,
   MeasureFn,
   Point,
+  SatelliteHook,
 } from './layout/mindmap.js';
+
+// 摘要卫星（S3）：钩子 + 几何常量（S4 括线渲染复用同一口径）。
+// `satelliteHook` 注入 `layoutMindmap` / `layoutLogic` / `layoutForest` 的 `satellite` 选项；
+// 未注入 = 无卫星行为（与旧输出逐位等价）。
+export {
+  buildSatellitePlan,
+  EMPTY_PLAN,
+  satelliteHook,
+  SUMMARY_BRACKET_GAP,
+  SUMMARY_STEM_GAP,
+} from './layout/satellite.js';
+export type { SatellitePlan, SatelliteSpec } from './layout/satellite.js';
+export { NO_SATELLITE_HOOK } from './layout/mindmap.js';
 
 export {
   minimapNodeRects,
@@ -369,6 +391,14 @@ export type {
   ResolvedGroupMember,
   ResolvedLink,
 } from './registry/note-anchor.js';
+
+// 摘要范围锚三态解析（S1）：同父 + 顺序 + S 不在范围内；dangling/stale 只诊断不删数据
+export {
+  W_SUMMARY_DANGLING,
+  collectSummaryDiagnostics,
+  resolveSummaries,
+} from './registry/summary-anchor.js';
+export type { ResolvedSummary, SummaryDiagnostic } from './registry/summary-anchor.js';
 
 export { planReferenceMigration } from './registry/anchor-migrate.js';
 export type {

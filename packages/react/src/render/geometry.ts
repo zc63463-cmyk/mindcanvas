@@ -14,8 +14,46 @@ import {
 import type { Box, GrowDir, LayoutNode } from '@mindcanvas/kernel';
 import type { BranchColor, TokenSet } from '../theme/types.js';
 
-/** 卡片层级（决定圆角/描边/配色变体） */
-export type CardLevel = 'branch' | 'leaf';
+/**
+ * 视觉档（DEPTH-VIS-1 深度阶梯）：root = depth 0 / branch = depth 1 / leaf = depth ≥ 2。
+ * 与布局 depth 切分一致 —— **不改**「有子才算父」的语义，只是把根独立成第三档。
+ */
+export type VisualRank = 'root' | 'branch' | 'leaf';
+
+/** 卡片层级（决定圆角/描边/配色变体）—— 与 VisualRank 同域，旧调用方传 'branch' | 'leaf' 行为不变 */
+export type CardLevel = VisualRank;
+
+/** depth → 视觉档（唯一映射出口：NodeG / MapView / Canvas scene / 导出同源） */
+export function visualRankOf(depth: number): VisualRank {
+  return depth === 0 ? 'root' : depth >= 2 ? 'leaf' : 'branch';
+}
+
+/**
+ * 视觉档 → 字号/字重（唯一出口）。
+ *
+ * NodeG / OverlayEditor / Canvas scene / 导出 / 度量侧只许走本函数 —— 这条「同源」纪律
+ * 是「看起来大、点不中」的防线：任何按 depth 自行分档的字体读取都会与另一处漂移。
+ *
+ * 旧主题缺 `sizeRoot` / `weightLeaf` 时回退（size + 2 / weight）—— 不得崩。
+ */
+export function fontOf(token: TokenSet, depth: number): { size: number; weight: number } {
+  return fontForRank(token.font, visualRankOf(depth));
+}
+
+/**
+ * 视觉档 → 字号/字重（令牌 `font` 块口径；`fontOf` 的底层）。
+ *
+ * 度量侧（`createRankedCharMeasure`）与渲染侧共用本函数：字体块是布局能拿到的唯一字体事实，
+ * 分档算式放这里，禁止在 domMeasure / 组件里再抄一份「root 用 sizeRoot，leaf 用 sizeLeaf」。
+ */
+export function fontForRank(
+  font: TokenSet['font'],
+  rank: VisualRank,
+): { size: number; weight: number } {
+  if (rank === 'root') return { size: font.sizeRoot ?? font.size + 2, weight: font.weightRoot };
+  if (rank === 'leaf') return { size: font.sizeLeaf, weight: font.weightLeaf ?? font.weight };
+  return { size: font.size, weight: font.weight };
+}
 
 /** 节点卡片视觉结论（渲染器只读消费） */
 export interface NodeCardStyle {
@@ -56,10 +94,13 @@ export function computeBranchIndex(layoutNodes: readonly LayoutNode[]): Map<stri
 }
 
 /**
- * 节点卡片样式（全令牌驱动）：
- * - 实体节点 → entityFill / KIND_META 语义色描边（跨主题一致，仅令牌基座）
- * - 叶节点 → 分支 leaf 变体（classic）或主题 leafDefault（sticker/glass）
- * - 其余 → 分支色板对应色
+ * 节点卡片样式（全令牌驱动，按视觉档三档）：
+ * - 实体节点 → entityFill / KIND_META 语义色描边（跨主题一致，仅令牌基座；不参与深度阶梯）
+ * - root（depth 0）→ 分支 root 变体（同支深色描边）或主题 rootDefault（glass：更不透明卡）
+ * - leaf（depth ≥ 2）→ 分支 leaf 变体（classic）或主题 leafDefault（sticker/glass）
+ * - branch（depth 1）→ 分支色板对应色（今日视觉，不变）
+ *
+ * 描边宽阶梯（DEPTH-VIS-1）：strokeWidthRoot ≥ strokeWidth ≥ strokeWidthLeaf —— 父先于子。
  */
 export function nodeCardStyle(
   token: TokenSet,
@@ -67,7 +108,6 @@ export function nodeCardStyle(
   level: CardLevel,
   entityKind?: string | null,
 ): NodeCardStyle {
-  const isLeaf = level === 'leaf';
   if (entityKind) {
     const kindColor = KIND_META[entityKind]?.color ?? KIND_FALLBACK_COLOR;
     return {
@@ -79,14 +119,22 @@ export function nodeCardStyle(
       filter: token.nodeStyle.shadow === 'none' ? 'none' : token.nodeStyle.shadow,
     };
   }
+  const branchStyle = palette ?? token.color.branches[0]!;
   const leafStyle = palette?.leaf ?? token.color.leafDefault;
-  const s = isLeaf ? leafStyle : (palette ?? token.color.branches[0]!);
+  const rootStyle = palette?.root ?? token.color.rootDefault ?? branchStyle;
+  const s =
+    level === 'leaf' ? leafStyle : level === 'root' ? rootStyle : branchStyle;
   return {
     fill: s.fill,
     stroke: s.stroke,
-    strokeWidth: isLeaf ? token.nodeStyle.strokeWidthLeaf : token.nodeStyle.strokeWidth,
+    strokeWidth:
+      level === 'leaf'
+        ? token.nodeStyle.strokeWidthLeaf
+        : level === 'root'
+          ? (token.nodeStyle.strokeWidthRoot ?? token.nodeStyle.strokeWidth)
+          : token.nodeStyle.strokeWidth,
     text: s.text,
-    radius: isLeaf ? token.radius.leaf : token.radius.node,
+    radius: level === 'leaf' ? token.radius.leaf : token.radius.node,
     filter: token.nodeStyle.shadow,
   };
 }
@@ -346,15 +394,34 @@ export type LodLevel = 'full' | 'detail' | 'skeleton';
 /** LOD 自动降级阈值（T8 降级策略 L1）：节点数超过 → detail/skeleton 阈值提前（激进 LOD） */
 export const LOD_AUTO_NODES = 5000;
 
-export function lodFor(k: number, nodeCount?: number): LodLevel {
+/** full 档进入阈值（k ≥ 本值 → 全量细节） */
+export const LOD_FULL_K = 0.5;
+/** detail 档进入阈值（非大图：k ≥ 本值 → detail） */
+export const LOD_DETAIL_K = 0.26;
+/** 大图（> LOD_AUTO_NODES）的 detail 阈值（更早 skeleton） */
+export const LOD_DETAIL_K_BIG = 0.4;
+/**
+ * 滞回带宽（DEPTH-VIS-1 后续 · k 压线抖动修复）：
+ * **已在某档时**，退出该档要再多降 ε —— 进出档用不同阈值，防 fit/缩放停在 0.5、0.26 附近时
+ * 文字随 ±0.001 的 k 抖动反复进出（用户可见的密叶文字闪烁）。纯函数：由调用方回传上一档。
+ */
+export const LOD_HYSTERESIS = 0.02;
+
+/**
+ * 当前 LOD 档（zoom 为主 + 节点数修饰）。
+ *
+ * @param prev 上一帧档位（可选）：给了才启用滞回——已在该档时按「阈值 − ε」判定，
+ *             升档仍需达到原阈值。缺省（老调用方）= 逐值等于旧行为。
+ */
+export function lodFor(k: number, nodeCount?: number, prev?: LodLevel | null): LodLevel {
+  const eps = (level: LodLevel): number => (prev === level ? LOD_HYSTERESIS : 0);
   // 近距离（k>=0.5）始终全量细节——大图降级只影响远距档位，不牺牲眼前阅读
-  if (k >= 0.5) return 'full';
+  if (k >= LOD_FULL_K - eps('full')) return 'full';
   // 大图自动降级（A2/L1）：detail 阈值从 0.26 提高到 0.4 → skeleton 覆盖 [0,0.4)，更早省文本
   if (nodeCount !== undefined && nodeCount > LOD_AUTO_NODES) {
-    return k >= 0.4 ? 'detail' : 'skeleton';
+    return k >= LOD_DETAIL_K_BIG - eps('detail') ? 'detail' : 'skeleton';
   }
-  if (k >= 0.26) return 'detail';
-  return 'skeleton';
+  return k >= LOD_DETAIL_K - eps('detail') ? 'detail' : 'skeleton';
 }
 
 /** 文本是否被 LOD 省略 */

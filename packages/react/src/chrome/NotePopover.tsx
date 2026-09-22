@@ -24,57 +24,50 @@ import type { EditableNode } from '@mindcanvas/kernel';
 import { preferredLinkAnchor } from '../edit/textLinks.js';
 import { CHROME } from '../theme/tokens.js';
 import type { TokenSet } from '../theme/types.js';
+import { useCompositionCommitGuard } from '../edit/compositionGuard.js';
+import { useDraftSession } from '../edit/draftSessions.js';
 import { collectNodeChoices } from './edgeEditorShared.js';
 import { EdgeAnchorPicker } from './EdgeAnchorPicker.js';
+import {
+  EMBEDDED_NOTE_MIN_H,
+  EMBEDDED_NOTE_MIN_W,
+  EDITING_NOTE_MAX_H,
+  EDITING_NOTE_MIN_H,
+  EDITING_NOTE_MIN_W,
+  FLOATING_NOTE_GAP,
+  FLOATING_NOTE_MARGIN,
+  FLOATING_NOTE_MAX_H,
+  FLOATING_NOTE_MIN_W,
+  FLOATING_NOTE_W,
+  MIN_KNOWN_VIEWPORT,
+  NOTE_FONT_MAX,
+  REGION_MAX_H,
+  estimateFloatingNoteHeight,
+  floatingNoteWidth,
+  noteFontSizeOf,
+} from './noteSizing.js';
 import { MdEditButton, NoteBody } from './NoteBackEditor.js';
 import { QaEditor } from './QaEditor.js';
 import { TextLinkSpans } from './TextLinkSpans.js';
 
-/** 单个区域的最大高度（超出内部滚动，浮窗整体不被撑爆） */
-const REGION_MAX_H = 160;
-
-/** 节点宽度未知时的兜底宽度（屏幕 px） */
-export const FLOATING_NOTE_W = 260;
-/**
- * 悬浮预览的最小宽度：宽度**对齐节点**，只有节点窄到装不下文字时才兜到这里。
- * 再窄中文会一字一行，等同于被"压成细条"。
- */
-export const FLOATING_NOTE_MIN_W = 120;
-/** 悬浮预览与视口边缘的安全间距 */
-export const FLOATING_NOTE_MARGIN = 10;
-/** 悬浮预览与节点之间的间距 */
-export const FLOATING_NOTE_GAP = 8;
-/** 悬浮预览整体高度上限（超出内部滚动，不遮全屏） */
-export const FLOATING_NOTE_MAX_H = 320;
-/** 视口尺寸可信下限：小于它视为"尚未观测"，不做边界钳制/翻转 */
-const MIN_KNOWN_VIEWPORT = 50;
-/** 嵌入卡片的最小基线宽/高（世界 px）—— 极小缩放下防止渲染溃缩成一条线 */
-export const EMBEDDED_NOTE_MIN_W = 120;
-export const EMBEDDED_NOTE_MIN_H = 72;
-/**
- * note 正文字号上限（= chrome 小字号）—— 笔记是节点的附注，视觉上不能盖过节点正文。
- */
-export const NOTE_FONT_MAX = CHROME.fontSizeSmall;
-/**
- * note 正文字号下限（可读底线）。
- *
- * 字号取 min(上限, 所属节点字号)；但小缩放下节点自身在屏幕上只有几 px（本来就已不可读），
- * 此时若严格跟随就没人看得清笔记 —— 兜到这个下限。也就是说：
- * 只有在「节点字号本身已经小到读不了」时，笔记字号才会反过来大于节点字号。
- */
-export const NOTE_FONT_MIN = 9;
-/**
- * 编辑态浮窗最小高度：**先给足空间再键入**（与 DescBlock 的 DESC_EDIT_MIN_LINES
- * 同一交互纪律）——矮面板里打两行就看不见自己在写什么。
- */
-export const EDITING_NOTE_MIN_H = 300;
-/** 编辑态浮窗高度上限（视口再大也不遮全屏，超出由区域内部滚动） */
-export const EDITING_NOTE_MAX_H = 460;
-/**
- * 编辑态浮窗最小宽度：宽度平时对齐节点，但节点太窄时（比如 120px 的叶子）
- * 编辑框里连半句话都放不下 —— 编辑是可用性优先的场景，兜到这个宽度。
- */
-export const EDITING_NOTE_MIN_W = 320;
+// 尺寸/字号口径（纯函数 + 常量）已抽到 noteSizing：这里**原样再导出**，外部导入路径不变
+export {
+  EDITING_NOTE_MAX_H,
+  EDITING_NOTE_MIN_H,
+  EDITING_NOTE_MIN_W,
+  EMBEDDED_NOTE_MIN_H,
+  EMBEDDED_NOTE_MIN_W,
+  FLOATING_NOTE_GAP,
+  FLOATING_NOTE_MARGIN,
+  FLOATING_NOTE_MAX_H,
+  FLOATING_NOTE_MIN_W,
+  FLOATING_NOTE_W,
+  NOTE_FONT_MAX,
+  NOTE_FONT_MIN,
+  estimateFloatingNoteHeight,
+  floatingNoteWidth,
+  noteFontSizeOf,
+} from './noteSizing.js';
 /** 编辑态正文输入框的最小高度 */
 const EDITING_TEXTAREA_MIN_H = 110;
 
@@ -134,42 +127,6 @@ export interface NotePopoverProps {
   onFlipChange?: (next: boolean) => void;
   /** P2：背面源文提交（失焦 / Shift+Enter 上抛原文；空文本 → 删 md 键由写回链映射） */
   onChangeMd?: (md: string) => void;
-}
-
-/**
- * 悬浮预览宽度：**与节点长度对齐**（`nodeWidth` = 节点屏幕宽），
- * 只有节点窄到装不下内容时才兜到 `FLOATING_NOTE_MIN_W`；最后不超出视口。
- *
- * 不固定 260 的原因：固定值会让窄节点的浮窗明显比节点宽一大截，视觉上"飘"在节点外。
- */
-export function floatingNoteWidth(nodeWidth: number, viewportW: number): number {
-  const base = nodeWidth > 0 ? nodeWidth : FLOATING_NOTE_W;
-  const w = Math.max(base, FLOATING_NOTE_MIN_W);
-  if (viewportW > MIN_KNOWN_VIEWPORT) {
-    return Math.max(FLOATING_NOTE_MIN_W, Math.min(w, viewportW - FLOATING_NOTE_MARGIN * 2));
-  }
-  return w;
-}
-
-/** 笔记字号：不大于所属节点字号，但不低于可读底线 */
-export function noteFontSizeOf(nodeFontSize: number | undefined): number {
-  if (nodeFontSize === undefined || !Number.isFinite(nodeFontSize)) return NOTE_FONT_MAX;
-  return Math.min(NOTE_FONT_MAX, Math.max(NOTE_FONT_MIN, nodeFontSize));
-}
-
-/**
- * 悬浮浮窗的内容高度估算（翻转判定的输入；不要求精确，够做方向决策即可）。
- */
-export function estimateFloatingNoteHeight(
-  seq: readonly string[],
-  text: string,
-  width: number,
-): number {
-  const charsPerLine = Math.max(8, Math.floor(width / 12));
-  const textLines = Math.max(1, Math.ceil(text.length / charsPerLine));
-  const seqH = seq.length === 0 ? 0 : Math.min(REGION_MAX_H, 22 + seq.length * 22);
-  const textH = Math.min(REGION_MAX_H, 22 + textLines * 20);
-  return Math.min(FLOATING_NOTE_MAX_H, 40 + seqH + (seqH > 0 ? 8 : 0) + textH);
 }
 
 export function NotePopover({
@@ -270,13 +227,34 @@ export function NotePopover({
     taRef.current?.focus();
   }, [editing, floating]);
 
+  // MG-R1-B：组合未结束时不得提交未确认候选串；结束用确认文字补提交
+  const { onCompositionStart, onCompositionEnd, allowCommit } = useCompositionCommitGuard(
+    (next) => {
+      if (next !== text) onChangeText(next);
+    },
+  );
+
   // 简化正文编辑：textarea 非受控（defaultValue），失焦时把 DOM 当前值与 prop.text 对比
   // —— 有差异才回传。这样 props 变化不会重建 textarea 实例，焦点不丢，
   // 也不会出现 props.text 与正在输入的内容打架的情况。
   const onTextBlur = (): void => {
+    if (!allowCommit()) return;
     const cur = taRef.current?.value ?? text;
     if (cur !== text) onChangeText(cur);
   };
+
+  // MG-R4：正文草稿的 pending/flush 通道（DOM 无控件可 blur 时——例如面板卸载前——
+  // 也能被离开路径提交、被 beforeunload 检出）
+  useDraftSession(() => ({
+    hasPending: () => {
+      const ta = taRef.current;
+      return ta !== null && ta.value !== text;
+    },
+    commit: () => {
+      const cur = taRef.current?.value ?? text;
+      if (cur !== text) onChangeText(cur);
+    },
+  }));
 
   // ---- 屏幕空间定位（floating）：固定宽 + 边界钳制 + 空间不足时翻转到节点上方 ----
   // 视口尺寸尚未观测到（首帧 / 容器隐藏，ViewportController 初值 1）时按"未知"处理：
@@ -461,6 +439,8 @@ export function NotePopover({
           ref={taRef}
           defaultValue={text}
           placeholder="整段说明…"
+          onCompositionStart={onCompositionStart}
+          onCompositionEnd={(e) => onCompositionEnd(e.currentTarget.value)}
           onBlur={onTextBlur}
           onKeyDown={(e) => e.stopPropagation()}
           style={{

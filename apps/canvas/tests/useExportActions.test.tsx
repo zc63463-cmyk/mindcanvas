@@ -165,4 +165,74 @@ describe('useExportActions · deps 完整性（B-P9）', () => {
       expect.objectContaining({ boundaryLinks: blB }),
     );
   });
+
+  /**
+   * S4-R2：`root` 换代后导出必须用**新** root。
+   *
+   * 为什么补这条：R2 的修复是给 `handleExportPng` 的 deps 补上 `root`
+   * （S4 提交 327a754 当时只补了 `handleExport`）。但本文件原有的用例都用
+   * `renderHook` **只渲染一次、root 全程不变**，因此「deps 漏 root」的缺陷存在时
+   * 它们**照样全绿** —— 即该修复没有任何 committed 测试钉住
+   * （S4-R2 独立复核 finding，severity medium）。
+   *
+   * 本用例用 `rerender` 换 root（其余 props 引用不变），断言两个导出函数都收到新值：
+   * **把 `root` 从 handleExportPng 的 deps 里去掉即红**（会收到旧的 rootA）。
+   */
+  it('root 换代后 handleExport / handleExportPng 均使用新 root（缺 root 依赖即红）', async () => {
+    const layout = {} as NonNullable<Deps['layout']>;
+    const token = {} as Deps['token'];
+    const onNotice = vi.fn<(m: string) => void>();
+    const rootA = { id: 'A' } as NonNullable<Deps['root']>;
+    const rootB = { id: 'B' } as NonNullable<Deps['root']>;
+    vi.mocked(exportPng).mockResolvedValue({ ok: true, blob: new Blob() });
+
+    const { result, rerender } = renderHook(
+      ({ r }: { r: Deps['root'] }) =>
+        useExportActions({ layout, token, docName: '画布.mm.md', root: r, onNotice }),
+      { initialProps: { r: rootA } },
+    );
+
+    await act(async () => {
+      result.current.handleExport();
+    });
+    await act(async () => {
+      await result.current.handleExportPng();
+    });
+    expect(vi.mocked(exportSvg)).toHaveBeenLastCalledWith(
+      layout,
+      token,
+      expect.objectContaining({ root: rootA }),
+    );
+    expect(vi.mocked(exportPng)).toHaveBeenLastCalledWith(
+      layout,
+      token,
+      expect.objectContaining({ root: rootA }),
+    );
+
+    rerender({ r: rootB }); // 只换 root，其余 props 引用不变
+
+    await act(async () => {
+      result.current.handleExport();
+    });
+    expect(vi.mocked(exportSvg)).toHaveBeenLastCalledWith(
+      layout,
+      token,
+      expect.objectContaining({ root: rootB }),
+    );
+
+    await act(async () => {
+      await result.current.handleExportPng();
+    });
+    // 修复前：handleExportPng 的回调被 memo 在旧闭包上 → 这里会收到 rootA（红）
+    expect(vi.mocked(exportPng)).toHaveBeenLastCalledWith(
+      layout,
+      token,
+      expect.objectContaining({ root: rootB }),
+    );
+    expect(vi.mocked(exportSvg)).toHaveBeenLastCalledWith(
+      layout,
+      token,
+      expect.objectContaining({ root: rootB }),
+    );
+  });
 });

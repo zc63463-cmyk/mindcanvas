@@ -22,6 +22,12 @@ function fakeCtx(): Ctx2D & { calls: string[] } {
     translate: record('translate'),
     scale: record('scale'),
     beginPath: record('beginPath'),
+    // DF-R4：连线/箭头落笔需要的路径几何指令（与场景构造器输出的 M/L/Q/C/Z 一一对应）
+    moveTo: record('moveTo'),
+    lineTo: record('lineTo'),
+    quadraticCurveTo: record('quadraticCurveTo'),
+    bezierCurveTo: record('bezierCurveTo'),
+    closePath: record('closePath'),
     roundRect: record('roundRect'),
     fill: record('fill'),
     stroke: record('stroke'),
@@ -114,5 +120,59 @@ describe('CanvasBackend（R4：T8 L3 骨架）', () => {
     expect(el.type).toBe(CanvasSurface);
     expect(el.props.width).toBe(640);
     expect(el.props.height).toBe(480);
+  });
+
+  /**
+   * DF-R4：连线/箭头必须**落笔**。
+   *
+   * 修复前 `tracePath` 只对 `M` 调 `beginPath()`，不产出任何几何指令 → `stroke()` 画空路径，
+   * Canvas 后端（`?backend=canvas` 或布局节点数 > 50000 的自动降级）看不到树线。
+   * 下面用**场景构造器真实产出的格式**（含逗号分隔与箭头 Z）钉住解析结果。
+   */
+  it('path 原语 → 真实几何指令（M/L 逐点下发）', () => {
+    const ctx = fakeCtx();
+    drawScene(ctx, { type: 'path', d: 'M 10 10 L 80 80', stroke: '#f00', strokeWidth: 2 });
+    expect(ctx.calls).toEqual(['save', 'beginPath', 'moveTo(10,10)', 'lineTo(80,80)', 'stroke', 'restore']);
+  });
+
+  it('path 原语 → 二次/三次贝塞尔（`bezierPath`/`orthogonalPath` 的「坐标, 坐标」逗号格式）', () => {
+    const quad = fakeCtx();
+    drawScene(quad, { type: 'path', d: 'M 0 0 L 5 0 Q 10 0, 10 5 L 10 20', stroke: '#f00', strokeWidth: 2 });
+    expect(quad.calls).toContain('quadraticCurveTo(10,0,10,5)');
+    expect(quad.calls).toContain('lineTo(10,20)');
+
+    const cubic = fakeCtx();
+    drawScene(cubic, {
+      type: 'path',
+      d: 'M 1 2 C 20 30, 60 70, 80 80',
+      stroke: '#f00',
+      strokeWidth: 2,
+    });
+    expect(cubic.calls).toContain('bezierCurveTo(20,30,60,70,80,80)');
+    expect(cubic.calls).toContain('moveTo(1,2)');
+  });
+
+  it('path 原语 → 箭头三角 Z 闭合、负坐标不丢；tipD 一并落笔', () => {
+    const arrow = fakeCtx();
+    drawScene(arrow, {
+      type: 'path',
+      d: 'M 0 0 L 100 100',
+      stroke: '#f00',
+      strokeWidth: 1,
+      tipD: 'M 100 100 L 92 96 L 92 104 Z',
+    });
+    expect(arrow.calls).toContain('closePath');
+    expect(arrow.calls).toContain('lineTo(92,96)');
+    expect(arrow.calls).toContain('lineTo(92,104)');
+    // tipD 走独立 beginPath：整段序列里恰有两次 beginPath（主线 + 箭头）
+    expect(arrow.calls.filter((c) => c === 'beginPath').length).toBe(2);
+  });
+
+  it('path 原语：未知指令不落笔也不抛错（有界解析）', () => {
+    const ctx = fakeCtx();
+    expect(() =>
+      drawScene(ctx, { type: 'path', d: 'M 1 2 A 5 5 0 0 1 9 9', stroke: '#f00', strokeWidth: 1 }),
+    ).not.toThrow();
+    expect(ctx.calls).toEqual(['save', 'beginPath', 'moveTo(1,2)', 'stroke', 'restore']);
   });
 });

@@ -7,6 +7,7 @@ import { memo, useEffect, useState } from 'react';
 import type { DisplayMetrics, LayoutNode } from '@mindcanvas/kernel';
 import type { TokenSet } from '../theme/types.js';
 import type { NodeCardStyle } from './geometry.js';
+import { fontOf } from './geometry.js';
 import type { AnimatedBox } from './transition.js';
 import { resolveNodeIcon } from './nodeIcon.js';
 import { sanitizeInlineSvg, tintSvgToCurrentColor } from './svgTint.js';
@@ -87,9 +88,8 @@ function NodeGImpl({
   dragTarget,
 }: NodeGProps) {
   const b = node.box;
-  const leaf = depth >= 2;
-  const fontSize = leaf ? token.font.sizeLeaf : token.font.size;
-  const fontWeight = root ? token.font.weightRoot : token.font.weight;
+  // 字号/字重按视觉档走唯一出口（DEPTH-VIS-1）：根 > 一级 > 叶；与度量/编辑浮层同源
+  const { size: fontSize, weight: fontWeight } = fontOf(token, depth);
   const lines = metrics.lines;
   // 有附属区时 rect 只画本体高，其余留给附属区（注释区 / 浮出描述块）
   const bodyH = bodyHeight != null ? bodyHeight : b.h;
@@ -265,7 +265,7 @@ function NodeGImpl({
               x={chipX ?? 12}
               y={textTop + LINE_H / 2}
               fontSize={fontSize}
-              fontWeight={token.font.weightRoot}
+              fontWeight={fontWeight}
               fill={metrics.kindColor}
               dominantBaseline="central"
             >

@@ -7,6 +7,112 @@
 > （09-05~09-06）与「图引擎适配 / 文件工作台」（09-10）等批次未单独标号，
 > 按完成时间归入对应段落末尾的「同批」小节。
 
+## [未发布 · 待版本号] — 2026-09-22 · 摘要节点（XMind 式概要）S1–S5
+
+> **版本状态（如实）**：本段是在制批次，**尚未发版**——`@mindcanvas/kernel` / `@mindcanvas/react`
+> 版本号仍为 **1.7.0**（`apps/canvas` 亦然），根 `package.json` 为 `0.0.0`。
+> 号位按仓内既有惯例留作 **v1.12 候选**（`docs/specs/2026-09-02-mm-md-protocol.md` §6.5 /
+> §十二 版本历史同措辞）；发布批次统一编号。**本段记到 S5**：S5 首版（09-21）被独立复核判
+> REJECT（neg3-rootbox 阴性对照证据失实 + S5 文档缺失两项阻断），S5-R2 返修（09-22）重做
+> 该对照（Mac 实测真实转红）并补齐文档后收口，待独立复核。
+
+**本批含五组**（S1 数据层 / S2 创建事务与交互 / S3 布局卫星 / S4 括线渲染与导出 /
+S5 收尾验证与文档收口）。
+S4 的完整回执与证据在 `docs/dispatch/2026-09-21-summary-node-s4-report.md` 与
+`outputs/summary-node/S4/S4-20260921-160000/`；S5 评审报告在
+`docs/dispatch/2026-09-21-summary-node-s5-report.md`（判 REJECT）；S5-R2 返修回执与证据在
+`docs/dispatch/2026-09-22-summary-node-s5-r2-report.md` 与
+`outputs/summary-node/S5-R2/S5-R2-20260922-142654/`。
+
+- **数据层（S1）**：新增 `Note.summary_of`（`{ from, to }`，两字段非空、写入一律 `cid:`）；
+  `resolveSummaries` 三态解析（`well-formed` / `dangling` / `stale`，含**同父 + 顺序 +
+  S 不在区间内**校验）+ `W-SUMMARY-DANGLING` 诊断；锚迁移登记进 `cutAttach`
+  （形态 `summary_of.from` / `summary_of.to`）。
+- **创建事务与两跳交互（S2）**：`planCreateSummary` / `createSummary`（校验存在/非根/同父/顺序；
+  `ensureNodeCid` 两端缺失才补；单条 undo）；右键菜单「创建摘要…」入「结构」区（**加法**：
+  `summaryActions` 缺省不渲染）；画布第一跳进 draft、第二跳点选末成员完成（Esc/空白/切文档清草稿）。
+- **布局卫星（S3）**：`buildSatellitePlan` 把 well-formed 摘要**从布局树摘除**为成员带外侧卫星
+  （`LayoutResult.satellites` **加法字段**；卫星子树根同时出现在扁表 → 渲染/命中/选择零改动）；
+  只承诺 `layoutMindmap`（含无 `note.dir` 回退）与 `layoutLogic`（森林左/右岛）两条路径，
+  org / 显式 `note.dir` / 框内**留流内降级**（宁可无括线，不让节点消失）；嵌套摘要
+  （成员区间含另一摘要）走 `nestedSkip` 同一出口；森林岛平移与岛内链接随动。
+  导出常量 `SUMMARY_BRACKET_GAP` / `SUMMARY_STEM_GAP` 供渲染层复用（唯一口径）。
+- **括线渲染与导出（S4）**：
+  - `render/summaryFrames.ts`（**纯几何**，零 React/DOM）：`buildSummaryViews` 由
+    `layout.satellites`（唯一的「该不该画」判据）+ `buildSatellitePlan().specs`（成员区间）
+    + 扁表盒 + kernel 常量产出 `{ summaryId, side, memberIds, bracketPath, stem*, memberBand, summaryBox }`。
+    **不重解析** raw `summary_of`、不重跑 `resolveSummaries`；成员**子树**并集为带，左右严格镜像；
+    成员盒/satellite 盒缺失或降级项（dangling/stale/nestedSkip）一律跳过。
+  - `render/SummaryLayer.tsx`：方括号 + stem，线色/线宽取主题 token；
+    挂载在 MapView 变换 `<g>` 内**层序 `sections → island-overview（IO-1 条件层）→ summaries → tree-links → … → nodes`**
+    （括线是树线延伸，必须在节点卡之下）；`pointer-events: none` → **命中/选择逻辑零改动**；
+    稳定锚点 `data-summary-bracket` / `data-summary-stem`。选中摘要 → 成员高亮；
+    选中成员 → 反向显示所属摘要状态（**只读可视化，不写布局数据**）。
+    Canvas 后端**不宣称支持括线**（与 SectionLayer 同边界，不经 SVG 分支即不渲染）。
+  - `chrome/exportSvg.ts`：括线插入**导出实际发射序**「背景 `rect` → 树线 `path` →
+    跨岛补线 `boundaryLinks`（虚线）→ **摘要括线** → 节点卡」。
+    （导出**不画框边界**；且此处括线在树线**之后**，与画布 DOM 层序
+    `sections → summaries → tree-links`（括线在树线**之前**）方向相反 —— 两者是不同契约，见协议 §6.5 对照表。）
+    `root` 为**加法选项**，**不传 = 与 S4 之前逐字等价**（有逐字等价用例钉死）；
+    导出件保留 `data-summary-bracket` / `data-summary-stem`；PNG 经 `exportPng` 透传同口径。
+    产品壳 `useExportActions` 透传 `controller.root`（缺省不传 → 旧调用方零改动）。
+  - 回归：`packages/react/tests/summary-frames.test.ts`（18）、`summary-layer-host.test.tsx`（6，
+    **真挂载生产 MapView**）、`summary-export-svg.test.ts`（10）、
+    `apps/canvas/tests/summary-export-root.test.tsx`（2，宿主 root 透传）、
+    `apps/canvas/tests/prod-build-isolation.test.ts`（2，**产物级**扫 dist 断言
+    `__mindcanvasSummaryHost` / `__MINDCANVAS_TEST_BUILD__` 零命中）。
+    浏览器 `tools/verify-summary.mjs`（创建 / 成员变化 / 左右向 / 三主题 / 三档缩放 / 导出，全绿）。
+  - **negative controls（4 组，S5-R2 Mac 实测退出码 1，红因均为目标断言）**：删 `<SummaryLayer>` 挂载 →
+    宿主括线用例红；摘要层挪到节点层之后 → 层序用例红；成员带改用**成员自身盒** →
+    子树几何用例红（`expected 378 to be greater than or equal to 541.999999`；S5 首轮该组
+    证据失实，已由 S5-R2 重做取代）；删 `satellites` 空早退（改消费 `plan.specs`）→ 降级用例红。
+- **收尾验证与文档收口（S5，首版 REJECT → S5-R2 返修收口）**：
+  - 真浏览器矩阵 106 断言全绿（Windows Chromium：创建两跳 / 成员增删降级 / 左向岛 /
+    降级域 / 导出 SVG+PNG / undo-redo / 重复创建与重建 / 嵌套 / 框内+改名 / dangling-stale /
+    普通文档编辑平移缩放保存 / 三主题 / 三档缩放，证据
+    `outputs/summary-node/S5/S5-20260921-230000/browser/`）；普通文档（无 `summary_of`）在
+    布局 / 编辑 / 平移 / 缩放 / 保存 / 导出六项与 S1 基线**逐字节等价**（三候选两两 cmp IDENTICAL）。
+  - 阴性对照 4 组于 S5-R2 在 Mac 全部重做转红（含变异落盘硬校验 + 备份还原 cmp 逐字节），
+    证据 `outputs/summary-node/S5-R2/S5-R2-20260922-142654/negctl/`；首轮 neg3-rootbox 的
+    「变异不可观测 / 语义等价」结论经同形夹具探针与复跑**证伪并撤回**（成员扁节点携带
+    children，子树并集右沿 542 ≠ 自身盒并集右沿 378）。
+  - 文档收口：协议 §6.5 DOM 层序表补记 `island-overview` 条件层（对齐
+    `mapview-layer-order.test.tsx` 契约）；AI 契约 `summary_of` 补读法已在位
+    （`docs/specs/2026-09-17-mm-md-ai-contract.md`）；S5 收口文档（候选终态 + 证据索引 +
+    未覆盖清单）落盘 `outputs/summary-node/S5-R2/S5-R2-20260922-142654/docs/closeout.md`；
+    本段 CHANGELOG 顺延至 S5。
+  - 工具与忽略规则修正：`tools/verify-summary-supplement.mjs` 的 H/F 横幅描述与自身断言对齐
+    （断言逻辑零改动）；`.gitignore` 补 `!outputs/**/browser/*.log`（browser 证据日志入库通道）。
+  - 其余门禁：kernel 708 / react 1636 / canvas 396 / typecheck / depcruise / lint / budget /
+    targeted 91 / prod-build-isolation 红/绿双向 / root 依赖负控（Windows 冻结基线全绿），
+    S5-R2 于 Mac 复测见 R2 回执 §五；Mac 构建产物 `main-BgdfvXm7.js` 与 Windows 浏览器
+    证据 bundle **sha256 逐字节一致**（159e2d1a…，450702 B），浏览器矩阵证据据此沿用。
+
+## [未发布 · 待交付] — 2026-09-19 · 交付收口（保存生命周期 + MODE-GUARD + 类型门禁 + 债务收口）
+
+> **版本状态（如实）**：本段是在制批次，**尚未发版、未提交**——`@mindcanvas/kernel` / `@mindcanvas/react` 版本号仍为 **1.7.0**（`apps/canvas` 亦然），根 `package.json` 为 `0.0.0`。上方 `[1.12.0]` 同样是**未发布**的号位预留；请勿把本段当作已发布说明。发布时需另起一批：升版本号 + 更新 README 状态 + 打 tag。
+
+**本批含五组**（每组都有真浏览器证据与回归钉；详见 `docs/dispatch/2026-09-18-delivery-close-report.md` 与两份回执，以及深度收尾返修回执 `docs/dispatch/2026-09-19-delivery-close-finish-repair-report.md`）：
+
+- **保存生命周期（包 1）**：慢写窗口不误清新编辑（写出快照按**内容身份**判定，继续编辑则保持 dirty 并续写）；另存为后的排队写入写**新目的地**；`downloaded` 只表示「发起了下载」，不当作已落盘、不自动离开，提示文案不再声称「已写入文件」；`remember` 等附属失败与写盘成功解耦（独立警告渠道）。回归：`apps/canvas/tests/save-lifecycle.test.tsx`、`useAutoSave.test.tsx`、`useDocumentActions.test.tsx`；浏览器 `tools/verify-save-lifecycle.mjs`（PASS）。
+- **MODE-GUARD 离开保护（包 2）**：单实例离开决策器（三选项模态 + 默认非破坏性焦点 + Tab 约束 + 焦点恢复）、单请求互斥（含异步目标期间）、「flush 草稿 → 复核 dirty/saving → 才执行目标」；中文组合输入（IME）**未结束不得提交候选串**（组合跟踪加载即装、编辑器提交边界拒绝并在 `compositionend` 补提交、暂缓期不弹模态/非模态提示 + 自动续跑）；端口注销/替换/决策器卸载使在途请求结算 `false`（迟到回调零副作用）；草稿会话通道覆盖**预览态/隐藏态**草稿；提交**失败**如实上报（`'failed'`）——保留草稿、目标零执行、可修正后重试或显式放弃。回归：`unsaved-transition.test.tsx`、`mode-guard.test.tsx`、`free-canvas-leave.test.tsx`、`leave-entry-matrix.test.tsx`、`note-back-leave.test.tsx`；浏览器 `tools/verify-mode-guard.mjs`（PASS，含 A/B/C/D/E 旅程）。
+- **Canvas 后端连线落笔（DF-R4 最小修复）**：`canvasBackend.tsx` 的 `tracePath` 此前只对 `M` 调 `beginPath()`、不产出任何几何指令，`case 'path'` 对空路径 `stroke()` —— 显式 `?backend=canvas` 或**布局节点总数 > 50000**（`CANVAS_AUTO_NODES`）自动降级时，节点卡与文字正常但**树线/组织图梁线/hub 箭头全不显示**。现按场景构造器实际产出的 `M`/`L`/`Q`/`C`/`Z` 绝对指令做有界解析（空格与逗号分隔都吃；未知/相对指令不落笔也不抛错），`Ctx2D` 相应增补 `moveTo`/`lineTo`/`quadraticCurveTo`/`bezierCurveTo`/`closePath`。回归：`packages/react/tests/canvas-backend.test.tsx`（+4 条，react 1498→1502）+ 浏览器 `tools/verify-release-123.mjs` 的 R5d（墨迹跨度内无整列空白 + 连线细柱）；负控 `neg-canvas-links`（只把路径几何打成空函数）只让 R5d 转红。**未**顺带做 DPR、图片异步缓存或后端重构；含中心/自由边的文档仍由产品壳强制 SVG。
+- **类型门禁补盲区**：新增 `apps/canvas/tsconfig.test.json`（`tsc -p … --noEmit`），canvas `typecheck` 脚本、`.githooks/pre-push` 回退路径与 CI 同时覆盖 `tests/`；实测诊断 **7 → 0**（其中 `no-native-dialogs` 改用 Vite `?raw` glob，不再需要 `@types/node`）；pre-push 回退补齐 **free-canvas** 的类型与测试（四子项目集合与 `pnpm gate` 一致）。
+- **债务收口（budget 回到全绿）**：`asCast 32 → 31`（`domMeasure` 用 `WeakMap<EditableNode, DisplayMetrics>` 取代 `as WeakMap<…, never>` 断言）；超 600 行生产文件 **6 → 4**——`mindmap.ts` 631 → **499**（连线几何抽到 `layout/linkGeometry.ts`，原符号**再导出**、导入路径不变）、`frameLayout.ts` 983 → **424**（按职责拆出 `frameHangGeometry.ts` / `frameIslandGeometry.ts` / `frameTreeGeometry.ts`；框语义、四向镜像、baseDepth 透传、布局缓存键与既有导出面均不变）。`pnpm budget` 退出码 **0**（`asCast 31/31`、`bigFiles 4/4`，其余持平或更优）。
+- **验收基础设施强化（深度收尾 · 仅工具与夹具，该批产品源码零改动）**：① 写盘替身改为**账本**（`tools/lib/releaseAcceptance.mjs` 的 `createWriteLedger`：`write()` 只记 pending、`close()` 成功才入 committed，失败/未完成不可读），注入浏览器用同一份函数源码，并在启动前做 Node 端自检；显式保存改为**等待本次新的已完成写入**（不再靠 `writes.length>=1` 或历史「已保存」文本）。② **运行输入冻结清单**：`--inputs=` 逐项复算脚本/依赖/夹具/产物入口 bundle，不一致即 `exit 3` 并停止该运行（篡改副本已实测 3）。③ 行为负控改为**扰动独立副本 / 运行期省略动作**，不再改动期望值（6 个负控各自只让预定 caseId 转红）：`neg-undoredo`→R1e、`neg-stalejson`→R6d/R6f、`neg-canvas`→R5a/R5b、`neg-endpoints`→R3d（扰动夹具副本的边端点）、`neg-theme`→R2d（扰动导出 SVG 副本的字号）、`neg-canvas-links`→R5d（只把路径几何打成空函数）。④ 夹具 `apps/canvas/tests/fixtures/release-123-nested.mm.md`（框内成框）与对应检查（GEO-FRAME 行/壳几何、嵌套双壳、LOD **两档滞回带**真实 wheel 旅程 + **手势窗口冻结**、Canvas 逐墨迹带绘制 + 坐标命中身份、导出 PNG 逐节点区域有效内容、**句柄身份**跨夹具切换与延迟 close 不串档）。⑤ **完整候选清单**（`fullCandidateList`：`git ls-files` ∪ 未跟踪未忽略，含点目录与删除项；`verifyFullCandidate` 逐项复算）。⑥ **文件目的地三层身份**（DF-R5）：写盘替身此前只有 `md:<夹具来源>` 一个存储键，**「另存为」的新文件与已打开文件共用身份** —— 写 B 之后经 A 也读出 B 的内容。现拆为「夹具来源 / 目的地 id（打开 = `open:<夹具来源>:<名>`、另存为 = `save:<名>`）/ 句柄对象」三层：两个不同 Markdown 文件必得两个身份，**同名但来源不同也不合并**，同一份文件换 handle 重开读回同一 committed（不再每次 picker 造空文件）；`close()` 失败不记账、pending 不可读等既有契约不变。回归：浏览器 R7 旅程（真实 UI 点「另存为」）+ 7 个行为负控（新增 `neg-saveas-share` 只让另存为目的地塌回打开文件身份 → 只 R7 家族转红）。该轮**只改验收工具与文档，产品源码逐字未动**。
+
+## [1.12.0] — 2026-09-18 · 深度视觉阶梯（DEPTH-VIS-1）+ 档位度量收口（MEASURE-RANK）
+
+**触发**：岛内树父子同款描边/字号/填色 → 扫读时密叶与一级分支抢注意力（**抓叶漏骨**；用户信息链路默认「父 → 子」）。设计 `docs/specs/2026-09-18-depth-visual-hierarchy-design.md`（V1–V7 口径 / §4 锁定数值）；外派 `docs/dispatch/2026-09-18-depth-visual-hierarchy-dispatch-prompt.md`。本段含**两批**：DEPTH-VIS-1（视觉阶梯）与 MEASURE-RANK（阶梯引出的度量同源收口）。
+
+- **DEPTH-VIS-1 · 三档视觉档**：`render/geometry.ts` 新增 `VisualRank = 'root' | 'branch' | 'leaf'`（`depth===0 / ===1 / ≥2`，**不改**「有子才算父」与 branchIndex）+ 唯一出口 `visualRankOf` / `fontOf` / `fontForRank`；`CardLevel` 扩为同域（旧传 `'branch'|'leaf'` 零改动）。三主题 token 按 §4 锁定值填数（classic 13/12/9·700/600/500·描边 1.8/1.4/1.0；sticker 14/13/10·700/600/500·1.8/1.2/1.0；glass 13/12/9·650/550/450·1.6/1.0/0.7；新键 `font.sizeRoot?` `font.weightLeaf?` `nodeStyle.strokeWidthRoot?` `color.rootDefault?` `BranchColor.root?` 全可选，缺省回退旧行为）。`nodeCardStyle` 三档：root = 分支 `root` 变体（classic/sticker 取**同支深色**作描边；glass 走 `rootDefault` fill .10/边 .34/主文字色）→ branch 原样 → leaf 再弱一档（glass leafDefault .08/.35/霓虹 → **.04/.16/#98a2b3**）。接线：`NodeG`（字号字重 + kind chip 同档）、`OverlayEditor`（编辑框与节点卡同档）、`MapView`（rank 进 styleKey 缓存键）、`sceneBuilder`（Canvas 同源）、`exportSvg`（导出即所见）。
+- **MEASURE-RANK · 度量随档位**（ADR-0004 **minor**：只新增可选参数，不改既有签名）：`MeasureFn` 增可选第二参 `(node, depth?)`——布局把自己即将写入 `LayoutNode.depth` 的深度交给度量方，`(node) => …` 旧实现与旧调用方零改动。kernel 逐层传深度：`layoutMindmap`（含 `subtreeHeightOf`）/ `layoutMindmapBranched` 骨架 / `buildSkeletonCached`（logic·org）/ `buildLayoutTree`（timeline·fishbone）/ `createFrameShellMeasure` 穿透 + `subtreeMainExtent`·`subtreeCrossExtent`·挂点 / `layoutForest` 新增 `measureDepthBase`（框挂出岛以**文档绝对深度**参与档位，岛条目键含 `depthBase`）；`LayoutCache.heightsByDepth`（节点身份 × 深度**双键**——拖拽改层级时不得命中旧高度；旧 `heights` 字段保留仅为兼容）。react：`createRankedCharMeasure(token.font)` 产出三档字符度量、`createNodeMeasure` / `createDisplayMetricsFn` 增可选 `charOf`（缓存按档位度量实例隔离）、`MapView` 增 `charOf` prop（展示度量与布局同源）、`layoutDemo` 增 `charOf` 参且 desc/expand/fixedNote 装饰器逐层透传 depth。canvas：`MindmapStage` 建 `charOf` 同时喂 `layoutDemo` 与 `MapView`，`measureKey` 纳入分档字号全量（`sizeRoot/sizeLeaf/三档字重`）。
+- **LOD 滞回**：`lodFor(k, nodeCount?, prev?)` 增可选 `prev`（回传上一帧档位）——已在某档时按「阈值 − `LOD_HYSTERESIS`」退出，防 fit k 停在 0.5 / 0.26 附近时密叶文字随 ±0.001 抖动反复进出；不传 `prev` 逐值等于旧行为。`MapView` 接线（手势冻结逻辑不变）。
+- **效果**：叶盒不再按 branch 字号量（白边约 25% 的根源），整体布局收紧 → fit k 回升、LOD 文字更晚被省。实证：`apps/canvas` 的 jsdom 视口桩（960×720）在 DEPTH-VIS-1 期间算出 k=0.4938（**恰好压线**掉进 detail），MEASURE-RANK 后回到 full 档——该测试设施临时改动已**完全复原**（`git diff apps/` 仅剩 MindmapStage 接线）。
+- **测试**：kernel `tests/measure-depth.test.ts`（+8：逐层深度、折叠口径、旧式单参零改动、框壳穿透、挂出岛绝对深度、`heightsByDepth` 双键）；react `tests/ranked-measure.test.ts`（+6：三档字符度量、实例缓存、缺省 `sizeRoot` 回退、三主题盒阶梯、缺省 charOf = 旧行为、叶盒等价性）+ `tests/lod-auto.test.ts`（+4 滞回）+ `tests/visual-rank.test.ts` / `tests/node-card-style.test.tsx`（DEPTH-VIS-1 期新增）；`tests/geometry.test.ts` 同步 glass 叶档期望值。
+- **验收**：kernel **622**（+8）/ react **1494**（+10）/ canvas **245** 全绿；tsc ×3 零错误；未 push。
+- **非目标 / 待跟进**：① 实体卡（`KIND_META`）不参与阶梯（仍 `strokeWidth` + 语义色）；② `DescBlock` 描述区**宽度估算**仍用 branch 字符度量（行高恒 `DESC_LINE_H` 不随档，防 measure 错位）；③ `FrameOutline` 行内样式与 `scripts/theme-snapshot.mjs`（仍自带 depth 分支，主题预览快照未重生）未对齐；④ 岛/框内布局以**岛根/框根为 0** 计深度（与 `LayoutNode.depth` 同源，等升格中心仍是 root 档）。
+
 ## [1.11.0] — 2026-09-17 · 共享梁双把手（trunk / rail 分流：`note.beamAt`）
 
 **触发**：用户摩擦「拖共享梁抬高时，子节点短桩与梁 **1:1 齐步走**」——直觉要拉长「父 → 梁」的主干，实现却在改整段层距（子组被推开）。设计 `docs/specs/2026-09-17-beam-dual-handle-design.md`（方案 C：一根梁两个把手）；外派 `docs/dispatch/2026-09-17-beam-dual-handle-prompt.md`。三提交：B1 `ea18c74` → B2 `d284890` → B3 本提交（不 push）。

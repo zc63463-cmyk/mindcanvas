@@ -485,7 +485,7 @@ describe('文件工作台 · 预设目录与分类 Tab 与星标', () => {
     await waitFor(() => {
       const flatDocs = container.querySelectorAll('[data-flat-doc]');
       expect(flatDocs.length).toBe(1);
-      expect(flatDocs[0].textContent).toContain('a.mm.md');
+      expect(flatDocs[0]?.textContent).toContain('a.mm.md');
     });
   });
 });

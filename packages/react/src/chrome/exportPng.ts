@@ -6,7 +6,7 @@
  * - 'unsupported'：无 canvas 2d（测试环境 / 旧浏览器）或 toBlob 返回空
  * 调用方降级：回落下载 SVG + 提示。
  */
-import type { LayoutResult } from '@mindcanvas/kernel';
+import type { EditableNode, LayoutResult } from '@mindcanvas/kernel';
 import { exportSvg } from './exportSvg.js';
 import type { TokenSet } from '../theme/index.js';
 
@@ -30,9 +30,15 @@ export async function exportPng(
     title?: string;
     /** G6″（A6/T23）：跨岛父子连接补线（透传 exportSvg） */
     boundaryLinks?: ReadonlyArray<{ fromId: string; toId: string }>;
+    /** S4：文档根（透传 exportSvg；提供时导出摘要括线）。缺省 = 不画括线 */
+    root?: EditableNode;
   } = {},
 ): Promise<ExportPngResult> {
-  const svg = exportSvg(layout, token, { title: opts.title, boundaryLinks: opts.boundaryLinks });
+  const svg = exportSvg(layout, token, {
+    title: opts.title,
+    boundaryLinks: opts.boundaryLinks,
+    root: opts.root,
+  });
   const size = readSvgSize(svg);
   if (!size) return { ok: false, reason: 'unsupported' };
   return renderPng(svg, size.width, size.height, opts.scale ?? 2);

@@ -14,12 +14,9 @@
  * 宿主保持 `null` 状态，调用方回落既有的 `LocalDocHost`（单文件句柄闭环）。
  */
 import { isAbortError } from './fsError.js';
-import {
-  deleteDirectoryHandle,
-  getDirectoryHandle,
-  setDirectoryHandle,
-  verifyPermission,
-} from './handleStore.js';
+import { getDirectoryHandle, verifyPermission, writeWorkspaceRegistry } from './handleStore.js';
+import { BROWSER_SCOPE, applyIdentity, markDormant } from './scopeIdentity.js';
+import type { ScopeId, ScopeState } from './workspaceScope.js';
 import {
   isDirEntry,
   isFileEntry,
@@ -128,6 +125,8 @@ async function dirAt(
 export class DirectoryWorkspaceHost {
   private root: FsDirectoryHandle | null = null;
   private tree: WorkspaceNode[] | null = null;
+  /** 工作区身份（browser / disk / disk-session）；epoch：挂载、断开、scopeId 变化时 +1 */
+  private scope: ScopeState = { ...BROWSER_SCOPE };
 
   /** 是否已挂载工作区 */
   get mounted(): boolean {
@@ -139,13 +138,30 @@ export class DirectoryWorkspaceHost {
     return this.root?.name ?? null;
   }
 
+  // ---------------------------------------------------------------- P0-0：身份访问器
+
+  /** 运行期身份形态（shared-contracts §1.2.5） */
+  get scopeState(): ScopeState {
+    return this.scope;
+  }
+
+  /** 当前 scopeId；未挂载或 browser → null */
+  get scopeId(): ScopeId | null {
+    return this.scope.kind === 'browser' ? null : this.scope.scopeId;
+  }
+
+  /** 会话代：挂载、断开、scopeId 变化时 +1；已挂载的 `requestPermission` 不变 */
+  get scopeEpoch(): number {
+    return this.scope.epoch;
+  }
+
   /** 浏览器能力 + 权限是否已就绪 */
   static isSupported(): boolean {
     return isDirectoryPickerSupported();
   }
 
   /**
-   * 弹出目录选择器并挂载为工作区。成功后写入 IndexedDB，刷新可恢复。
+   * 弹出目录选择器并挂载为工作区。成功后经**单一路径**解析身份并写 IndexedDB，刷新可恢复。
    * 用户取消 / 不支持 → null（调用方回落单文件模式）。
    */
   async pick(): Promise<FsDirectoryHandle | null> {
@@ -153,9 +169,10 @@ export class DirectoryWorkspaceHost {
     try {
       const handle = await window.showDirectoryPicker?.({ mode: 'readwrite' });
       if (!handle) return null;
-      await setDirectoryHandle(handle);
+      const state = await applyIdentity(handle);
       this.root = handle;
       this.tree = null;
+      this.mountScope(state);
       return handle;
     } catch (e) {
       // AbortError = 用户取消；其他错误也一律降级，不打断主流程
@@ -174,28 +191,44 @@ export class DirectoryWorkspaceHost {
     const handle = await getDirectoryHandle();
     if (!handle) return false;
     if (!(await verifyPermission(handle, true))) return false;
+    const state = await applyIdentity(handle);
     this.root = handle;
     this.tree = null;
+    this.mountScope(state);
     return true;
   }
 
   /** 有用户手势时补一次权限请求（点「连接工作区」按钮时调用） */
   async requestPermission(): Promise<boolean> {
+    const wasMounted = this.root !== null;
     const handle = this.root ?? (await getDirectoryHandle());
     if (!handle) return false;
     const ok = await verifyPermission(handle, true, true);
-    if (ok) {
-      this.root = handle;
-      this.tree = null;
+    if (!ok) return false;
+    if (!wasMounted) {
+      // 本次挂载改变了 root：必须经同一条身份解析路径（I-23）；已挂载时不重解析、不改 scopeId/epoch
+      const state = await applyIdentity(handle);
+      this.mountScope(state);
     }
-    return ok;
+    this.root = handle;
+    this.tree = null;
+    return true;
   }
 
-  /** 断开工作区（清 IDB 记录 + 内存态） */
+  /** 断开工作区（注册表转 dormant + 删裸键，**同一事务**；内存态回 browser） */
   async detach(): Promise<void> {
     this.root = null;
     this.tree = null;
-    await deleteDirectoryHandle();
+    // R1：不再单独调用 deleteDirectoryHandle()（避免两键分叉）；corrupt / unavailable 时不写键
+    await writeWorkspaceRegistry(markDormant, { kind: 'delete' });
+    this.scope = { ...BROWSER_SCOPE, epoch: this.scope.epoch + 1 };
+  }
+
+  // ---------------------------------------------------------------- P0-0：身份解析（单一路径 + 两阶段）
+
+  /** 挂载成功：写 scope 并 `epoch+1`（挂载、断开、scopeId 变化时 +1） */
+  private mountScope(state: ScopeState): void {
+    this.scope = { ...state, epoch: this.scope.epoch + 1 };
   }
 
   private requireRoot(): FsDirectoryHandle {

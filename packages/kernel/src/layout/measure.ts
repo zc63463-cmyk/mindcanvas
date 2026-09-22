@@ -20,8 +20,11 @@ export const defaultCharMeasure: CharMeasure = (text) => {
  * 默认节点级 MeasureFn（node → {w,h}）。
  * 基于 displayMetrics（与渲染层同一套换行/盒高逻辑）+ 空实体表 + 默认字符估算。
  * packages/react 将来注入精确 DOM 度量以替换本默认实现（TODO(K3)）。
+ *
+ * `depth` 形参只为满足 `MeasureFn` 新签名：默认度量是**单档**的（无主题字号可依），
+ * 恒等价于老行为——需要按视觉档分档的是渲染器注入的 `createNodeMeasure`。
  */
-export function defaultMeasure(node: EditableNode): { w: number; h: number } {
+export function defaultMeasure(node: EditableNode, _depth?: number): { w: number; h: number } {
   const m = displayMetrics(node, new Map(), defaultCharMeasure);
   return { w: m.w, h: m.h };
 }

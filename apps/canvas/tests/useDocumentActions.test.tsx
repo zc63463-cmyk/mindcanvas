@@ -9,11 +9,26 @@
  * 不测自动保存（已抽为 hooks/useAutoSave，见 useAutoSave.test.tsx）。
  */
 import { act, cleanup, fireEvent, render, renderHook } from '@testing-library/react';
+import { makeTextNode } from '@mindcanvas/kernel';
 import type { RefObject } from 'react';
-import type { DocumentHost, EditorController, FsFileHandle, MindDoc } from '@mindcanvas/react';
+import type {
+  DocumentHost,
+  EditorController,
+  FsFileHandle,
+  MindDoc,
+  SaveOutcome,
+} from '@mindcanvas/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useDocumentActions } from '../src/hooks/useDocumentActions';
+import { DocumentSaveSession } from '../src/hooks/useDocumentSaveSession';
 import { SAVE_BLOCKED_NOTICE } from '../src/hooks/saveGuard';
+import {
+  SAVE_BUSY_NOTICE,
+  SAVE_FAILED_NOTICE,
+  SAVE_METADATA_WARNING,
+  type RequestLeave,
+  type SaveCompletion,
+} from '../src/documentLifecycle';
 import { UnsavedPrompt } from '../src/UnsavedPrompt.js';
 
 /** 最小可用的 controller：只实现本 hook 触碰的成员 */
@@ -42,7 +57,23 @@ function makeDocHost(over: Partial<DocumentHost> = {}): DocumentHost {
   } as unknown as DocumentHost;
 }
 
-const baseDoc: MindDoc = { name: 'a.mm.md', source: 'X', saved: true, handle: {} };
+/** 最小可用文件句柄（保存走句柄写回时会调用 createWritable：形状必须完整，不用 `{}` 顶替） */
+const HANDLE: FsFileHandle = {
+  name: 'a.mm.md',
+  createWritable: async () => ({
+    write: async () => undefined,
+    close: async () => undefined,
+  }),
+};
+
+const baseDoc: MindDoc = {
+  id: 'a.mm.md',
+  name: 'a.mm.md',
+  source: 'X',
+  saved: true,
+  handle: HANDLE,
+  ts: 0,
+};
 
 /**
  * 把 setDoc 的调用「求值」成最终状态。
@@ -57,8 +88,8 @@ function setup(over: {
   controller?: Partial<EditorController>;
   docHost?: Partial<DocumentHost>;
   doc?: Partial<MindDoc>;
-  /** A-D4：未保存切换确认的注入式问询器（替代 window.confirm） */
-  confirmDiscard?: () => Promise<boolean>;
+  /** MODE-GUARD：离开决策器（默认：直接执行目标并返回 true，等价「无保护」） */
+  requestLeave?: RequestLeave;
   /** S2G：同步标记初值；缺省 = 与 doc.source 同源（现行为） */
   synced?: string | null;
 } = {}) {
@@ -69,10 +100,16 @@ function setup(over: {
   const fileInputRef = { current: null } as RefObject<HTMLInputElement | null>;
   const autoSaveTimer: RefObject<ReturnType<typeof setTimeout> | null> = { current: null };
   const onBlockedSave = vi.fn();
+  // 附属记录失败（写盘已成功）的独立通知渠道
+  const onSaveWarning = vi.fn();
   // S2G：mock 增 `syncedSourceRef`（缺省同源 = 现行为，同 S2F 先例）
   const syncedSourceRef: RefObject<string | null> = {
     current: over.synced === undefined ? doc.source : over.synced,
   };
+  // SAVE-LIFECYCLE：保存会话（同会话串行 + 会话/内容归属校验）；
+  // 目的地按生产接线由 doc.handle 初始化（渲染层由 useAutoSave 的同步 effect 维护）
+  const session = new DocumentSaveSession({ readContent: () => controller.root });
+  session.setDestination(doc.handle);
   const { result } = renderHook(() =>
     useDocumentActions({
       controller,
@@ -81,9 +118,11 @@ function setup(over: {
       setDoc,
       fileInputRef,
       autoSaveTimer,
+      session,
       syncedSourceRef,
       onBlockedSave,
-      confirmDiscard: over.confirmDiscard,
+      onSaveWarning,
+      requestLeave: over.requestLeave,
     }),
   );
   return {
@@ -94,8 +133,10 @@ function setup(over: {
     setDoc,
     fileInputRef,
     autoSaveTimer,
+    session,
     syncedSourceRef,
     onBlockedSave,
+    onSaveWarning,
   };
 }
 
@@ -105,9 +146,23 @@ afterEach(() => {
   vi.unstubAllGlobals(); // handleOpen 用例注入的 window.showOpenFilePicker 随用例回收
 });
 
-describe('useDocumentActions · applyDoc', () => {
-  it('无未保存修改时直接切换并记住文档', async () => {
-    const { result, docHost, setDoc } = setup({ controller: { dirty: false } });
+/**
+ * MODE-GUARD：`applyDoc` 不再自带确认框 —— 它把「真正替换」交给注入的 `requestLeave`
+ * （App 的三选项决策器）。缺省未注入时直接替换（独立用法/旧测试）。
+ */
+describe('useDocumentActions · applyDoc（离开决策器接管）', () => {
+  /** 假决策器：`allow=true` 时执行目标并返回 true（等价用户选择「保存/放弃并继续」） */
+  const allowLeave = (): RequestLeave =>
+    vi.fn(async (perform: () => void | Promise<void>) => {
+      await perform();
+      return true;
+    }) as unknown as RequestLeave;
+
+  it('干净 → 决策器仍被调用（决策器自行判断是否直接放行）', async () => {
+    const { result, docHost, setDoc } = setup({
+      controller: { dirty: false },
+      requestLeave: allowLeave(),
+    });
     const next = { ...baseDoc, name: 'b.mm.md' };
 
     await act(async () => {
@@ -118,66 +173,51 @@ describe('useDocumentActions · applyDoc', () => {
     expect(docHost.remember).toHaveBeenCalledWith(next);
   });
 
-  // A-D4：未保存确认改注入式确认器（confirmDiscard）——window.confirm 在 webview 会被静默吞掉。
-  // 每例都把 window.confirm 换成会抛错的 spy：实现只要回退到原生对话框即失败。
-  it('dirty + 确认器返回 false → 不切换、不记住、不触碰 window.confirm', async () => {
+  it('决策器拒绝（用户取消）→ 不切换、不记住', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockImplementation(() => {
       throw new Error('native confirm() 被调用');
     });
-    const confirmDiscard = vi.fn(async () => false);
-    const { result, docHost, setDoc } = setup({ controller: { dirty: true }, confirmDiscard });
+    const requestLeave = vi.fn(async () => false) as unknown as RequestLeave;
+    const { result, docHost, setDoc } = setup({ controller: { dirty: true }, requestLeave });
 
+    let ok: boolean | null = null;
     await act(async () => {
-      await result.current.applyDoc({ ...baseDoc, name: 'b.mm.md' });
+      ok = await result.current.applyDoc({ ...baseDoc, name: 'b.mm.md' });
     });
 
-    expect(confirmDiscard).toHaveBeenCalledTimes(1);
+    expect(ok).toBe(false);
+    expect(requestLeave).toHaveBeenCalledTimes(1);
     expect(setDoc).not.toHaveBeenCalled();
     expect(docHost.remember).not.toHaveBeenCalled();
     expect(confirmSpy).not.toHaveBeenCalled();
   });
 
-  it('dirty + 确认器返回 true → 正常切换', async () => {
+  it('决策器放行 → 正常切换', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockImplementation(() => {
       throw new Error('native confirm() 被调用');
     });
-    const confirmDiscard = vi.fn(async () => true);
-    const { result, setDoc } = setup({ controller: { dirty: true }, confirmDiscard });
+    const { result, setDoc } = setup({
+      controller: { dirty: true },
+      requestLeave: allowLeave(),
+    });
     const next = { ...baseDoc, name: 'b.mm.md' };
 
     await act(async () => {
       await result.current.applyDoc(next);
     });
 
-    expect(confirmDiscard).toHaveBeenCalledTimes(1);
     expect(setDoc).toHaveBeenCalledWith(next);
     expect(confirmSpy).not.toHaveBeenCalled();
   });
 
-  it('dirty 且未注入确认器 → 保守返回 false（绝不静默丢数据）', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockImplementation(() => {
-      throw new Error('native confirm() 被调用');
-    });
+  it('未注入决策器（独立用法）→ 直接替换（不静默加锁）', async () => {
     const { result, setDoc } = setup({ controller: { dirty: true } });
-
-    await act(async () => {
-      await expect(result.current.applyDoc({ ...baseDoc, name: 'b.mm.md' })).resolves.toBe(false);
-    });
-
-    expect(setDoc).not.toHaveBeenCalled();
-    expect(confirmSpy).not.toHaveBeenCalled();
-  });
-
-  it('不 dirty → 不调用确认器，直接切换', async () => {
-    const confirmDiscard = vi.fn(async () => true);
-    const { result, setDoc } = setup({ controller: { dirty: false }, confirmDiscard });
     const next = { ...baseDoc, name: 'b.mm.md' };
 
     await act(async () => {
-      await result.current.applyDoc(next);
+      await expect(result.current.applyDoc(next)).resolves.toBe(true);
     });
 
-    expect(confirmDiscard).not.toHaveBeenCalled();
     expect(setDoc).toHaveBeenCalledWith(next);
   });
 });
@@ -215,7 +255,7 @@ describe('useDocumentActions · handleSave', () => {
 
   it('用户取消保存对话框 → 不动（不 markSaved、不 setDoc）', async () => {
     const { result, controller, setDoc, docHost } = setup({
-      docHost: { save: vi.fn(async () => ({ result: 'cancelled' })) },
+      docHost: { save: vi.fn(async (): Promise<SaveOutcome> => ({ result: 'cancelled' })) },
     });
 
     await act(async () => {
@@ -425,45 +465,120 @@ describe('useDocumentActions · 保存写回口径（E 批：source 冻结）', 
 });
 
 /**
- * A-D4：UnsavedPrompt 是「未保存切换确认」的载体（替代 window.confirm）。
- * 两按钮语义（决策 A1）：放弃修改并切换 / 取消；键盘语义与 LenBubble 一致（Enter 确认 / Esc 取消）。
+ * MODE-GUARD：UnsavedPrompt 由两按钮**升级**为三选项（保存并继续 / 放弃修改 / 取消）。
+ * 键盘纪律：默认焦点在非破坏性选项；Enter 只激活聚焦按钮；Esc / 遮罩 = 取消。
  */
-describe('UnsavedPrompt · 两按钮模态（A-D4）', () => {
+describe('UnsavedPrompt · 三选项模态（MODE-GUARD）', () => {
   it('open=false → 不渲染任何内容', () => {
-    const onSettle = vi.fn();
-    const { container } = render(<UnsavedPrompt open={false} onSettle={onSettle} />);
+    const onChoice = vi.fn();
+    const { container } = render(<UnsavedPrompt open={false} onChoice={onChoice} />);
     expect(container.querySelector('[data-unsaved-prompt]')).toBeNull();
   });
 
-  it('点「放弃修改并切换」→ settle(true)', () => {
-    const onSettle = vi.fn();
-    const { container } = render(<UnsavedPrompt open onSettle={onSettle} />);
-    fireEvent.click(container.querySelector('[data-unsaved-ok]')!);
-    expect(onSettle).toHaveBeenCalledWith(true);
+  it('三选项各自 dispatch save / discard / cancel', () => {
+    const onChoice = vi.fn();
+    const { container } = render(<UnsavedPrompt open onChoice={onChoice} />);
+
+    fireEvent.click(container.querySelector('[data-unsaved-save]') as HTMLElement);
+    expect(onChoice).toHaveBeenLastCalledWith('save');
+    fireEvent.click(container.querySelector('[data-unsaved-discard]') as HTMLElement);
+    expect(onChoice).toHaveBeenLastCalledWith('discard');
+    fireEvent.click(container.querySelector('[data-unsaved-cancel]') as HTMLElement);
+    expect(onChoice).toHaveBeenLastCalledWith('cancel');
   });
 
-  it('点「取消」→ settle(false)', () => {
-    const onSettle = vi.fn();
-    const { container } = render(<UnsavedPrompt open onSettle={onSettle} />);
-    fireEvent.click(container.querySelector('[data-unsaved-cancel]')!);
-    expect(onSettle).toHaveBeenCalledWith(false);
-  });
+  it('遮罩按下 / Esc → 取消（保守：绝不误当作确认或放弃）', () => {
+    const onChoice = vi.fn();
+    const { container } = render(<UnsavedPrompt open onChoice={onChoice} />);
+    fireEvent.pointerDown(container.querySelector('[data-unsaved-backdrop]') as HTMLElement);
+    expect(onChoice).toHaveBeenLastCalledWith('cancel');
 
-  it('Enter = 确认 / Esc = 取消', () => {
-    const onSettle = vi.fn();
-    const { container } = render(<UnsavedPrompt open onSettle={onSettle} />);
-    const card = container.querySelector('[data-unsaved-prompt]')!;
-    fireEvent.keyDown(card, { key: 'Enter' });
-    expect(onSettle).toHaveBeenLastCalledWith(true);
+    onChoice.mockClear();
+    const card = container.querySelector('[data-unsaved-prompt]') as HTMLElement;
     fireEvent.keyDown(card, { key: 'Escape' });
-    expect(onSettle).toHaveBeenLastCalledWith(false);
+    expect(onChoice).toHaveBeenCalledWith('cancel');
   });
 
-  it('点背板（模态之外）→ settle(false)（保守：绝不误当作确认）', () => {
-    const onSettle = vi.fn();
-    const { container } = render(<UnsavedPrompt open onSettle={onSettle} />);
-    fireEvent.pointerDown(container.querySelector('[data-unsaved-backdrop]')!);
-    expect(onSettle).toHaveBeenCalledWith(false);
+  it('默认焦点在非破坏性选项；Enter 只激活聚焦按钮；Tab 在模态内循环', () => {
+    const onChoice = vi.fn();
+    const { container } = render(<UnsavedPrompt open onChoice={onChoice} />);
+    const card = container.querySelector('[data-unsaved-prompt]') as HTMLElement;
+    const save = container.querySelector('[data-unsaved-save]') as HTMLElement;
+
+    expect(document.activeElement).toBe(save); // 默认聚焦「保存并继续」（非破坏性）
+
+    fireEvent.keyDown(card, { key: 'Enter' });
+    expect(onChoice).toHaveBeenCalledWith('save');
+
+    onChoice.mockClear();
+    fireEvent.keyDown(card, { key: 'Tab' }); // save → 循环到 cancel
+    expect(document.activeElement).toBe(container.querySelector('[data-unsaved-cancel]'));
+    fireEvent.keyDown(card, { key: 'Enter' });
+    expect(onChoice).toHaveBeenCalledWith('cancel');
+  });
+
+  it('busy → 显示进行中文案但**不制造死按钮**；取消仍可操作；notice 可见', () => {
+    const onChoice = vi.fn();
+    const { container } = render(
+      <UnsavedPrompt open busy notice="已发起下载，但下载不证明文件已落盘" onChoice={onChoice} />,
+    );
+    const save = container.querySelector('[data-unsaved-save]') as HTMLButtonElement;
+
+    expect(save.getAttribute('aria-busy')).toBe('true');
+    expect(save.textContent).toContain('正在保存');
+    expect(save.disabled).toBe(false); // 等待收束由决策器处理，按钮保持可点
+    fireEvent.click(save);
+    expect(onChoice).toHaveBeenCalledWith('save');
+    expect(container.querySelector('[data-unsaved-notice]')?.textContent).toContain('已发起下载');
+
+    fireEvent.click(container.querySelector('[data-unsaved-cancel]') as HTMLElement);
+    expect(onChoice).toHaveBeenCalledWith('cancel');
+  });
+
+  it('层级高于自由画布工具栏（200）与 App 浮标（500），背景不可穿透', () => {
+    const { container } = render(<UnsavedPrompt open onChoice={vi.fn()} />);
+    const backdrop = container.querySelector('[data-unsaved-backdrop]') as HTMLElement;
+    expect(Number(backdrop.style.zIndex)).toBeGreaterThan(500);
+    // 卡片内的 pointerdown 不冒泡到遮罩（不会「点卡片 = 取消」）
+    const onChoice = vi.fn();
+    cleanup();
+    const second = render(<UnsavedPrompt open onChoice={onChoice} />);
+    fireEvent.pointerDown(
+      second.container.querySelector('[data-unsaved-prompt]') as HTMLElement,
+    );
+    expect(onChoice).not.toHaveBeenCalled();
+  });
+
+  it('关闭后焦点恢复到打开前的元素', () => {
+    const { container, rerender } = render(
+      <div>
+        <button type="button" data-outside>
+          外部
+        </button>
+        <UnsavedPrompt open={false} onChoice={vi.fn()} />
+      </div>,
+    );
+    const outside = container.querySelector('[data-outside]') as HTMLButtonElement;
+    outside.focus();
+    expect(document.activeElement).toBe(outside);
+
+    rerender(
+      <div>
+        <button type="button" data-outside>
+          外部
+        </button>
+        <UnsavedPrompt open onChoice={vi.fn()} />
+      </div>,
+    );
+    rerender(
+      <div>
+        <button type="button" data-outside>
+          外部
+        </button>
+        <UnsavedPrompt open={false} onChoice={vi.fn()} />
+      </div>,
+    );
+    expect(document.activeElement).toBe(outside);
   });
 });
 
@@ -514,5 +629,259 @@ describe('useDocumentActions · S2G 同步守卫', () => {
 
     expect(docHost.save).toHaveBeenCalledWith(expect.objectContaining({ handle: undefined }));
     expect(onBlockedSave).not.toHaveBeenCalled();
+  });
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((ok) => {
+    resolve = ok;
+  });
+  return { promise, resolve };
+}
+
+async function flush(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, 0);
+  });
+}
+
+/**
+ * SAVE-LIFECYCLE：手动保存 / 另存为的结果可判别与写入协调。
+ *
+ * 判别核心：
+ * - 结果区分 `saved` / `downloaded` / `cancelled` / `blocked` / `stale`；
+ * - 写入期间继续编辑 → `{ saved, current:false }`：savedSource 记实际写出快照，但**不清脏**；
+ * - 显式文档替换（applyDoc）推进会话令牌 → 未开始的请求 stale、进行中的完成零回填；
+ * - 文件选择器尊重手势：会话忙时不排队（blocked + 提示），避免丢 transient activation。
+ */
+describe('useDocumentActions · SAVE-LIFECYCLE 结果与协调', () => {
+  it('同步保存成功 → { kind:saved, current:true }', async () => {
+    const { result } = setup({ doc: { id: 'a.mm.md' } });
+    let completion: SaveCompletion | null = null;
+
+    await act(async () => {
+      completion = await result.current.handleSave();
+    });
+
+    expect(completion).toEqual({ kind: 'saved', current: true });
+  });
+
+  it('下载兜底 → { kind:downloaded }（与 saved 可判别）', async () => {
+    const { result } = setup({
+      doc: { id: 'a.mm.md' },
+      docHost: { save: vi.fn(async () => ({ result: 'download' as const })) },
+    });
+    let completion: SaveCompletion | null = null;
+
+    await act(async () => {
+      completion = await result.current.handleSave();
+    });
+
+    expect(completion).toEqual({ kind: 'downloaded', current: true });
+  });
+
+  it('手动保存成功 → 会话目的地同步为新句柄（不等重渲）', async () => {
+    const fresh = { name: 'b.mm.md' } as FsFileHandle;
+    const { result, session } = setup({
+      doc: { id: 'a.mm.md' },
+      docHost: { save: vi.fn(async () => fsOk(fresh)) },
+    });
+
+    await act(async () => {
+      await result.current.handleSave();
+    });
+    expect(session.getDestination()).toBe(fresh);
+  });
+
+  it('附属记录失败（remember 抛错）→ 结果仍 saved，写盘照常回填，只发附属警告（复核 R4-B）', async () => {
+    const { result, controller, setDoc, doc, onBlockedSave, onSaveWarning } = setup({
+      doc: { id: 'a.mm.md' },
+      docHost: {
+        save: vi.fn(async () => fsOk()),
+        remember: vi.fn((): void => {
+          throw new Error('recent-document-metadata-failed');
+        }),
+      },
+    });
+    let completion: SaveCompletion | null = null;
+
+    await act(async () => {
+      completion = await result.current.handleSave();
+    });
+
+    // 写盘成功 → 不得降级为 failed（否则与已清 dirty、提示文案三者矛盾）
+    expect(completion).toEqual({ kind: 'saved', current: true });
+    expect(controller.markSaved).toHaveBeenCalledTimes(1);
+    expect(applied(setDoc, doc)).toContainEqual(
+      expect.objectContaining({ savedSource: 'SRC', saved: true }),
+    );
+    expect(onBlockedSave).not.toHaveBeenCalled();
+    expect(onSaveWarning).toHaveBeenCalledWith(SAVE_METADATA_WARNING);
+  });
+
+  it('手动保存写入失败 → { kind:failed } + 失败通知；不 markSaved / 不 setDoc（复核 R3）', async () => {
+    const { result, controller, docHost, setDoc, onBlockedSave } = setup({
+      doc: { id: 'a.mm.md' },
+      docHost: {
+        save: vi.fn(async () => {
+          throw new Error('disk-full');
+        }),
+      },
+    });
+    let completion: SaveCompletion | null = null;
+
+    await act(async () => {
+      completion = await result.current.handleSave();
+    });
+
+    expect(completion).toEqual({ kind: 'failed' });
+    expect(controller.markSaved).not.toHaveBeenCalled();
+    expect(setDoc).not.toHaveBeenCalled();
+    expect(docHost.remember).not.toHaveBeenCalled();
+    expect(onBlockedSave).toHaveBeenCalledWith(SAVE_FAILED_NOTICE);
+  });
+
+  it('另存为失败 → { kind:failed } + 失败通知，目的地不变（取消/失败不换目标）', async () => {
+    const { result, session, setDoc, onBlockedSave } = setup({
+      doc: { id: 'a.mm.md' },
+      docHost: {
+        save: vi.fn(async () => {
+          throw new Error('picker-failed');
+        }),
+      },
+    });
+    const before = session.getDestination();
+    let completion: SaveCompletion | null = null;
+
+    await act(async () => {
+      completion = await result.current.handleSaveAs();
+    });
+
+    expect(completion).toEqual({ kind: 'failed' });
+    expect(session.getDestination()).toBe(before);
+    expect(setDoc).not.toHaveBeenCalled();
+    expect(onBlockedSave).toHaveBeenCalledWith(SAVE_FAILED_NOTICE);
+  });
+
+  it('写入期间继续编辑 → { saved, current:false }：记快照但不 markSaved', async () => {
+    const gate = deferred<{ result: 'fs' }>();
+    const { result, setDoc, doc, controller } = setup({
+      controller: { serialize: () => 'SNAP-A', dirty: true, root: makeTextNode('内容 A') },
+      doc: { id: 'a.mm.md' },
+      docHost: { save: vi.fn(() => gate.promise) },
+    });
+    let completion: SaveCompletion | null = null;
+
+    await act(async () => {
+      const pending = result.current.handleSave();
+      // 写入等待期间内容身份变化（继续编辑）
+      (controller as unknown as { root: unknown }).root = makeTextNode('内容 B');
+      gate.resolve({ result: 'fs' });
+      completion = await pending;
+    });
+
+    expect(completion).toEqual({ kind: 'saved', current: false });
+    expect(controller.markSaved).not.toHaveBeenCalled();
+    // 磁盘上确实是 SNAP-A：快照照记（保持 dirty 由会话负责），但不得清脏
+    expect(applied(setDoc, doc)).toContainEqual(expect.objectContaining({ savedSource: 'SNAP-A' }));
+  });
+
+  it('另存为写入期间继续编辑 → { saved, current:false }：新文件里是旧快照，保持 dirty', async () => {
+    const gate = deferred<{ result: 'fs'; handle?: FsFileHandle }>();
+    const { result, setDoc, doc, controller } = setup({
+      controller: { serialize: () => 'SNAP-A', dirty: true, root: makeTextNode('内容 A') },
+      doc: { id: 'a.mm.md' },
+      docHost: { save: vi.fn(() => gate.promise) },
+    });
+    let completion: SaveCompletion | null = null;
+
+    await act(async () => {
+      const pending = result.current.handleSaveAs();
+      // 写入等待期间继续编辑
+      (controller as unknown as { root: unknown }).root = makeTextNode('内容 B');
+      gate.resolve({ result: 'fs', handle: { name: 'new.mm.md' } as FsFileHandle });
+      completion = await pending;
+    });
+
+    expect(completion).toEqual({ kind: 'saved', current: false });
+    expect(controller.markSaved).not.toHaveBeenCalled();
+    expect(applied(setDoc, doc)).toContainEqual(expect.objectContaining({ savedSource: 'SNAP-A' }));
+  });
+
+  it('applyDoc 推进会话：未开始的手动保存 stale、进行中的完成零回填', async () => {
+    const gate = deferred<{ result: 'fs' }>();
+    const save = vi.fn(() => gate.promise);
+    const { result, docHost, setDoc } = setup({ doc: { id: 'a.mm.md' }, docHost: { save } });
+    let first: SaveCompletion | null = null;
+    let second: SaveCompletion | null = null;
+
+    await act(async () => {
+      void result.current.handleSave().then((c) => {
+        first = c;
+      });
+      void result.current.handleSave().then((c) => {
+        second = c;
+      });
+      // 显式文档替换：会话令牌推进（第二个请求尚未开始 → 直接 stale）
+      await result.current.applyDoc({ ...baseDoc, id: 'b.mm.md', source: 'Y' });
+      gate.resolve({ result: 'fs' });
+      await flush();
+    });
+
+    expect(second).toEqual({ kind: 'stale' });
+    expect(first).toEqual({ kind: 'stale' });
+    expect(docHost.save).toHaveBeenCalledTimes(1);
+    // 只有 applyDoc 的切换写回；旧会话的 savedSource 不得回填
+    expect(applied(setDoc, baseDoc)).toContainEqual(expect.objectContaining({ source: 'Y' }));
+    expect(applied(setDoc, baseDoc)).not.toContainEqual(
+      expect.objectContaining({ savedSource: expect.anything() }),
+    );
+  });
+
+  it('会话忙 + 无句柄 → 拒绝启动（不写盘、不排队、提示稍后重试）', async () => {
+    const gate = deferred<{ result: 'fs' }>();
+    const save = vi.fn(() => gate.promise);
+    const { result, docHost, onBlockedSave } = setup({
+      doc: { id: 'a.mm.md', handle: undefined },
+      docHost: { save },
+    });
+    let second: SaveCompletion | null = null;
+
+    await act(async () => {
+      void result.current.handleSave(); // 第一发：无句柄但会话空闲 → 进入写入（挂起）
+      second = await result.current.handleSave(); // 第二发：忙 + 无句柄 → 不得排队
+    });
+
+    expect(second).toEqual({ kind: 'blocked' });
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(onBlockedSave).toHaveBeenCalledWith(SAVE_BUSY_NOTICE);
+
+    await act(async () => {
+      gate.resolve({ result: 'fs' });
+      await flush();
+    });
+    expect(docHost.remember).toHaveBeenCalled();
+  });
+
+  it('会话忙 + 另存为 → 拒绝启动选择器（不调用 save、提示稍后重试）', async () => {
+    const gate = deferred<{ result: 'fs' }>();
+    const save = vi.fn(() => gate.promise);
+    const { result, onBlockedSave } = setup({ doc: { id: 'a.mm.md' }, docHost: { save } });
+    let saveAs: SaveCompletion | null = null;
+
+    await act(async () => {
+      void result.current.handleSave(); // 占住会话（挂起）
+      saveAs = await result.current.handleSaveAs();
+    });
+
+    expect(saveAs).toEqual({ kind: 'blocked' });
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(onBlockedSave).toHaveBeenCalledWith(SAVE_BUSY_NOTICE);
+
+    await act(async () => {
+      gate.resolve({ result: 'fs' });
+      await flush();
+    });
   });
 });

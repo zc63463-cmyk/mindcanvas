@@ -2,18 +2,39 @@
  * 文档操作 hook —— 打开 / 新建 / 保存 / 另存为 / 切换（含未保存守卫）。
  *
  * 从 `MindmapStage.tsx` 的 `StageContent`（原 1,394 行单函数）中抽出，
- * 属代码结构规范化 T1 的一部分。**纯搬迁，逻辑未改写**。
+ * 属代码结构规范化 T1 的一部分；SAVE-LIFECYCLE 批次接入保存会话（写入顺序与结果归属）。
  *
- * 不是什么：不含自动保存（那是 `StageContent` 内的 effect，依赖 dirty/saved/handle 联动）；
- * 不含导出（见 `useExportActions`）。
+ * 不是什么：不含自动保存（见 `useAutoSave`）；不含导出（见 `useExportActions`）。
+ *
+ * MODE-GUARD（包 2）：`applyDoc` 不再自带确认框 —— 它把「真正替换」交给注入的
+ * `requestLeave`（App 的三选项决策器：保存并继续 / 放弃修改 / 取消），
+ * 打开/新建/最近/文件输入/拖入/工作区等入口因此共用一个离开判定。
+ *
+ * SAVE-LIFECYCLE：
+ * - `applyDoc` 是**显式文档替换**入口 —— 先推进会话令牌再 `setDoc`，旧会话的迟到回调
+ *   因此不会回填新文档（令牌推进不依赖延后的 passive effect）；
+ * - `handleSave` / `handleSaveAs` 返回 `SaveCompletion`：只在会话+内容归属校验通过时清脏；
+ *   `downloaded` 与 `saved` 可区分（下载兜底不代表持久化已确认）；`blocked` 覆盖
+ *   同步守卫拒写与「写入忙」两种「本次未发起写入」的情形，均不改动任何状态；
+ * - 文件选择器尊重用户手势：会话忙时**不排队等待**（那会丢失 transient activation），
+ *   直接拒绝并提示稍后重试。
  *
  * S2G 守卫：`handleSave` 任务开头查同步标记（`canWriteDoc`），不同步拒写并通知（每次）；
- * `handleSaveAs` **不拦**（逃生口：把改动救到新文件）。
+ * `handleSaveAs` **不拦**（逃生口：把改动救到新文件）——救出的快照不证明原会话已同步。
  */
 import { useCallback } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import type { DocumentHost, EditorController, FsFileHandle, MindDoc } from '@mindcanvas/react';
 import { getFileHandle, setFileHandle, verifyPermission } from '@mindcanvas/react';
+import {
+  SAVE_BUSY_NOTICE,
+  SAVE_FAILED_NOTICE,
+  SAVE_METADATA_WARNING,
+  SAVE_METADATA_WARNING_DOWNLOAD,
+  type RequestLeave,
+  type SaveCompletion,
+} from '../documentLifecycle.js';
+import type { DocumentSaveSession } from './useDocumentSaveSession.js';
 import { canWriteDoc, SAVE_BLOCKED_NOTICE } from './saveGuard.js';
 
 export interface DocumentActionsOptions {
@@ -22,20 +43,37 @@ export interface DocumentActionsOptions {
   doc: MindDoc;
   setDoc: Dispatch<SetStateAction<MindDoc>>;
   fileInputRef: RefObject<HTMLInputElement | null>;
-  /** 自动保存 debounce 定时器；手动保存需先取消 pending */
+  /** 自动保存 debounce 定时器；手动保存需先取消 pending（不等于取消已开始的 I/O） */
   autoSaveTimer: RefObject<ReturnType<typeof setTimeout> | null>;
+  /** 保存会话（同会话串行 / 会话+内容归属校验） */
+  session: DocumentSaveSession;
   /** S2G：同步标记（读点②：handleSave 任务开头判定；三写点见 useDocumentSwitch / MindmapStage） */
   syncedSourceRef: RefObject<string | null>;
-  /** S2G：守卫拦截通知（每次）；可选，缺省不通知 */
-  onBlockedSave?: (msg: string) => void;
-  /** 落盘瞬态通知（FA1-T1：驱动顶部「保存中…」指示）；可选，缺省不通知 */
-  onSavingChange?: (saving: boolean) => void;
   /**
-   * A-D4：未保存修改时的切换确认（宿主提供自定义模态；resolve true = 放弃修改并切换）。
-   * 缺省 undefined → **保守策略：视为 false（不切换）**，绝不静默丢数据。
-   * 替代 window.confirm —— 它在 IDE webview 中会被静默吞掉（false/undefined 且无 UI）。
+   * R2：文档会话令牌的推进口（`hooks/useDocumentToken.ts`）。
+   *
+   * 语义 = 「一棵树被整体换成了另一棵」。只在**显式文档替换**时调用；普通编辑、保存、
+   * 另存为都不推进（保存只回填 `savedSource` / `handle` / `saved` / `ts`，不换文档身份）。
    */
-  confirmDiscard?: () => Promise<boolean>;
+  onDocumentReplaced?: () => void;
+  /**
+   * 保存未完成的通知渠道（同步守卫拦截 / 写入忙 / **写入失败**）；可选，缺省不通知。
+   * 文案由 `documentLifecycle.ts` 的常量区分；取消与过期（stale）静默。
+   */
+  onBlockedSave?: (msg: string) => void;
+  /**
+   * 附属记录失败的通知渠道（写盘**已成功**，仅最近列表/句柄回填失败）；可选，缺省不通知。
+   * 与 `onBlockedSave` 分开：前者说「没写成」，本项说「写成了，但附属记录没更新」
+   * （复核 R4-B：结果、dirty、提示必须一致）。
+   */
+  onSaveWarning?: (msg: string) => void;
+  /**
+   * MODE-GUARD：离开决策器（App 注入的三选项确认 + 保存/放弃/取消）。
+   *
+   * 缺省 undefined → 不做离开保护，直接切换（独立用法/旧测试；生产由 App 注入）。
+   * 传入时 `applyDoc` 的返回语义与决策器一致：true = 目标已执行。
+   */
+  requestLeave?: RequestLeave;
 }
 
 export interface DocumentActions {
@@ -48,8 +86,8 @@ export interface DocumentActions {
   applyDoc: (next: MindDoc) => Promise<boolean>;
   handleOpen: () => Promise<void>;
   handleNew: () => void;
-  handleSave: () => Promise<void>;
-  handleSaveAs: () => Promise<void>;
+  handleSave: () => Promise<SaveCompletion>;
+  handleSaveAs: () => Promise<SaveCompletion>;
 }
 
 export function useDocumentActions({
@@ -59,24 +97,13 @@ export function useDocumentActions({
   setDoc,
   fileInputRef,
   autoSaveTimer,
+  session,
   syncedSourceRef,
+  onDocumentReplaced,
   onBlockedSave,
-  onSavingChange,
-  confirmDiscard,
+  onSaveWarning,
+  requestLeave,
 }: DocumentActionsOptions): DocumentActions {
-  /** 落盘瞬态：手动保存也走它，避免「自动保存有指示、Ctrl+S 没有」的割裂 */
-  const runSave = useCallback(
-    async (job: () => Promise<void>): Promise<void> => {
-      onSavingChange?.(true);
-      try {
-        await job();
-      } finally {
-        onSavingChange?.(false);
-      }
-    },
-    [onSavingChange],
-  );
-
   /**
    * 句柄落 IndexedDB（FA1-T2）。save 成功 / open 成功都会调用；
    * 失败静默 —— 持久化是增强，不是保存主流程的前置条件。
@@ -85,13 +112,26 @@ export function useDocumentActions({
     if (handle) void setFileHandle(docId, handle);
   }, []);
 
-  const applyDoc = useCallback(
-    async (next: MindDoc): Promise<boolean> => {
-      // A-D4：未保存守卫走注入式确认器（宿主自定义模态）——不再触碰会被 webview 吞掉的 confirm。
-      // 缺省保守 false：宿主未接线时宁可「不切换」，也绝不静默丢数据。
-      if (controller.dirty && !((await confirmDiscard?.()) ?? false)) {
-        return false;
-      }
+  /** 写入忙：拒绝启动（选择器/权限请求需要用户手势，排队等待会丢激活） */
+  const refuseBusy = useCallback((): SaveCompletion => {
+    onBlockedSave?.(SAVE_BUSY_NOTICE);
+    return { kind: 'blocked' };
+  }, [onBlockedSave]);
+
+  /** 真正执行文档替换（离开决策通过后调用） */
+  const performApplyDoc = useCallback(
+    (next: MindDoc): void => {
+      // SAVE-LIFECYCLE：显式文档替换 → 推进会话令牌 + 同步换目的地（在旧回调观察到新文档
+      // 之前完成）。已开始的 I/O 不撤回，但其完成回调不再回填；未开始的旧任务按 stale 结束。
+      session.beginDocument(next.handle);
+      // R2：**同一处**推进文档会话令牌 —— 这是「文档被整体替换」的**定义性入口**
+      // （打开 / 新建 / 最近 / 文件库 / 工作区 / 拖入 全部经此处）。
+      //
+      // 为什么必须在这里、而不是只听 `doc.source` 变化：**同内容替换**（重开同一文件、
+      // 另一份 source 逐字相同的文档）下 `doc.source` 不变，`useDocumentSwitch` 的
+      // effect 不会重跑 —— 靠 source 判据就会把「换了文档」漏成「没换」，旧摘要草稿
+      // 于是活到新文档上。本调用点在**替换动作发生时**（无论内容是否相同）推进。
+      onDocumentReplaced?.();
       setDoc(next);
       docHost.remember(next);
       // FA1-T2：从「最近文档」/文件库切来的文档没有 handle，异步补挂后回填。
@@ -102,9 +142,22 @@ export function useDocumentActions({
           setDoc((d) => (d.id === next.id ? { ...d, handle: withHandle.handle } : d));
         }
       });
-      return true;
     },
-    [controller, setDoc, docHost, confirmDiscard],
+    [session, setDoc, docHost, onDocumentReplaced],
+  );
+
+  const applyDoc = useCallback(
+    async (next: MindDoc): Promise<boolean> => {
+      // MODE-GUARD：文档替换与模式切换共用同一个离开决策器（三选项 + 保存/放弃/取消）。
+      // 决策器内部会先 flush 未提交草稿，并在执行前重新核验 dirty/saving；
+      // 未注入决策器（独立用法/旧测试）→ 直接替换（生产由 App 注入）。
+      if (requestLeave === undefined) {
+        performApplyDoc(next);
+        return true;
+      }
+      return requestLeave(() => performApplyDoc(next));
+    },
+    [performApplyDoc, requestLeave],
   );
 
   const handleOpen = useCallback(async (): Promise<void> => {
@@ -127,60 +180,139 @@ export function useDocumentActions({
     void applyDoc(docHost.create('未命名.mm.md', '# 未命名\n'));
   }, [docHost, applyDoc]);
 
-  const handleSave = useCallback(async (): Promise<void> => {
-    await runSave(async () => {
+  const handleSave = useCallback(async (): Promise<SaveCompletion> => {
+    // 无目的地时本次保存需要唤起选择器/权限请求：会话忙则拒绝排队（手势会失效）。
+    // 判据与写入一致（都读会话目的地）——不能出现「判定有句柄、写入却弹选择器」的错位。
+    if (session.isSaving() && !session.getDestination()) return refuseBusy();
+    if (autoSaveTimer.current) {
+      clearTimeout(autoSaveTimer.current);
+      autoSaveTimer.current = null;
+    }
+    const completion = await session.submit({
+      intent: 'manual',
       // S2G 读点②：写盘前同步不变量 —— 不同步拒写（通知每次：用户手势触发，无刷屏问题）
-      if (!canWriteDoc(syncedSourceRef.current, doc.source)) {
-        onBlockedSave?.(SAVE_BLOCKED_NOTICE);
-        return;
-      }
-      if (autoSaveTimer.current) {
-        clearTimeout(autoSaveTimer.current);
-        autoSaveTimer.current = null;
-      }
-      const source = controller.serialize();
-      // FA1-T2：无句柄时先尝试从 IndexedDB 取回并请求权限。
-      // 这里**必须**在同一个异步流程里用返回值，不能 setDoc 后等下一次渲染 ——
-      // 那会读到过期的 doc.handle，白跑一次权限请求。
-      // requestPermission 需要 transient user activation，而点击「保存」正是手势。
-      let effective = doc.handle;
-      if (!effective) {
-        const stored = await getFileHandle(doc.id);
-        if (stored && (await verifyPermission(stored, true, true))) effective = stored;
-      }
-      const outcome = await docHost.save({ ...doc, source, handle: effective });
-      if (outcome.result === 'cancelled') return;
-      // 句柄写回（FA1-T1）：首次「另存为」拿到 handle 后记住它，
-      // 后续 Ctrl+S 直接 createWritable() 静默覆盖，不再唤起系统对话框与覆盖确认。
-      // 下载兜底没有句柄，保留原值（不把已有 handle 抹成 undefined）。
-      const nextHandle = outcome.handle ?? effective;
-      // E 批口径：保存路径不得改写 doc.source（解析输入）——内容快照写入 savedSource
-      setDoc((d) => ({ ...d, savedSource: source, handle: nextHandle, saved: true, ts: Date.now() }));
-      controller.markSaved();
-      docHost.remember({ ...doc, source, handle: nextHandle, saved: true, ts: Date.now() });
-      persistHandle(doc.id, nextHandle);
-    });
-  }, [runSave, autoSaveTimer, controller, docHost, doc, setDoc, persistHandle, syncedSourceRef, onBlockedSave]);
-
-  const handleSaveAs = useCallback(async (): Promise<void> => {
-    await runSave(async () => {
-      const source = controller.serialize();
-      // 显式丢弃 handle → 必然唤起选择器（另存到新路径）
-      const outcome = await docHost.save({ ...doc, source, handle: undefined });
-      if (outcome.result === 'cancelled') return;
-      setDoc((d) => ({
-        ...d,
+      guard: () => canWriteDoc(syncedSourceRef.current, doc.source),
+      capture: () => ({ source: controller.serialize(), content: controller.root }),
+      write: async (snapshot) => {
+        // 目的地读**会话**（同步事实源）：另存为/打开回填后，排队中的手动保存必须写新目的地，
+        // 而不是提交时闭包里的旧 doc.handle（复核 R1 同族）。
+        // FA1-T2：无句柄时先尝试从 IndexedDB 取回并请求权限。
+        // 这里**必须**在同一个异步流程里用返回值，不能 setDoc 后等下一次渲染 ——
+        // 那会读到过期的 handle，白跑一次权限请求。
+        // requestPermission 需要 transient user activation，而点击「保存」正是手势。
+        let effective = session.getDestination();
+        if (!effective) {
+          const stored = await getFileHandle(doc.id);
+          if (stored && (await verifyPermission(stored, true, true))) effective = stored;
+        }
+        const outcome = await docHost.save({ ...doc, source: snapshot.source, handle: effective });
+        // 句柄写回（FA1-T1）：首次「另存为」拿到 handle 后记住它，
+        // 后续 Ctrl+S 直接 createWritable() 静默覆盖，不再唤起系统对话框与覆盖确认。
+        // 下载兜底没有句柄，保留原值（不把已有 handle 抹成 undefined）。
+        return { result: outcome.result, handle: outcome.handle ?? effective };
+      },
+      commit: (snapshot, outcome, current) => {
+        const nextHandle = outcome.handle ?? doc.handle;
+        // 目的地同步推进：本次实际写到哪，后续排队请求就写哪（复核 R1）
+        session.setDestination(nextHandle);
         // E 批口径：保存路径不得改写 doc.source（解析输入）——内容快照写入 savedSource
-        savedSource: source,
-        handle: outcome.handle ?? d.handle,
-        saved: true,
-        ts: Date.now(),
-      }));
-      controller.markSaved();
-      // 另存为会换文件：旧 id 的句柄记录要清掉，否则下次载入会指回旧文件
-      if (outcome.handle) persistHandle(outcome.handle.name ?? doc.id, outcome.handle);
+        setDoc((d) => ({
+          ...d,
+          savedSource: snapshot.source,
+          handle: nextHandle,
+          saved: true,
+          ts: Date.now(),
+        }));
+        // 写入期间继续编辑 → 磁盘上是旧快照：保持 dirty（后续自动保存写最新内容）
+        if (current) controller.markSaved();
+        // 附属记录（最近列表 / 句柄持久化）失败**不影响**写盘事实：结果仍是 saved，
+        // 失败经 onSaveWarning 独立提示（复核 R4-B）
+        let metadataFailed = false;
+        try {
+          docHost.remember({ ...doc, source: snapshot.source, handle: nextHandle, saved: true, ts: Date.now() });
+        } catch {
+          metadataFailed = true;
+        }
+        try {
+          persistHandle(doc.id, nextHandle);
+        } catch {
+          metadataFailed = true;
+        }
+        // 下载分支不得声称「已写入文件」（第三轮复核口径）
+        if (metadataFailed) {
+          onSaveWarning?.(
+            outcome.result === 'fs' ? SAVE_METADATA_WARNING : SAVE_METADATA_WARNING_DOWNLOAD,
+          );
+        }
+      },
     });
-  }, [runSave, controller, docHost, doc, setDoc, persistHandle]);
+    // 未完成时的可见反馈：守卫拦截 / 写入忙 / 写入失败三态分别有文案；取消与过期静默
+    if (completion.kind === 'blocked') onBlockedSave?.(SAVE_BLOCKED_NOTICE);
+    if (completion.kind === 'failed') onBlockedSave?.(SAVE_FAILED_NOTICE);
+    return completion;
+  }, [
+    autoSaveTimer,
+    controller,
+    docHost,
+    doc,
+    setDoc,
+    persistHandle,
+    session,
+    syncedSourceRef,
+    refuseBusy,
+    onBlockedSave,
+    onSaveWarning,
+  ]);
+
+  const handleSaveAs = useCallback(async (): Promise<SaveCompletion> => {
+    // 另存为必然唤起选择器：忙时不能排到任意旧 Promise 之后（transient activation 会丢）
+    if (session.isSaving()) return refuseBusy();
+    const completion = await session.submit({
+      intent: 'save-as',
+      capture: () => ({ source: controller.serialize(), content: controller.root }),
+      write: async (snapshot) => {
+        // 显式丢弃 handle → 必然唤起选择器（另存到新路径）。取消/失败都不改目的地。
+        return docHost.save({ ...doc, source: snapshot.source, handle: undefined });
+      },
+      commit: (snapshot, outcome, current) => {
+        const nextHandle = outcome.handle ?? session.getDestination();
+        // 另存为成功即**同步**换目的地：已入队的 auto/manual 随后写新文件（复核 R1）
+        session.setDestination(nextHandle);
+        setDoc((d) => ({
+          ...d,
+          // E 批口径：保存路径不得改写 doc.source（解析输入）——内容快照写入 savedSource
+          savedSource: snapshot.source,
+          handle: nextHandle,
+          saved: true,
+          ts: Date.now(),
+        }));
+        // 另存为期间继续编辑：新文件里是旧快照 → 保持 dirty
+        if (current) controller.markSaved();
+        // 另存为会换文件：旧 id 的句柄记录要清掉，否则下次载入会指回旧文件。
+        // 附属记录失败不影响写盘事实（复核 R4-B）→ 独立附属警告
+        try {
+          if (outcome.handle) persistHandle(outcome.handle.name ?? doc.id, outcome.handle);
+        } catch {
+          onSaveWarning?.(
+            outcome.result === 'fs' ? SAVE_METADATA_WARNING : SAVE_METADATA_WARNING_DOWNLOAD,
+          );
+        }
+      },
+    });
+    // 另存为失败要可见（取消/过期静默）
+    if (completion.kind === 'failed') onBlockedSave?.(SAVE_FAILED_NOTICE);
+    return completion;
+  }, [
+    controller,
+    docHost,
+    doc,
+    setDoc,
+    persistHandle,
+    session,
+    refuseBusy,
+    onBlockedSave,
+    onSaveWarning,
+  ]);
 
   return { applyDoc, handleOpen, handleNew, handleSave, handleSaveAs };
 }

@@ -1,6 +1,6 @@
 {
   "name": "@mindcanvas/kernel",
-  "version": "1.7.0",
+  "version": "1.12.0",
   "description": "mindcanvas headless 内核：实体契约 / 六注册表 / 插件基类 / 最小协议骨架（零运行时依赖）",
   "type": "module",
   "main": "./dist/index.js",

@@ -14,6 +14,8 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import type { EditableNode } from '@mindcanvas/kernel';
+import { useCompositionCommitGuard } from '../edit/compositionGuard.js';
+import { useDraftSession } from '../edit/draftSessions.js';
 import { CHROME } from '../theme/tokens.js';
 import type { TokenSet } from '../theme/types.js';
 import { TextLinkSpans } from './TextLinkSpans.js';
@@ -205,6 +207,10 @@ export function DescBlock({
   const s = scale;
   const [draft, setDraft] = useState(text);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
+  const textRef = useRef(text);
+  textRef.current = text;
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
 
   // 进入编辑态：同步草稿并聚焦（光标移到末尾）
   useEffect(() => {
@@ -218,9 +224,25 @@ export function DescBlock({
     }
   }, [editing, text]);
 
+  // MG-R1-B：组合未结束时不得提交未确认候选串；结束用确认文字补提交
+  const { onCompositionStart, onCompositionEnd, allowCommit } = useCompositionCommitGuard(
+    (next) => {
+      onCommit?.(next.trim());
+    },
+  );
+
   const commit = (): void => {
-    onCommit?.(draft.trim());
+    if (!allowCommit()) return;
+    onCommit?.(draftRef.current.trim());
   };
+
+  // MG-R4：编辑态草稿的 pending/flush 通道（编辑中被卸载/隐藏时也能被提交与检出）
+  useDraftSession(() => ({
+    hasPending: () => editing && draftRef.current.trim() !== textRef.current,
+    commit: () => {
+      onCommit?.(draftRef.current.trim());
+    },
+  }));
 
   if (!editing && text === '') return null;
 
@@ -290,6 +312,8 @@ export function DescBlock({
           rows={1}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
+          onCompositionStart={onCompositionStart}
+          onCompositionEnd={(e) => onCompositionEnd(e.currentTarget.value)}
           onKeyDown={(e) => {
             e.stopPropagation();
             if (e.key === 'Enter' && e.shiftKey) {

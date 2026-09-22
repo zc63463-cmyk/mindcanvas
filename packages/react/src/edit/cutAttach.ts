@@ -151,6 +151,19 @@ export function collectReferenceAnchors(root: EditableNode): AnchorRef[] {
           }
         });
       }
+      // 摘要范围锚（S1）：`summary_of: {from, to}` 是**对象值**，不在 ANCHOR_NOTE_KEYS 的
+      // 数组键 walk 内 → 单列分支；field 形态 `summary_of.from` / `summary_of.to`。
+      // 写入落 cid（身份稳定，迁移时原样保留即正确）；手写/旧文件的 node: 路径锚
+      // 走 planReferenceMigration 的 nodeId 重建（与 sections[].root 同轨）。
+      const summaryAnchor = note.summary_of;
+      if (isRec(summaryAnchor)) {
+        if (typeof summaryAnchor.from === 'string') {
+          refs.push({ noteKey: n.id, field: 'summary_of.from', anchor: summaryAnchor.from });
+        }
+        if (typeof summaryAnchor.to === 'string') {
+          refs.push({ noteKey: n.id, field: 'summary_of.to', anchor: summaryAnchor.to });
+        }
+      }
       // L2：文本字段内的行内链接（desc / note_text 标量；note[i] / qa[i] 数组项）。
       // field 形态 `desc#0` / `note_text#0` / `note[2]#1` / `qa[0]#0`——span 序号按出现顺序。
       collectTextLinkRefs(n.id, 'desc', note.desc, undefined, refs);
@@ -182,7 +195,19 @@ export function applyAnchorUpdateToNote(
     return applyTextLinkUpdate(note, sm[1] ?? '', sm[2], Number(sm[3]), to);
   }
   const m = /^([a-z_]+)\[(\d+)\](?:\.([a-z]+))?$/.exec(field);
-  if (!m) return note ?? {};
+  // S1：摘要范围锚形态 `summary_of.from` / `summary_of.to`（对象值内的叶子字段，
+  // 不是数组项——与上面的 `key[i].leaf` 形态刻意分开，避免正则在两条路径上互相误吃）。
+  // 两组默认空串 = 未命中分支（正则两组均为 `+`，命中即非空），无需非空断言。
+  if (!m) {
+    const [, dk = '', dleaf = ''] = /^([a-z_]+)\.([a-z_]+)$/.exec(field) ?? [];
+    if (dk === '') return note ?? {};
+    const base0: Note = note ?? {};
+    const cur0 = base0[dk];
+    if (!isRec(cur0)) return base0;
+    const out0: Note = { ...base0 };
+    out0[dk] = { ...cur0, [dleaf]: to };
+    return out0;
+  }
   const key = m[1];
   if (!key) return note ?? {};
   const idx = Number(m[2]);
@@ -304,6 +329,15 @@ function readAnchorField(note: Note | undefined, field: string): string | undefi
     if (text === undefined) return undefined;
     const links = parseTextLinks(text).filter((s) => s.kind === 'link');
     return links[Number(sm[3])]?.anchorText;
+  }
+  // S1：摘要范围锚形态 `summary_of.from` / `summary_of.to`（对象值内的叶子字段）。
+  // 两组默认空串 = 未命中分支，无需非空断言。
+  const [, dk = '', dleaf = ''] = /^([a-z_]+)\.([a-z_]+)$/.exec(field) ?? [];
+  if (dk !== '') {
+    const cur = note[dk];
+    if (!isRec(cur)) return undefined;
+    const v = cur[dleaf];
+    return typeof v === 'string' ? v : undefined;
   }
   const m = /^([a-z_]+)\[(\d+)\]\.(?:members\[(\d+)\]|([a-z]+))$/.exec(field);
   const key = m?.[1];
