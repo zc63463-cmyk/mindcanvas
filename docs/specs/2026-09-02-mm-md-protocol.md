@@ -442,7 +442,7 @@ kernel 常量（`SUMMARY_BRACKET_GAP` / `SUMMARY_STEM_GAP`）；左右严格镜�
 
 | 面 | 顺序 | 依据 |
 |---|---|---|
-| 画布 DOM（SVG 层 z-order，自下而上） | `sections` → **`summaries`** → `tree-links` → `free-edges` → `nodes` → `edge-labels` → `ghosts` → `drag` | `MapView.tsx` 的 `<SummaryLayer>` 挂在 `tree-links` 层**之前** |
+| 画布 DOM（SVG 层 z-order，自下而上） | `sections` → `island-overview`（IO-1 条件层：`k < K_OVERVIEW` 且有中心岛才挂） → **`summaries`** → `tree-links` → `free-edges` → `nodes` → `edge-labels` → `ghosts` → `drag` | `MapView.tsx` 的 `<SummaryLayer>` 挂在 `tree-links` 层**之前**；`island-overview` 钉在 `sections` 之后、`tree-links` 之前（`MapView.tsx` SectionLayer/IslandOverviewLayer/SummaryLayer/tree-links 挂载序，层序契约 `packages/react/tests/mapview-layer-order.test.tsx` 的 CONTRACT 数组同序；S5-R2 补记——首版表遗漏该条件层） |
 | SVG 导出（字符串发射序） | 背景 `rect` → 树线 `path` → 跨岛补线 `boundaryLinks`（虚线）→ **摘要括线** → 节点卡 | `chrome/exportSvg.ts` 的 `parts.push` 次序 |
 
 两点须注意：
@@ -577,7 +577,7 @@ cd apps/canvas && npx vite-node scripts/diag-roundtrip-real.mts     # 真实文�
 
 | 版本 | 变更 |
 |---|---|
-| v1.12 候选（**待版本号**） | 节点级 `Note.summary_of`（XMind 式概要：同父连续兄弟区间 + `cid:` 锚 + `W-SUMMARY-DANGLING` 数据无损；卫星摘除 + 方括号括线渲染）。**尚未定号**——S1/S2/S3/S4 已实现并验证，发版批次统一编号 |
+| v1.12 候选（**待版本号**） | 节点级 `Note.summary_of`（XMind 式概要：同父连续兄弟区间 + `cid:` 锚 + `W-SUMMARY-DANGLING` 数据无损；卫星摘除 + 方括号括线渲染）。**尚未定号**——S1–S5 已实现并验证（S5 首版 REJECT、S5-R2 返修收口），发版批次统一编号 |
 | v1.11.0 | `Note.beamAt` 共享梁比例位（逐方向 0..1；缺省 = 0.5/中点，与旧几何逐位兼容；≈0.5 不落盘——写侧删键。零 parser/serializer 改动） |
 | v1.10.0 | `Note.frame` 子树框编辑的持久框标记（`version: 1` + `depth` 有限整数 ≥ 1；成框/拆框 = 写/删该键，零 parser/serializer 改动） |
 | v1.7.0 | `Note.lens`（逐方向组缺省层距）/ `Note.hub`（出线枢纽共享竖梁）；布局侧四向分叉碰撞消解与连线避障（不改协议语义） |

@@ -3,9 +3,11 @@
  *
  * 覆盖（任务书「Undo 与替换若脚本未覆盖，你必须手动补做」+ 几何/顺序 + PNG + frame/satellite/cache）：
  *  E  Undo：创建摘要后 Ctrl+Z → 括线消失、摘要节点消失；Ctrl+Shift+Z 重做 → 复原
- *  F  替换：对同一区间再次创建摘要 → 仍 1 条括线（替换/不叠加）
+ *  F  替换（实测口径）：命令层**不做替换**——同区间再次创建 → 两个摘要节点、括线 2 条（FA1/FA2，
+ *     与 summary-create.test.ts:586 一致）；「删除后重建」才是不叠加（F2–F4 仍 1 条）
  *  G  nestedSkip：成员区间**含另一摘要节点**时，不摘除嵌套摘要（两条括线都在，不删除嵌套节点）
- *  H  DOM 括线层序：背景 rect → tree-links → 边界补线 → summaries → nodes
+ *  H  DOM 括线层序：sections → island-overview（IO-1 条件层）→ summaries → tree-links → … → nodes
+ *     （summaries 在 tree-links 之前、nodes 之前；与 SVG 导出发射序不同，见协议 §6.5 对照表）
  *  I  SVG 导出层序（同一文档）：背景 rect → 树线 path → boundaryLinks → summary → 节点卡
  *  J  PNG 导出：真实点「导出 PNG」按钮，落盘 .png（PNG 魔数）且非降级 .svg
  *  K  frame 路径 / 卫星传播 / 缓存 / 重复布局：数据面短路 + 缓存命中不改变布局与括线
@@ -464,7 +466,7 @@ check('G6 外层摘要节点仍在画布可见（留流内，不消失）', (awa
 await page.screenshot({ path: `${SHOTS}/g2-nested.png` });
 
 // ════════════════════════════════ H · DOM 括线层序
-section('H · DOM 层序：背景 rect → tree-links → 边界补线 → summaries → nodes');
+section('H · DOM 层序：sections → island-overview（IO-1 条件层）→ summaries → tree-links → … → nodes');
 const domOrder = await page.evaluate(() => {
   const svg = document.querySelector('svg');
   const rootG = svg ? [...svg.children].find((e) => e.tagName === 'g') : null;
@@ -486,7 +488,7 @@ check('H1 summaries 层在 nodes 层之前（括线在节点卡之下，不盖�
   idxSummary,
   idxNodes,
 });
-check('H2 summaries 层在 tree-links 层之前（S4 契约：层序 = sections → summaries → tree-links）', idxSummary >= 0 && idxTreeLinks >= 0 && idxSummary < idxTreeLinks, {
+check('H2 summaries 层在 tree-links 层之前（DOM 契约：层序 = sections → island-overview（条件层）→ summaries → tree-links）', idxSummary >= 0 && idxTreeLinks >= 0 && idxSummary < idxTreeLinks, {
   idxSummary,
   idxTreeLinks,
 });

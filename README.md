@@ -6,17 +6,17 @@
 
 ## 当前分支
 
-**摘要节点 S5 候选，REJECT／待返修。** 未因仓库迁移改变判定。
+**摘要节点批次 S1–S5 已收口（S5-R2 经独立复核 ACCEPT），留作 v1.12.0 候选。**
 
 ## 开发状态
 
 这是持续开发中的项目。`main` 从原工程已提交基线 `a2ce72bf122574815bf1b9134253a7bd0349c038` 建立公开源码快照，另行加入 GitHub 配置与可移植性调整；并非宣称产品已发布或所有特性通过验收。
 
 - `codex/workspace-wip`：原主工作区尚未整合的开发内容。
-- `codex/summary-node-s5`：摘要节点候选，原锚点 `123d22b773a06c4b8e3f6aa987e5493a2e3fce1b`，**S5 REJECT，待返修**。
+- `codex/summary-node-s5`：摘要节点批次（S1 数据层 / S2 创建与交互 / S3 布局卫星 / S4 括线渲染与导出 / S5 收尾验证与文档收口），S5-R2 经独立复核 ACCEPT，版本号 1.12.0 候选。
 - 历史 SHA 用于追溯本地来源，不属于本公开仓库历史；旧历史和完整取证包单独备份。
 
-分支差异、已知限制见 [开发交接](docs/development-handoff.md)。CI 的结果只覆盖列明的自动检查，不代表 S5 已被签收。
+分支差异、已知限制见 [开发交接](docs/development-handoff.md)。CI 的结果只覆盖列明的自动检查；摘要节点批次的签收结论以 `docs/dispatch/2026-09-22-summary-node-s5-r2-rv-report.md` 为准。
 
 ## Windows / macOS / Linux 快速开始
 

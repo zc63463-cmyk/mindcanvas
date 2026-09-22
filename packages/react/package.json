@@ -1,6 +1,6 @@
 {
   "name": "@mindcanvas/react",
-  "version": "1.7.0",
+  "version": "1.12.0",
   "description": "mindcanvas React 渲染器（消费 @mindcanvas/kernel；三主题令牌系统 + 玻璃 chrome）",
   "type": "module",
   "main": "./dist/index.js",

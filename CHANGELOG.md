@@ -7,16 +7,22 @@
 > （09-05~09-06）与「图引擎适配 / 文件工作台」（09-10）等批次未单独标号，
 > 按完成时间归入对应段落末尾的「同批」小节。
 
-## [未发布 · 待版本号] — 2026-09-21 · 摘要节点（XMind 式概要）S1–S4
+## [未发布 · 待版本号] — 2026-09-22 · 摘要节点（XMind 式概要）S1–S5
 
 > **版本状态（如实）**：本段是在制批次，**尚未发版**——`@mindcanvas/kernel` / `@mindcanvas/react`
 > 版本号仍为 **1.7.0**（`apps/canvas` 亦然），根 `package.json` 为 `0.0.0`。
 > 号位按仓内既有惯例留作 **v1.12 候选**（`docs/specs/2026-09-02-mm-md-protocol.md` §6.5 /
-> §十二 版本历史同措辞）；发布批次统一编号。**本段只记到 S4**，S5（收尾与文档收口）未启动。
+> §十二 版本历史同措辞）；发布批次统一编号。**本段记到 S5**：S5 首版（09-21）被独立复核判
+> REJECT（neg3-rootbox 阴性对照证据失实 + S5 文档缺失两项阻断），S5-R2 返修（09-22）重做
+> 该对照（Mac 实测真实转红）并补齐文档后收口，待独立复核。
 
-**本批含四组**（S1 数据层 / S2 创建事务与交互 / S3 布局卫星 / S4 括线渲染与导出）。
+**本批含五组**（S1 数据层 / S2 创建事务与交互 / S3 布局卫星 / S4 括线渲染与导出 /
+S5 收尾验证与文档收口）。
 S4 的完整回执与证据在 `docs/dispatch/2026-09-21-summary-node-s4-report.md` 与
-`outputs/summary-node/S4/S4-20260921-160000/`。
+`outputs/summary-node/S4/S4-20260921-160000/`；S5 评审报告在
+`docs/dispatch/2026-09-21-summary-node-s5-report.md`（判 REJECT）；S5-R2 返修回执与证据在
+`docs/dispatch/2026-09-22-summary-node-s5-r2-report.md` 与
+`outputs/summary-node/S5-R2/S5-R2-20260922-142654/`。
 
 - **数据层（S1）**：新增 `Note.summary_of`（`{ from, to }`，两字段非空、写入一律 `cid:`）；
   `resolveSummaries` 三态解析（`well-formed` / `dangling` / `stale`，含**同父 + 顺序 +
@@ -38,7 +44,7 @@ S4 的完整回执与证据在 `docs/dispatch/2026-09-21-summary-node-s4-report.
     **不重解析** raw `summary_of`、不重跑 `resolveSummaries`；成员**子树**并集为带，左右严格镜像；
     成员盒/satellite 盒缺失或降级项（dangling/stale/nestedSkip）一律跳过。
   - `render/SummaryLayer.tsx`：方括号 + stem，线色/线宽取主题 token；
-    挂载在 MapView 变换 `<g>` 内**层序 `sections → summaries → tree-links → … → nodes`**
+    挂载在 MapView 变换 `<g>` 内**层序 `sections → island-overview（IO-1 条件层）→ summaries → tree-links → … → nodes`**
     （括线是树线延伸，必须在节点卡之下）；`pointer-events: none` → **命中/选择逻辑零改动**；
     稳定锚点 `data-summary-bracket` / `data-summary-stem`。选中摘要 → 成员高亮；
     选中成员 → 反向显示所属摘要状态（**只读可视化，不写布局数据**）。
@@ -56,9 +62,31 @@ S4 的完整回执与证据在 `docs/dispatch/2026-09-21-summary-node-s4-report.
     `apps/canvas/tests/prod-build-isolation.test.ts`（2，**产物级**扫 dist 断言
     `__mindcanvasSummaryHost` / `__MINDCANVAS_TEST_BUILD__` 零命中）。
     浏览器 `tools/verify-summary.mjs`（创建 / 成员变化 / 左右向 / 三主题 / 三档缩放 / 导出，全绿）。
-  - **negative controls（4 组，实测退出码 1，红因均为目标断言）**：删 `<SummaryLayer>` 挂载 →
+  - **negative controls（4 组，S5-R2 Mac 实测退出码 1，红因均为目标断言）**：删 `<SummaryLayer>` 挂载 →
     宿主括线用例红；摘要层挪到节点层之后 → 层序用例红；成员带改用**成员自身盒** →
-    子树几何用例红；删 `satellites` 空早退（改消费 `plan.specs`）→ 降级用例红。
+    子树几何用例红（`expected 378 to be greater than or equal to 541.999999`；S5 首轮该组
+    证据失实，已由 S5-R2 重做取代）；删 `satellites` 空早退（改消费 `plan.specs`）→ 降级用例红。
+- **收尾验证与文档收口（S5，首版 REJECT → S5-R2 返修收口）**：
+  - 真浏览器矩阵 106 断言全绿（Windows Chromium：创建两跳 / 成员增删降级 / 左向岛 /
+    降级域 / 导出 SVG+PNG / undo-redo / 重复创建与重建 / 嵌套 / 框内+改名 / dangling-stale /
+    普通文档编辑平移缩放保存 / 三主题 / 三档缩放，证据
+    `outputs/summary-node/S5/S5-20260921-230000/browser/`）；普通文档（无 `summary_of`）在
+    布局 / 编辑 / 平移 / 缩放 / 保存 / 导出六项与 S1 基线**逐字节等价**（三候选两两 cmp IDENTICAL）。
+  - 阴性对照 4 组于 S5-R2 在 Mac 全部重做转红（含变异落盘硬校验 + 备份还原 cmp 逐字节），
+    证据 `outputs/summary-node/S5-R2/S5-R2-20260922-142654/negctl/`；首轮 neg3-rootbox 的
+    「变异不可观测 / 语义等价」结论经同形夹具探针与复跑**证伪并撤回**（成员扁节点携带
+    children，子树并集右沿 542 ≠ 自身盒并集右沿 378）。
+  - 文档收口：协议 §6.5 DOM 层序表补记 `island-overview` 条件层（对齐
+    `mapview-layer-order.test.tsx` 契约）；AI 契约 `summary_of` 补读法已在位
+    （`docs/specs/2026-09-17-mm-md-ai-contract.md`）；S5 收口文档（候选终态 + 证据索引 +
+    未覆盖清单）落盘 `outputs/summary-node/S5-R2/S5-R2-20260922-142654/docs/closeout.md`；
+    本段 CHANGELOG 顺延至 S5。
+  - 工具与忽略规则修正：`tools/verify-summary-supplement.mjs` 的 H/F 横幅描述与自身断言对齐
+    （断言逻辑零改动）；`.gitignore` 补 `!outputs/**/browser/*.log`（browser 证据日志入库通道）。
+  - 其余门禁：kernel 708 / react 1636 / canvas 396 / typecheck / depcruise / lint / budget /
+    targeted 91 / prod-build-isolation 红/绿双向 / root 依赖负控（Windows 冻结基线全绿），
+    S5-R2 于 Mac 复测见 R2 回执 §五；Mac 构建产物 `main-BgdfvXm7.js` 与 Windows 浏览器
+    证据 bundle **sha256 逐字节一致**（159e2d1a…，450702 B），浏览器矩阵证据据此沿用。
 
 ## [未发布 · 待交付] — 2026-09-19 · 交付收口（保存生命周期 + MODE-GUARD + 类型门禁 + 债务收口）
 
