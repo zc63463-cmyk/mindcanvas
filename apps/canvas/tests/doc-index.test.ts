@@ -31,6 +31,24 @@ import {
 
 const HANDLES_DB_HINT = 'mindcanvas-handles';
 
+/**
+ * 取第一个元素（不存在则抛清晰的断言错误）。
+ *
+ * 用它在测试里替代 `arr[0]!.x`：非空断言会让 lint 记一条 warning（债务基线冻结），
+ * 而这里本就需要「不存在即失败」的语义，用显式断言表达更准确。
+ */
+function first<T>(list: readonly T[]): T {
+  const hit = list[0];
+  if (hit === undefined) throw new Error('期望至少一个元素，实际为空');
+  return hit;
+}
+
+/** 取一条被断言「必须存在」的记录（同上：不用非空断言） */
+function must<T>(v: T | undefined): T {
+  if (v === undefined) throw new Error('期望条目存在，实际为 undefined');
+  return v;
+}
+
 function store(): IndexStore {
   return {
     get: (k) => localStorage.getItem(k),
@@ -59,7 +77,10 @@ function idx(ctx: MigrateContext, now = 1_000): DocIndex {
   return new DocIndex({
     store: store(),
     now: () => t,
-    makeLineageId: () => `lin-${(t += 1)}`,
+    makeLineageId: () => {
+      t += 1;
+      return `lin-${t}`;
+    },
     ctx: () => ctx,
   });
 }
@@ -116,7 +137,7 @@ describe('DocIndex · openedAt / savedAt（UD-2）', () => {
       JSON.stringify([{ id: '旧.mm.md', name: '旧.mm.md', ts: 9_999_999, folder: '', tags: [] }]),
     );
     d2.migrate();
-    const migrated = d2.listDocs()[0]!;
+    const migrated = first(d2.listDocs());
     expect(migrated.openedAt).toBeNull(); // ← 绝不把 ts(9_999_999) 当成打开时间
     expect(migrated.savedAt).toBe(9_999_999);
 
@@ -227,17 +248,17 @@ describe('DocIndex · 迁移幂等与续跑（NC-2 期望）', () => {
     seedLegacy();
     const ctx = diskCtx();
     const d = idx(ctx);
-    const first = d.migrate();
+    const run1 = d.migrate();
     const snapshot = JSON.stringify(d.listDocs());
-    const second = d.migrate();
-    expect(first.migrated).toBeGreaterThan(0);
-    expect(second.migrated).toBe(0); // 第二次全部 unchanged
-    expect(second.unchanged).toBeGreaterThan(0);
+    const run2 = d.migrate();
+    expect(run1.migrated).toBeGreaterThan(0);
+    expect(run2.migrated).toBe(0); // 第二次全部 unchanged
+    expect(run2.unchanged).toBeGreaterThan(0);
     expect(JSON.stringify(d.listDocs())).toBe(snapshot);
     // 迁移不得编造打开时间
     expect(d.listDocs().every((e) => e.openedAt === null)).toBe(true);
     // 收藏被迁移（M6 精确命中）
-    expect(d.listDocs()[0]!.starred).toBe(true);
+    expect(first(d.listDocs()).starred).toBe(true);
   });
 
   it('第一批未处理完的旧键在后续调用时补齐（可中断续跑）', () => {
@@ -302,7 +323,7 @@ describe('DocIndex · 归属证据（§6.2.1 / NC-3 期望）', () => {
     expect(r.migrated).toBe(0);
     expect(d.listDocs()).toEqual([]); // ← 不建条目 = 不认领
     expect(d.historyPool().map((h) => h.key)).toEqual(['研发/架构.mm.md']);
-    expect(d.historyPool()[0]!.reason).toBe('no-evidence');
+    expect(first(d.historyPool()).reason).toBe('no-evidence');
     // 旧键保留（用户不处理也不丢）；folder 会被包侧 normalize 清洗掉首尾斜杠
     const kept = JSON.parse(localStorage.getItem(LEGACY_LIBRARY_KEY) ?? '[]') as Array<{
       id: string;
@@ -314,7 +335,7 @@ describe('DocIndex · 归属证据（§6.2.1 / NC-3 期望）', () => {
     localStorage.setItem(LEGACY_LIBRARY_KEY, JSON.stringify(legacy));
     const d = idx(diskCtx('ws:proven'));
     expect(d.migrate().migrated).toBe(1);
-    expect(d.listDocs()[0]!.docKey).toBe('ws:proven::研发/架构.mm.md');
+    expect(first(d.listDocs()).docKey).toBe('ws:proven::研发/架构.mm.md');
     expect(d.historyPool()).toEqual([]);
   });
 
@@ -345,7 +366,7 @@ describe('DocIndex · 归属证据（§6.2.1 / NC-3 期望）', () => {
     const d = idx(diskCtx('ws:session', { persisted: false, hasHistoryEvidence: false }));
     const r = d.migrate();
     expect(r.migrated).toBe(0);
-    expect(d.historyPool()[0]!.reason).toBe('ephemeral-scope');
+    expect(first(d.historyPool()).reason).toBe('ephemeral-scope');
   });
 
   it('hasOwnershipEvidence：无 relPath / 未持久 / 无证据 一律 false', () => {
@@ -412,12 +433,11 @@ describe('DocIndex · 降级投影（§6.3 / NC-4 期望）', () => {
     const lib = JSON.parse(localStorage.getItem(LEGACY_LIBRARY_KEY) ?? '[]') as Array<
       Record<string, unknown>
     >;
-    const row = lib.find((e) => e.id === '研发/架构.mm.md');
-    expect(row).toBeDefined();
-    expect(row!.name).toBe('架构.mm.md');
-    expect(row!.ts).toBe(1_111); // max(openedAt, savedAt)
-    expect(row!.folder).toBe('');
-    expect(row!.tags).toEqual([]);
+    const row = must(lib.find((e) => e.id === '研发/架构.mm.md'));
+    expect(row.name).toBe('架构.mm.md');
+    expect(row.ts).toBe(1_111); // max(openedAt, savedAt)
+    expect(row.folder).toBe('');
+    expect(row.tags).toEqual([]);
 
     // ② 旧收藏键集合：升级后新增的收藏必须在里面
     expect(JSON.parse(localStorage.getItem(LEGACY_STARRED_KEY) ?? '[]')).toEqual([
@@ -436,7 +456,7 @@ describe('DocIndex · 降级投影（§6.3 / NC-4 期望）', () => {
     const lib = JSON.parse(localStorage.getItem(LEGACY_LIBRARY_KEY) ?? '[]') as Array<{
       ts: number;
     }>;
-    expect(lib[0]!.ts).toBe(900);
+    expect(first(lib).ts).toBe(900);
   });
 
   it('投影保 source 只留 8 条，且不同旧 id 的既有快照不串源', () => {
@@ -471,9 +491,8 @@ describe('DocIndex · 降级投影（§6.3 / NC-4 期望）', () => {
     // 旧库孤儿**保留在旧结构里**（投影是并集，不是覆盖）。
     // 它的 source 可能落在 8 条窗口之外而被剥掉——这与既有 SOURCE_KEEP 降级一致，
     // 不是本次投影的丢失（索引侧仍保有条目本身）。
-    const orphan = lib.find((e) => e.id === 'd11.mm.md');
-    expect(orphan).toBeDefined();
-    expect(orphan!.name).toBe('d11.mm.md');
+    const orphan = must(lib.find((e) => e.id === 'd11.mm.md'));
+    expect(orphan.name).toBe('d11.mm.md');
   });
 
   it('取消收藏会同步从旧收藏键移除（投影是当前状态的镜像，不是只增）', () => {
@@ -544,7 +563,7 @@ describe('DocIndex · M4 / M7 / M8', () => {
     expect(r.migrated).toBe(1);
     // `idb:` 项（浏览器素材库）作用域唯一，可直接迁移
     expect(d.listAssets().map((a) => a.assetKey)).toEqual(['idb:a.png']); // 规范 id 保持原样
-    expect(d.listAssets()[0]!.starred).toBe(true);
+    expect(first(d.listAssets()).starred).toBe(true);
     // 无证据的 `disk:` 项进历史池
     expect(d.historyPool().map((h) => h.key)).toEqual(['disk:assets/b.png']);
   });
@@ -554,8 +573,8 @@ describe('DocIndex · M4 / M7 / M8', () => {
     const d = idx(diskCtx());
     expect(d.migrate().migrated).toBe(1);
     // 旧键 `disk:assets/b.png` 的 `kind:` 前缀不进入新 assetKey（真实身份是相对路径）
-    expect(d.listAssets()[0]!.assetKey).toBe('assets/b.png');
-    expect(d.listAssets()[0]!.legacyKeys).toEqual(['disk:assets/b.png']);
+    expect(first(d.listAssets()).assetKey).toBe('assets/b.png');
+    expect(first(d.listAssets()).legacyKeys).toEqual(['disk:assets/b.png']);
   });
 
   it('M8：自由画布最近并入索引且**不改写**该旧键', () => {
@@ -572,16 +591,12 @@ describe('DocIndex · M4 / M7 / M8', () => {
     // 二次迁移幂等：条目已在且 legacyKeys 已含该键 → 条目本身不再变。
     // （`migrated` 计数含「M8 补 legacyKeys」这一段，走完一轮进度归零后会重跑一次复核，
     //  所以断言落在**条目内容**与**不重复建条目**上，而不是计数。）
+    expect(d.getDoc('browser:local::c1')?.legacyKeys).toEqual([LEGACY_CANVAS_RECENT_KEY]);
+    // 再迁移一次：条目内容不变、不重复建条目（进度走完一轮后从头做幂等复核）
     const before = JSON.stringify(d.listDocs());
-    expect(d.getDoc('browser:local::c1')?.legacyKeys).toEqual([LEGACY_CANVAS_RECENT_KEY]);
-    const second = d.migrate();
-    expect(d.listDocs().length).toBe(1); // 不重复建条目
-    expect(JSON.stringify(d.listDocs())).toBe(
-      JSON.stringify(
-        (JSON.parse(before) as unknown[]).map((e) => ({ ...(e as object), legacyKeys: [LEGACY_CANVAS_RECENT_KEY] })),
-      ),
-    );
-    expect(d.getDoc('browser:local::c1')?.legacyKeys).toEqual([LEGACY_CANVAS_RECENT_KEY]);
+    d.migrate();
+    expect(d.listDocs().length).toBe(1);
+    expect(JSON.stringify(d.listDocs())).toBe(before);
     // 时间也不被迁移改写（迁移不是打开、不是保存）
     expect(d.getDoc('browser:local::c1')?.openedAt).toBeNull();
     expect(d.getDoc('browser:local::c1')?.savedAt).toBe(77);
@@ -664,18 +679,17 @@ describe('DocIndex · 收藏身份与宽容读写', () => {
     const raw = JSON.parse(localStorage.getItem(DOC_INDEX_KEY) ?? '{}') as {
       entries: Record<string, unknown>[];
     };
-    expect(raw.entries[0]!.futureField).toEqual({ a: 1 });
+    expect(first(raw.entries).futureField).toEqual({ a: 1 });
   });
 
   it('缺失字段被补齐而不丢条目（后向兼容）', () => {
     localStorage.setItem(DOC_INDEX_KEY, JSON.stringify([{ docKey: 'browser::y' }]));
-    const e = idx(diskCtx()).getDoc('browser::y');
-    expect(e).toBeDefined();
-    expect(e!.savedAt).toBe(0);
-    expect(e!.openedAt).toBeNull();
-    expect(e!.starred).toBe(false);
-    expect(e!.legacyKeys).toEqual([]);
-    expect(e!.sourceRef).toEqual({ kind: 'none' });
+    const e = must(idx(diskCtx()).getDoc('browser::y'));
+    expect(e.savedAt).toBe(0);
+    expect(e.openedAt).toBeNull();
+    expect(e.starred).toBe(false);
+    expect(e.legacyKeys).toEqual([]);
+    expect(e.sourceRef).toEqual({ kind: 'none' });
   });
 
   it('listDocs 可容忍非数组索引键', () => {
