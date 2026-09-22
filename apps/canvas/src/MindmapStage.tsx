@@ -994,12 +994,20 @@ function StageContent({
       persisted: scopeId !== null && workspace.scopeState.persisted,
       sourceRef: doc.handle ? { kind: 'disk-handle' } : { kind: 'none' },
     });
-    // 同一次保存只推进一次 `savedAt`（effect 会因其它依赖重跑）
+    // `savedAt` **只在真实保存转换时推进**。
+    //
+    // 此前把「`doc.saved` 为 true」整体当成一次保存：打开一份已保存的文档
+    // （挂载 / 切换文档）也会盖上 `savedAt = now`，「最近」被打开动作污染，
+    // 投影的 `ts = max(openedAt, savedAt)` 跟着漂。
+    // 判据：`seenKey` 记住「这份文档上一次见过的内容戳」——
+    //   - 第一次看到某份文档（打开）→ 只记戳，不推进；
+    //   - 同一份文档内容变了（真实保存）→ 推进。
     const stamp = `${docKey}|${snapshot.length}|${doc.name}`;
-    if (savedEffectRef.current !== stamp) {
-      savedEffectRef.current = stamp;
-      index.saveDoc({ docKey, relPath: workspacePath, name: doc.name });
-    }
+    const seen = savedEffectRef.current;
+    const first = seen === null || seen.slice(0, seen.indexOf('|')) !== docKey;
+    savedEffectRef.current = stamp;
+    if (first || seen === stamp) return; // 打开 / 同一次保存重跑 → 不推进 `savedAt`
+    index.saveDoc({ docKey, relPath: workspacePath, name: doc.name });
   }, [doc.name, doc.handle, doc.savedSource, doc.source, doc.saved, docKey, index, workspace, workspacePath]);
   // 异步清单（宿主可换 HTTP/FS 实现）；插入/上传后由 Stage 更新本地副本
   const [assetList, setAssetList] = useState<AssetItem[]>([]);
