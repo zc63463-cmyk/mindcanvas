@@ -106,6 +106,14 @@ R2 首跑（14:35）中，neg3 变异脚本因 Python bytes 字面量含中文�
    summaries → tree-links → … → nodes`；:6（头注释 F 行）改为实测口径（命令层不替换，
    同区间再创建 → 2 条括线，FA1/FA2；删除后重建不叠加，F2–F4）；:491 H2 断言描述串同步
    补 `island-overview`。**断言逻辑零改动**（仅文案）。
+   > **Errata（2026-09-22，回应独立复核 [low] finding）**：上述「断言逻辑零改动」
+   > 的取证方式**不是 git diff**——R2 改动前的 `verify-summary-supplement.mjs` 版本
+   > 未随 S5 首版候选入库（该工具为 S5 新增，远端基线 b808486 之前无此文件的历史锚点
+   > 可供 diff），故本回执无法以「`git diff <base>..HEAD` 断言段为空」直证。
+   > 实际取证为**语义核对**：逐条比对 R2 前后版本中 `check(...)` 调用的断言表达式、
+   > 目标变量与比较运算符，确认仅横幅/描述串（H/F 头注释、section 横幅、H2 断言
+   > message 参数）变化，`expect(...)` 的实参与断言逻辑未变。该结论在语义层成立，
+   > 但缺乏可复现的 diff 基线，特此如实声明方法边界。
    验证：`grep "背景 rect → tree-links"` 全文件零命中（陈旧横幅已清）。
 3. **[low] `.gitignore` 漏 browser 日志否定规则** —— 补 `!outputs/**/browser/*.log`
    （gitignore-scope.txt 方案 A），并把「gates/negctl 内任意命名 .log 放行」记为显式债务；
