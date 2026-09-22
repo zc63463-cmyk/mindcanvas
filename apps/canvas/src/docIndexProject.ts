@@ -39,7 +39,7 @@ export interface ProjectionState {
    * `ts = max(openedAt, savedAt)`（§6.3 明文）；source 仍只留 8 条，
    * 由 `DocLibrary.replaceAll` 的既有降级规则执行。
    */
-export function projectLibrary(index: ProjectionState): number {
+export function projectLibrary(index: ProjectionState): boolean {
     try {
       const prevRead = index.readJSON(LEGACY_LIBRARY_KEY);
       const prevList =
@@ -51,8 +51,6 @@ export function projectLibrary(index: ProjectionState): number {
         const id = item.id;
         if (typeof id === 'string' && id !== '') byId.set(id, item);
       }
-      let orphans = 0;
-
       const rows: Array<{
         id: string;
         name: string;
@@ -86,52 +84,58 @@ export function projectLibrary(index: ProjectionState): number {
       // 旧库中索引没有对应项的条目：原样保留（不进索引 = 没被认领，但也不能被抹掉）
       for (const [id, item] of byId) {
         if (seen.has(id)) continue;
-        orphans += 1;
         rows.push(item as (typeof rows)[number]);
       }
 
       // 索引无条目、旧结构也没有（或本就不合法）→ **不写**：
       // `replaceAll([])` 会把旧结构抹成空，既丢数据又白搭一次写。
-      if (rows.length === 0) return orphans;
+      // 这不是失败（没有东西要写），故返回 true。
+      if (rows.length === 0) return true;
 
       new DocLibrary().replaceAll(rows);
-      return orphans;
+      return true;
     } catch {
-      return 0;
+      return false; // 写失败：调用方据此置 projectionFailed（§6.3「不可回退且可查」）
     }
   }
 
   /**
    * 投影②：旧收藏键集合（`fullPath` 或旧 id）。
    *
-   * **必须与旧集合求并集**：无法归属到索引的旧收藏（→ 历史池）不在 `docs` 里，
-   * 只写索引一侧会把它们悄悄取消收藏。旧集合 + 索引收藏 = 不丢。
-   * 索引侧「取消收藏」的表达是：该键**不在**索引收藏集里，且它也不是旧集合里的孤儿项。
+   * **必须与旧集合求并集，且只移除「已被索引认领」的取消项**：
+   * - 无法归属到索引的旧收藏（→ 历史池）不在 `docs` 里，只写索引一侧会把它们悄悄取消收藏；
+   * - 更隐蔽的一种：**尚未迁移**的旧键也不能移除（否则投影反过来破坏迁移的输入）。
+   * 详见函数内 `claimedByIndex` 的注释。
    */
-export function projectStarred(index: ProjectionState, orphanCount: number): boolean {
-    try {
-      const prevRead = index.readJSON(LEGACY_STARRED_KEY);
-      const prevKeys =
-        prevRead.kind === 'ok' && Array.isArray(prevRead.value)
-          ? prevRead.value.filter((k): k is string => typeof k === 'string')
-          : [];
-      const indexedLegacyKeys = new Set(index.docs.filter((e) => e.starred).map(legacyIdOf));
-      // 被显式取消收藏的键：曾经在旧集合里、现在索引里有条目但 starred=false
-      const explicitlyUnstarred = new Set(
-        index.docs.filter((e) => !e.starred).map(legacyIdOf),
-      );
-      const out = new Set<string>();
-      for (const k of prevKeys) {
-        if (indexedLegacyKeys.has(k)) out.add(k);
-        else if (!explicitlyUnstarred.has(k)) out.add(k); // 孤儿/历史池项：保留
-      }
-      for (const k of indexedLegacyKeys) out.add(k);
-      index.store.set(LEGACY_STARRED_KEY, JSON.stringify([...out]));
-      // orphanCount 仅用于让调用方读懂「为什么是并集而不是覆盖」，不影响结果
-      void orphanCount;
-      return true;
-    } catch {
-      return false;
+export function projectStarred(index: ProjectionState): boolean {
+  try {
+    const prevRead = index.readJSON(LEGACY_STARRED_KEY);
+    const prevKeys =
+      prevRead.kind === 'ok' && Array.isArray(prevRead.value)
+        ? prevRead.value.filter((k): k is string => typeof k === 'string')
+        : [];
+    /** 索引侧「当前确实已收藏」的键（旧 id 形态）：用户现在要看到的收藏 */
+    const indexedKeys = new Set(index.docs.filter((e) => e.starred).map(legacyIdOf));
+    /** 迁移**认领过**的旧键（写进了某条目的 `legacyKeys`） */
+    const claimed = new Set(index.docs.flatMap((e) => e.legacyKeys));
+    /**
+     * 未认领的旧键一律保留。两类都在这里：
+     * ① 历史池里的记录（用户不处理也不丢）；
+     * ② **尚未迁移**的键 —— 这一条是硬要求：`registerDoc`/`openDoc` 会先于 `migrate()`
+     *    登记条目，如果那时就按「索引里没收藏 → 从旧集合删掉」处理，
+     *    投影会**反过来删掉迁移的输入**（实测：`mindcanvas.starred.v1` 被清空，
+     *    M6 之后读到空数组，一条收藏都迁不过来）。
+     * 认领过的键若已不再收藏，才是真正的「用户取消收藏」→ 不移入结果集。
+     */
+    const out = new Set<string>();
+    for (const k of prevKeys) {
+      if (!claimed.has(k) || indexedKeys.has(k)) out.add(k);
     }
+    for (const k of indexedKeys) out.add(k);
+    index.store.set(LEGACY_STARRED_KEY, JSON.stringify([...out]));
+    return true;
+  } catch {
+    return false;
   }
+}
 

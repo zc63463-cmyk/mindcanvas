@@ -30,6 +30,7 @@ import {
   appendUnique,
   browserDocKey,
   compareRecent,
+  legacyIdOf,
   grantRelinkEvidence,
   isRecord,
   nameOf,
@@ -262,13 +263,31 @@ export class DocIndex {
 
   /** 收藏/取消收藏（按**稳定身份** `docKey`；`relPath` 变了收藏不丢） */
   setStarred(docKey: string, starred: boolean, at = this.nowMs()): IndexChangeResult {
-    return this.mutate((prev) => {
+    const out = this.mutate((prev) => {
       if (!prev) {
         const created = this.freshEntry(docKey, relPathOfKey(docKey), { docKey }, at);
         return { ...created, starred };
       }
       return { ...prev, starred };
     }, docKey);
+    // 用户显式碰过这条 → 记下它当前的旧 id 写法，供投影区分
+    // 「用户取消收藏」与「这条还没迁移」（见 `claimKey` 注释）
+    const entry = this.getDoc(docKey);
+    if (entry !== undefined) this.claimKey(docKey, legacyIdOf(entry));
+    return out;
+  }
+
+  /**
+   * 把某个键登记为「已被索引认领」（写进目标条目的 `legacyKeys`）。
+   *
+   * 为什么收藏写入要记这个：降级投影需要区分两种 `starred === false`
+   * ——「用户显式取消收藏」（该从旧键移除）与「这条还没迁移」（绝不能动旧键）。
+   * 用户一碰收藏就留下认领痕迹，两者即可判定。见 `docIndexProject.projectStarred`。
+   */
+  private claimKey(docKey: string, key: string): void {
+    this.docs = this.docs.map((e) =>
+      e.docKey === docKey ? { ...e, legacyKeys: appendUnique(e.legacyKeys, key) } : e,
+    );
   }
 
   /**
@@ -281,11 +300,21 @@ export class DocIndex {
       this.getDoc(pathKey) ??
       this.docs.find((e) => e.relPath === pathKey) ??
       this.docs.find((e) => e.legacyKeys.includes(pathKey));
-    if (hit) return this.setStarred(hit.docKey, starred, at);
+    if (hit) {
+      const out = this.setStarred(hit.docKey, starred, at);
+      // 记录路径别名：用户显式操作过的键 = 已被认领（投影据此判定「取消收藏」）
+      this.claimKey(hit.docKey, pathKey);
+      return out;
+    }
     const docKey = pathKey.includes('::') ? pathKey : browserDocKey(pathKey);
     const created = this.mutate((prev) => {
       const base = prev ?? this.freshEntry(docKey, relPathOfKey(docKey) ?? pathKey, { docKey }, at);
-      return { ...base, relPath: base.relPath ?? pathKey, starred };
+      return {
+        ...base,
+        relPath: base.relPath ?? pathKey,
+        starred,
+        legacyKeys: appendUnique(base.legacyKeys, pathKey),
+      };
     }, docKey);
     return created;
   }
@@ -498,8 +527,7 @@ export class DocIndex {
    */
   project(indexWritten: boolean): boolean {
     if (!indexWritten) return false;
-    const orphans = projectLibrary(this);
-    return projectStarred(this, orphans);
+    return projectLibrary(this) && projectStarred(this);
   }
 
   /**

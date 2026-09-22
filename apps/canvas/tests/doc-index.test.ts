@@ -553,28 +553,140 @@ describe('DocIndex · 降级投影（§6.3 / NC-4 期望）', () => {
 // ---------------------------------------------------------------- M4 / M7 / M8
 
 describe('DocIndex · M4 / M7 / M8', () => {
-  it('M7：浏览器素材库收藏可直接迁移；磁盘项无证据时进历史池', () => {
+  /**
+   * 旧收藏键的真实格式是 `` `${a.kind}:${a.id}` ``，`a.kind ∈ {'img','draw'}`
+   * （`packages/react/src/chrome/assetTypes.ts:7`、`assetHost.ts:11-13`，
+   * 写入点 `AssetPanel.tsx:151/367`），`a.id` 是**资产 id**
+   * （`assets/<rel>` / `builtin:<id>` / data URL）。
+   *
+   * 这里刻意用真实前缀：旧实现把前缀猜成 `idb:` / `disk:`，
+   * 于是 `isBrowserItem` 恒 false、`relPath` 恒 null、
+   * 「磁盘项需 (scopeId, relPath) 且作用域已证明同一目录」这条分支**生产上不可达**。
+   */
+  /**
+   * M6 的「精确命中」**不是**归属证据（§6.2.1 第 1 行的前提是「该 scopeId 本次以
+   * isSameEntry / 用户确认建立」）。索引里任何作用域的条目（含另一工作区、
+   * 含 `ephemeral` 条目）都不能凭「恰好同名」把旧收藏键提升为「已绑定 + 已收藏」——
+   * 否则 `starredKeys()` 会把 `legacyKeys` 当收藏别名暴露给 UI，错绑直接显示成「已收藏」。
+   */
+  it('M6：索引里存在**其他作用域**的同名条目 → 不认领，进历史池', () => {
+    localStorage.setItem(LEGACY_STARRED_KEY, JSON.stringify(['研发/架构.mm.md']));
+    // 当前作用域是 ws:aaaa（无证据），索引里却有一条 ws:OTHER 的同名条目
+    const d = idx(adoptedCtx('ws:aaaa'));
+    d.registerDoc({
+      docKey: 'ws:OTHER::研发/架构.mm.md',
+      relPath: '研发/架构.mm.md',
+      name: '架构.mm.md',
+      scopeId: 'ws:OTHER',
+      persisted: true,
+      sourceRef: { kind: 'disk-handle' },
+    });
+    const r = d.migrate();
+    expect(r.migrated).toBe(0);
+    // 另一作用域的条目**不得**被置为收藏
+    expect(d.getDoc('ws:OTHER::研发/架构.mm.md')?.starred).toBe(false);
+    expect(d.starredDocs()).toEqual([]);
+    expect(d.historyPool().map((h) => h.key)).toEqual(['研发/架构.mm.md']);
+  });
+
+  it('M6：索引里的 `ephemeral` 条目不被旧收藏键认领（§6.2.1 第 5 行）', () => {
+    localStorage.setItem(LEGACY_STARRED_KEY, JSON.stringify(['会话文档.mm.md']));
+    const d = idx(diskCtx('ws:session', { persisted: false, hasHistoryEvidence: false }));
+    d.registerDoc({
+      docKey: 'ws:session::会话文档.mm.md',
+      relPath: '会话文档.mm.md',
+      name: '会话文档.mm.md',
+      scopeId: 'ws:session',
+      persisted: false,
+      sourceRef: { kind: 'none' },
+    });
+    expect(d.getDoc('ws:session::会话文档.mm.md')?.ephemeral).toBe(true);
+    d.migrate();
+    expect(d.getDoc('ws:session::会话文档.mm.md')?.starred).toBe(false);
+    expect(d.historyPool().map((h) => h.key)).toEqual(['会话文档.mm.md']);
+  });
+
+  it('M6：同作用域且有证据时，精确命中才认领为收藏', () => {
+    localStorage.setItem(LEGACY_STARRED_KEY, JSON.stringify(['研发/架构.mm.md']));
+    const d = idx(diskCtx('ws:proven'));
+    d.registerDoc({
+      docKey: 'ws:proven::研发/架构.mm.md',
+      relPath: '研发/架构.mm.md',
+      name: '架构.mm.md',
+      scopeId: 'ws:proven',
+      persisted: true,
+      sourceRef: { kind: 'disk-handle' },
+    });
+    const r = d.migrate();
+    // 断言落在**行为**上（收藏被认领、无历史池），不数 migrated：
+    // 同一轮里 M6 认领收藏、M8 补 legacyKeys 都会计入 migrated，计数随批量口径浮动。
+    expect(r.migrated).toBeGreaterThan(0);
+    expect(d.getDoc('ws:proven::研发/架构.mm.md')?.starred).toBe(true);
+    expect(d.getDoc('ws:proven::研发/架构.mm.md')?.legacyKeys).toContain(
+      `${LEGACY_STARRED_KEY}#研发/架构.mm.md`,
+    );
+    expect(d.historyPool()).toEqual([]);
+  });
+
+  it('M7：`assets/<rel>` 项在有证据作用域下迁移为 (scopeId, relPath)，前缀不进入 assetKey', () => {
+    localStorage.setItem(LEGACY_ASSET_FAV_KEY, JSON.stringify(['img:assets/b.png']));
+    const d = idx(diskCtx());
+    expect(d.migrate().migrated).toBe(1);
+    const a = first(d.listAssets());
+    // 资产 id 是 `assets/b.png` —— 去掉 `kind:` 之后整体保留（不是丢掉前缀只留末段）
+    expect(a.assetKey).toBe('assets/b.png');
+    expect(a.relPath).toBe('assets/b.png');
+    expect(a.starred).toBe(true);
+    expect(a.legacyKeys).toEqual(['img:assets/b.png']);
+    expect(d.historyPool()).toEqual([]);
+  });
+
+  it('M7：无证据作用域下 `assets/<rel>` 项进历史池（唯一同名也不认领）', () => {
+    localStorage.setItem(LEGACY_ASSET_FAV_KEY, JSON.stringify(['img:assets/b.png']));
+    const d = idx(adoptedCtx());
+    const r = d.migrate();
+    expect(r.migrated).toBe(0);
+    expect(d.listAssets()).toEqual([]);
+    expect(d.historyPool().map((h) => h.key)).toEqual(['img:assets/b.png']);
+  });
+
+  it('M7：`draw:` 前缀（SVG）按同一规则处理', () => {
+    localStorage.setItem(LEGACY_ASSET_FAV_KEY, JSON.stringify(['draw:assets/i.svg']));
+    const d = idx(diskCtx());
+    expect(d.migrate().migrated).toBe(1);
+    expect(first(d.listAssets()).assetKey).toBe('assets/i.svg');
+  });
+
+  it('M7：`builtin:` 与 data: 是自包含引用，不属于任何作用域，可直接迁移（I-5）', () => {
     localStorage.setItem(
       LEGACY_ASSET_FAV_KEY,
-      JSON.stringify(['idb:a.png', 'disk:assets/b.png']),
+      JSON.stringify(['img:builtin:star', 'draw:data:image/svg+xml;base64,AAA']),
     );
     const d = idx(adoptedCtx());
     const r = d.migrate();
-    expect(r.migrated).toBe(1);
-    // `idb:` 项（浏览器素材库）作用域唯一，可直接迁移
-    expect(d.listAssets().map((a) => a.assetKey)).toEqual(['idb:a.png']); // 规范 id 保持原样
-    expect(first(d.listAssets()).starred).toBe(true);
-    // 无证据的 `disk:` 项进历史池
-    expect(d.historyPool().map((h) => h.key)).toEqual(['disk:assets/b.png']);
+    expect(r.migrated).toBe(2);
+    // 自包含引用不在磁盘上，迁移后不该被当成工作区相对路径
+    for (const a of d.listAssets()) {
+      expect(a.relPath).toBeNull();
+      expect(a.starred).toBe(true);
+    }
+    expect(d.listAssets().map((a) => a.assetKey).sort()).toEqual([
+      'builtin:star',
+      'data:image/svg+xml;base64,AAA',
+    ]);
+    expect(d.historyPool()).toEqual([]);
   });
 
-  it('M7：作用域有证据时磁盘资产项才迁移', () => {
-    localStorage.setItem(LEGACY_ASSET_FAV_KEY, JSON.stringify(['disk:assets/b.png']));
+  it('M7：无法切出合法 `kind:` 的键记为未迁移，不猜归属', () => {
+    localStorage.setItem(LEGACY_ASSET_FAV_KEY, JSON.stringify(['assets/b.png', 'x:y']));
     const d = idx(diskCtx());
-    expect(d.migrate().migrated).toBe(1);
-    // 旧键 `disk:assets/b.png` 的 `kind:` 前缀不进入新 assetKey（真实身份是相对路径）
-    expect(first(d.listAssets()).assetKey).toBe('assets/b.png');
-    expect(first(d.listAssets()).legacyKeys).toEqual(['disk:assets/b.png']);
+    const r = d.migrate();
+    expect(r.migrated).toBe(0);
+    expect(r.failed).toBe(2);
+    expect(d.listAssets()).toEqual([]);
+    expect(localStorage.getItem(LEGACY_ASSET_FAV_KEY)).toBe(
+      JSON.stringify(['assets/b.png', 'x:y']),
+    );
   });
 
   it('M8：自由画布最近并入索引且**不改写**该旧键', () => {

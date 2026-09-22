@@ -151,30 +151,42 @@ export function runMigration(index: DocIndexState, opts?: { batch?: number }): M
             result.failed += 1;
             continue;
           }
-          // M6 明文：「只有该键能按 docKey **精确命中**索引条目时才迁移」
-          const exact = index.docs.find((e) => e.docKey === key || e.relPath === key);
-          if (exact === undefined && !hasOwnershipEvidence(ctx, key)) {
+          // M6 明文：「只有该键能按 docKey **精确命中**索引条目时才迁移」。
+          //
+          // 关键限定（§6.2.1 第 1 行 + 第 5 行）：**精确命中本身不是归属证据**。
+          // 命中条目必须
+          //   ① 属于**当前作用域**（`scopeId === ctx.scopeId`）——索引里另一工作区的
+          //      同名条目不能替当前作用域认领这条旧收藏；
+          //   ② 不是 `ephemeral`（上次会话的 disk-session，scopeId 本次已无效）；
+          //   ③ 该作用域本次以 isSameEntry / 用户确认建立（`hasOwnershipEvidence`）。
+          // 少任何一条就退到「证据不足」→ 历史池：宁可让用户显式关联，
+          // 也不能把「恰好同名」当成「就是它」。
+          const hit = index.docs.find(
+            (e) => e.docKey === key || (e.relPath === key && e.scopeId === ctx.scopeId),
+          );
+          const bound = hit !== undefined && hit.ephemeral !== true && hit.scopeId === ctx.scopeId;
+          if (!bound || !hasOwnershipEvidence(ctx, hit.relPath ?? key)) {
             pool.push({
               key,
               kind: 'starred',
               name: fileNameOf(key),
               openedAt: null,
               savedAt: 0,
-              reason: 'no-evidence',
+              reason: hit !== undefined && hit.ephemeral === true ? 'ephemeral-scope' : 'no-evidence',
               legacyKeys: [`${LEGACY_STARRED_KEY}#${key}`],
             });
             continue;
           }
           const outcome = index.adoptDoc({
-            docKey: exact?.docKey ?? wsDocKey(ctx.scopeId, key),
-            relPath: exact?.relPath ?? key,
-            name: exact?.name ?? fileNameOf(key),
+            docKey: hit.docKey,
+            relPath: hit.relPath ?? key,
+            name: hit.name,
             legacyKey: `${LEGACY_STARRED_KEY}#${key}`,
-            savedAt: exact?.savedAt ?? 0,
+            savedAt: hit.savedAt,
             starred: true,
-            scopeId: exact?.scopeId ?? ctx.scopeId,
-            sourceRef: exact?.sourceRef ?? { kind: 'none' },
-            ephemeral: exact?.ephemeral,
+            scopeId: hit.scopeId,
+            sourceRef: hit.sourceRef,
+            ephemeral: hit.ephemeral,
           });
           if (outcome === 'new') result.migrated += 1;
           else result.unchanged += 1;
@@ -185,6 +197,16 @@ export function runMigration(index: DocIndexState, opts?: { batch?: number }): M
     }
 
     // ---- M7：mindcanvas.assets.fav（键 = `kind:id`）→ AssetIndexEntry.starred
+    //
+    // 键的真实形态是 `` `${a.kind}:${a.id}` ``，`a.kind ∈ {'img','draw'}`
+    // （`packages/react/src/chrome/assetTypes.ts:7`；写入点 `AssetPanel.tsx:151/367`），
+    // `a.id` 是**资产 id**：`assets/<rel>` / `builtin:<id>` / data URL
+    // （shared-contracts §1.5 的 `AssetRef.id` 取值）。
+    //
+    // 归属判定（§6.2 M7 + §6.2.1）：
+    //   - `builtin:` / `data:` → 自包含引用，**不属于任何作用域**（I-5）→ 可直接迁移；
+    //   - `assets/<rel>` → 磁盘项：需 `(scopeId, relPath)` 且该作用域本次已证明同一目录
+    //     → 否则（含唯一同名命中）进历史池。**绝不能**靠猜前缀决定。
     const favRead = index.readJSON(LEGACY_ASSET_FAV_KEY);
     const favRaw = favRead.value;
     if (favRead.kind === 'ok' && Array.isArray(favRaw)) {
@@ -192,22 +214,21 @@ export function runMigration(index: DocIndexState, opts?: { batch?: number }): M
       const pending = favRaw.filter((k) => typeof k !== 'string' || !seen.has(k));
       for (const key of pending.slice(0, batch)) {
         try {
-          if (typeof key !== 'string' || !key.includes(':')) {
-            result.failed += 1;
+          const parsed = parseAssetFavKey(key);
+          if (parsed === null) {
+            result.failed += 1; // 切不出合法 `kind:id`：不迁移、不猜归属、不删旧键
             continue;
           }
-          const sep0 = key.indexOf(':');
-          const id0 = sep0 < 0 ? key : key.slice(sep0 + 1);
+          const { assetId, selfContained } = parsed;
           const existing = index.assets.find(
-            (a) => a.assetKey === key || a.assetKey === id0 || a.legacyKeys.includes(key),
+            (a) => a.assetKey === assetId || a.legacyKeys.includes(key),
           );
-          if (existing) {
-            void id0;
+          if (existing !== undefined) {
             if (existing.starred) {
               result.unchanged += 1;
             } else {
               index.assets = index.assets.map((a) =>
-                a.assetKey === key
+                a === existing
                   ? { ...a, starred: true, legacyKeys: appendUnique(a.legacyKeys, key) }
                   : a,
               );
@@ -215,23 +236,12 @@ export function runMigration(index: DocIndexState, opts?: { batch?: number }): M
             }
             continue;
           }
-          // 浏览器素材库项可直接迁移（作用域唯一）；磁盘项需 `(scopeId, relPath)` 且
-          // 该作用域已证明同一目录——否则（含唯一同名命中）进历史池。
-          // 旧键格式是 `kind:id`（如 `idb:a.png` / `disk:assets/b.png`；
-          // 见 shared-contracts §6.1 的 `mindcanvas.assets.fav` = `kind:id`），
-          // `id` 本身不含 `:` —— 用 `split(':')` 切一次，**不**把 `kind:` 当成 assetKey 前缀。
-          const sep = key.indexOf(':');
-          const kind = key.slice(0, sep);
-          const id = key.slice(sep + 1);
-          // §6.2 M7：`browser:local` 项可直接迁移（作用域唯一）；磁盘项需 `(scopeId, relPath)`
-          // 且该作用域当前已证明同一目录 → 否则（含唯一同名命中）进历史池。
-          const isBrowserItem = kind === 'idb' || kind === 'browser';
-          const relPath = kind === 'disk' ? id : null;
-          if (!isBrowserItem && !hasOwnershipEvidence(ctx, relPath)) {
+          const relPath = selfContained ? null : assetId;
+          if (!selfContained && !hasOwnershipEvidence(ctx, relPath)) {
             pool.push({
               key,
               kind: 'asset-fav',
-              name: nameOf(key),
+              name: nameOf(assetId),
               openedAt: null,
               savedAt: 0,
               reason: 'no-evidence',
@@ -239,18 +249,13 @@ export function runMigration(index: DocIndexState, opts?: { batch?: number }): M
             });
             continue;
           }
-          // 新 assetKey 用**已归一化的路径**，不是旧的 `kind:id` 字面量：
-          // 把 `disk:` 前缀带进新键会让它永远匹配不上真实的 `(scopeId, relPath)`。
-          // `idb:` 项保留其规范 id（素材在 IndexedDB 里就叫这个 id）；
-          // `disk:` 项丢掉旧前缀（真实身份是工作区内的相对路径）。
-          const assetKey = isBrowserItem ? key : id === '' ? key : id;
           index.assets = [
             ...index.assets,
             {
-              assetKey,
+              assetKey: assetId,
               scopeId: BROWSER_SCOPE_ID,
-              relPath: relPath ?? null,
-              name: nameOf(assetKey),
+              relPath,
+              name: nameOf(assetId),
               starred: true,
               legacyKeys: [key],
             },
@@ -346,8 +351,10 @@ export function runMigration(index: DocIndexState, opts?: { batch?: number }): M
       batch,
     );
 
-    index.history = pool;
-    result.historyPool = pool.length;
+    // 同一旧键可能同时出现在多个旧库（如 `library.v1` 与 `starred.v1` 都有它）：
+    // 历史池按 key 去重，否则用户会看到同一条记录出现两次。
+    index.history = [...new Map(pool.map((h) => [h.key, h])).values()];
+    result.historyPool = index.history.length;
     index.wrote = true;
     const written = index.persist();
     const projected = index.project(written);
@@ -379,4 +386,29 @@ function progress(seen: Set<string>, all: string[], batch: number): string[] {
   for (const k of pending.slice(0, batch)) merged.add(k);
   if (merged.size >= all.length) return []; // 走完全部 → 归零
   return [...merged];
+}
+
+/**
+ * 解析旧资产收藏键 `` `${kind}:${id}` `` → `{ assetId, selfContained }`。
+ *
+ * `kind` 的取值域是 `AssetItem.kind`（`'img' | 'draw'`，见 `assetTypes.ts:7`）。
+ * 非法输入返回 `null`（调用方记为未迁移，**不猜归属**）：
+ * 旧实现把前缀猜成 `idb:` / `disk:`，于是一切真实键都走「无证据」分支，
+ * 「磁盘项需 (scopeId, relPath) 且已证明同一目录」在生产上根本不可达。
+ *
+ * `id` 自身可含 `:`（`builtin:<id>` / `data:image/svg+xml;…`），
+ * 所以只切**第一个**冒号，其余原样保留。
+ */
+export function parseAssetFavKey(
+  key: string,
+): { kind: 'img' | 'draw'; assetId: string; selfContained: boolean } | null {
+  const sep = key.indexOf(':');
+  if (sep <= 0) return null;
+  const kind = key.slice(0, sep);
+  if (kind !== 'img' && kind !== 'draw') return null;
+  const assetId = key.slice(sep + 1);
+  if (assetId === '') return null;
+  // I-5：self-contained 引用不属于任何工作区作用域
+  const selfContained = assetId.startsWith('builtin:') || assetId.startsWith('data:');
+  return { kind, assetId, selfContained };
 }
