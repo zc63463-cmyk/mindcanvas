@@ -95,9 +95,6 @@ export function useIndexWiring(
           scopeId: scopeId ?? 'browser:local',
           persisted,
           sourceRef: d.wsFile ? { kind: 'disk-handle' } : { kind: 'none' },
-          // M9 双写写侧：工作区文件的旧 docId 就是它的相对路径
-          // （`openWorkspaceFile` 用 `id: file.path`），登记后才会补写裸句柄键。
-          handleId: d.wsFile ? d.fullPath : undefined,
         });
       }
       if (alive.current) {

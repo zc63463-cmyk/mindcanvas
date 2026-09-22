@@ -16,7 +16,7 @@ import { FlatDocRow } from './FileManagerChrome.js';
 import type { HistoryPoolEntry } from './docIndex.js';
 import type { TreeNode } from './fileTreeModel.js';
 import { btnBase, rowBtn } from './fileManagerShared.js';
-import { formatHistoryPool, formatRecentWhen } from './docIndex.js';
+import { formatHistoryPool, formatHistoryReason, formatRecentWhen } from './docIndex.js';
 
 /** 平铺列表的一行（已解析好的节点 + 显示文案 + 收藏键） */
 export interface FlatRow {
@@ -122,6 +122,10 @@ export function HistoryPool({
               style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0' }}
             >
               <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>{h.name}</span>
+              {/* 为什么这条不能自动绑定（§6.2.1 的四种「证据不足」用户语言） */}
+              <span data-fm-history-reason style={{ flex: 'none', opacity: 0.8 }}>
+                {formatHistoryReason(h.reason)}
+              </span>
               <span style={{ flex: 'none' }}>{formatRecentWhen(h.openedAt)}</span>
               <select
                 data-fm-history-target

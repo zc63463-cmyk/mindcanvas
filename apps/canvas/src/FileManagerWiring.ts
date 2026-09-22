@@ -83,10 +83,11 @@ export function rowFromIndexEntry(
   starredKeys: ReadonlySet<string>,
   matchQuery: (nodes: readonly TreeNode[]) => TreeNode[],
 ): FlatRow | null {
+  // 两个别名按优先级查（`nodeIndex` 里非空 `fullPath` 才建 `doc:` 键，
+  // 故 `relPath === null` 时不查 `doc:` —— 那样会去命中一个空串键）。
   const node =
-    byKey.get(`doc:${e.relPath ?? ''}`) ??
-    byKey.get(`doc:${e.docKey}`) ??
-    (e.relPath !== null ? byKey.get(`doc:${e.relPath}`) : undefined);
+    (e.relPath !== null ? byKey.get(`doc:${e.relPath}`) : undefined) ??
+    byKey.get(`doc:${e.docKey}`);
   if (!node) return null;
   if (matchQuery([node]).length === 0) return null;
   return {

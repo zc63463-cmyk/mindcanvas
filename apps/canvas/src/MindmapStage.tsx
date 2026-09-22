@@ -993,9 +993,6 @@ function StageContent({
       scopeId: scopeId ?? 'browser:local',
       persisted: scopeId !== null && workspace.scopeState.persisted,
       sourceRef: doc.handle ? { kind: 'disk-handle' } : { kind: 'none' },
-      // M9 双写：这里的 `doc.id` 正是包侧 `setFileHandle(doc.id, …)` 用的旧 docId。
-      // 登记后索引才会在下次迁移时把裸句柄补写到旧键（回退版本仍可用）。
-      handleId: doc.handle ? doc.id : undefined,
     });
     // 同一次保存只推进一次 `savedAt`（effect 会因其它依赖重跑）
     const stamp = `${docKey}|${snapshot.length}|${doc.name}`;
@@ -1003,7 +1000,7 @@ function StageContent({
       savedEffectRef.current = stamp;
       index.saveDoc({ docKey, relPath: workspacePath, name: doc.name });
     }
-  }, [doc.id, doc.name, doc.savedSource, doc.source, doc.saved, doc.handle, docKey, index, workspace, workspacePath]);
+  }, [doc.name, doc.handle, doc.savedSource, doc.source, doc.saved, docKey, index, workspace, workspacePath]);
   // 异步清单（宿主可换 HTTP/FS 实现）；插入/上传后由 Stage 更新本地副本
   const [assetList, setAssetList] = useState<AssetItem[]>([]);
 
