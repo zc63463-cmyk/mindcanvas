@@ -60,7 +60,7 @@ export interface DocIndexState {
   readJSON(key: string): { kind: 'absent' | 'ok' | 'corrupt'; value?: unknown };
   persist(): boolean;
   project(indexWritten: boolean): boolean;
-  mirrorHandles(): void;
+  mirrorHandles(): Promise<void>;
 }
 
   /**
@@ -324,7 +324,10 @@ export function runMigration(index: DocIndexState, opts?: { batch?: number }): M
     // ---- M9：旧 `docId` 裸句柄键（双读 + 双写）。
     //      读侧（新键未命中 → 读旧键）在包侧既有 `getFileHandle`；
     //      写侧在此：把**本会话已知可取的句柄**补写到旧 `docId` 键，使回退版本仍可用。
-    void index.mirrorHandles();
+    // M9 写侧（双写）：异步、失败不阻断；显式挂 `.catch` 而不是裸 `void`，
+    // 避免未处理的 rejection（`mirrorHandles` 内部已逐条 try/catch，
+    // 这里的 catch 是最后一道防线）。
+    void index.mirrorHandles().catch(() => undefined);
 
     // ---- M11：注册表 legacy adoption 由 P0-0 完成，这里只承接其证据位
     //      （`migrateContextOf` → `hasOwnershipEvidence`），不重做身份解析。

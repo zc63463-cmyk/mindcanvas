@@ -26,6 +26,11 @@ export interface IndexWiring {
   history: HistoryPoolEntry[];
   /** 惰性迁移的失败条目数（>0 → 提示「未迁移」，不伪报完成） */
   migrateFailed: number;
+  /**
+   * 降级投影是否写失败（§6.3：投影失败 → 该次变更**不可回退**）。
+   * 生产读取面：面板据此给出可重试提示，而不是把「已升级」当成「随时可回退」。
+   */
+  projectionFailed: boolean;
   /** 历史池折叠状态 */
   historyOpen: boolean;
   setHistoryOpen: (updater: (v: boolean) => boolean) => void;
@@ -51,9 +56,15 @@ export function useIndexWiring(
   const { useWorkspace, workspace, alive } = opts;
   const [history, setHistory] = useState<HistoryPoolEntry[]>([]);
   const [migrateFailed, setMigrateFailed] = useState(0);
+  const [projectionFailed, setProjectionFailed] = useState(false);
   const [historyOpen, setHistoryOpenRaw] = useState(false);
   const [, forceRender] = useState(0);
   const refresh = useCallback((): void => forceRender((n) => n + 1), []);
+
+  const syncProjectionState = useCallback((): void => {
+    if (!index || !alive.current) return;
+    setProjectionFailed(index.projectionStatus().projectionFailed);
+  }, [index, alive]);
 
   const runMigration = useCallback((): void => {
     if (!index) return;
@@ -62,6 +73,7 @@ export function useIndexWiring(
       if (alive.current) {
         setHistory(index.historyPool());
         setMigrateFailed(migrated.failed);
+        setProjectionFailed(index.projectionStatus().projectionFailed);
         refresh();
       }
     } catch {
@@ -83,14 +95,18 @@ export function useIndexWiring(
           scopeId: scopeId ?? 'browser:local',
           persisted,
           sourceRef: d.wsFile ? { kind: 'disk-handle' } : { kind: 'none' },
+          // M9 双写写侧：工作区文件的旧 docId 就是它的相对路径
+          // （`openWorkspaceFile` 用 `id: file.path`），登记后才会补写裸句柄键。
+          handleId: d.wsFile ? d.fullPath : undefined,
         });
       }
       if (alive.current) {
         setHistory(index.historyPool());
+        syncProjectionState();
         refresh();
       }
     },
-    [index, useWorkspace, workspace, alive, refresh],
+    [index, useWorkspace, workspace, alive, refresh, syncProjectionState],
   );
 
   const markOpened = useCallback(
@@ -99,10 +115,11 @@ export function useIndexWiring(
       index.openDoc({ docKey, relPath, name });
       if (alive.current) {
         setHistory(index.historyPool());
+        syncProjectionState();
         refresh();
       }
     },
-    [index, alive, refresh],
+    [index, alive, refresh, syncProjectionState],
   );
 
   const setHistoryOpen = useCallback((updater: (v: boolean) => boolean): void => {
@@ -112,6 +129,7 @@ export function useIndexWiring(
   return {
     history,
     migrateFailed,
+    projectionFailed,
     historyOpen,
     setHistoryOpen,
     runMigration,

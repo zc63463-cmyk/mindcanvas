@@ -311,14 +311,4 @@ describe('DocLibrary · P0-D 降级投影读入口', () => {
     expect(d.get('a')?.folder).toBe('工作/项目A');
   });
 
-  it('raw() 返回落盘顺序（已排序），供投影原地合并旧字段', () => {
-    const d = lib();
-    d.replaceAll([
-      { id: 'old', name: '旧.mm.md', ts: 1, folder: '', tags: [] },
-      { id: 'new', name: '新.mm.md', ts: 9, folder: '', tags: [] },
-    ]);
-    // replaceAll 已按 ts 降序落盘，raw() 不再排序
-    expect(d.raw().map((e) => e.id)).toEqual(['new', 'old']);
-    expect(d.list().map((e) => e.id)).toEqual(['new', 'old']);
-  });
 });

@@ -17,18 +17,13 @@
  * ② **唯一同名命中 ≠ 归属证据**（§6.2.1）：无历史证据的作用域下旧键只进历史池；
  * ③ **降级投影必须让旧结构真读到新数据**（§6.3 / I-21）：不能以「旧键还在」冒充回退。
  */
-import {
-  BROWSER_SCOPE_ID,
-  type FsFileHandle,
-  type ScopeId,
-  getFileHandle,
-  setFileHandle,
-} from '@mindcanvas/react';
+import { BROWSER_SCOPE_ID, type ScopeId } from '@mindcanvas/react';
 import {
   ASSET_INDEX_KEY,
   DOC_INDEX_KEY,
   appendUnique,
   browserDocKey,
+  collectStarredKeys,
   compareRecent,
   legacyIdOf,
   grantRelinkEvidence,
@@ -39,7 +34,7 @@ import {
   relPathOfKey,
 } from './docIndexCore.js';
 import { runMigration } from './docIndexMigrate.js';
-import { projectLibrary, projectStarred } from './docIndexProject.js';
+import { mirrorHandlesImpl, projectLibrary, projectStarred } from './docIndexProject.js';
 import type {
   AssetIndexEntry,
   DocIndexEntry,
@@ -138,30 +133,15 @@ export class DocIndex {
     return [...this.docs].sort(compareRecent).slice(0, limit);
   }
 
-  /** 收藏（稳定身份 = `docKey`；路径变化不影响，P0-A 改路径后仍连续） */
-  starredDocs(): DocIndexEntry[] {
-    return this.docs.filter((e) => e.starred);
-  }
-
   /**
-   * 收藏键集合：UI 用 `docKey` **或** `relPath` **或** 旧式 `fullPath` 判定星标。
-   * 三个别名都进集合是刻意的：投影把 `relPath` 写进旧键之后，
+   * 收藏键集合（纯函数 `collectStarredKeys` 的实例包装，见 `docIndexCore.ts`）。
+   *
+   * UI 用 `docKey` **或** `relPath` **或** 旧式 `fullPath` 判定星标：
+   * 三个别名都进集合是刻意的——投影把 `relPath` 写进旧键之后，
    * 两侧（索引与旧键读取方）必须能互相识别。
    */
   starredKeys(): Set<string> {
-    const out = new Set<string>();
-    for (const e of this.docs) {
-      if (!e.starred) continue;
-      out.add(e.docKey);
-      if (e.relPath !== null) out.add(e.relPath);
-      for (const k of e.legacyKeys) out.add(k);
-    }
-    for (const a of this.assets) {
-      if (!a.starred) continue;
-      out.add(a.assetKey);
-      if (a.relPath !== null) out.add(a.relPath);
-    }
-    return out;
+    return collectStarredKeys(this.docs, this.assets);
   }
 
   /** 历史池（§6.2.1）：由最近一次 `migrate` 重算 */
@@ -261,6 +241,23 @@ export class DocIndex {
     }, input.docKey);
   }
 
+  /**
+   * M9 写侧的**登记入口**：告诉索引「这个旧 docId 的裸句柄可取」。
+   *
+   * 生产调用点：保存成功（`MindmapStage` 的保存 effect 传 `doc.handle ? doc.id : undefined`）
+   * 与工作区文件登记（`useIndexWiring.registerDocs` 传相对路径）。
+   * 之所以显式登记而不是遍历所有条目：句柄读取是异步 IDB 调用，
+   * 对没有句柄的条目逐个 `getFileHandle` 会白跑一轮 IDB。
+   */
+  noteHandleId(legacyId: string): void {
+    if (legacyId !== '') this.handleIds.add(legacyId);
+  }
+
+  /** M9 写侧（双写）：把已知可取的裸句柄补写到旧 `docId` 键（实现见 docIndexProject） */
+  async mirrorHandles(): Promise<void> {
+    await mirrorHandlesImpl(this.handleIds);
+  }
+
   /** 收藏/取消收藏（按**稳定身份** `docKey`；`relPath` 变了收藏不丢） */
   setStarred(docKey: string, starred: boolean, at = this.nowMs()): IndexChangeResult {
     const out = this.mutate((prev) => {
@@ -340,21 +337,23 @@ export class DocIndex {
     this.assets = prev
       ? this.assets.map((a) => (a.assetKey === assetKey ? entry : a))
       : [...this.assets, entry];
-    this.wrote = true;
-    const written = this.persist();
-    const projected = this.project(written);
-    this.projectionFailed = !projected;
+    const { written, projected } = this.commit();
     return { entries: [], written, projected };
   }
 
   /**
    * 用户显式「关联到此工作区」（§6.2.1 的唯一合法绑定动作）：写入 `relinkEvidence`，
    * 此后该键视为证据充分——**必须由用户动作触发**，迁移永不自行调用。
+   *
+   * 两道拒绝（`relinkEvidence` 是不可撤销为假的凭证，宁可不写也不写错）：
+   * ① 目标必须**已在索引里**（用户从候选列表点选既有文档）——不允许边关联边新建身份；
+   * ② 目标必须属于**当前作用域**——跨作用域关联等于伪造归属证据。
    */
   relink(legacyKey: string, docKey: string, at = this.nowMs()): boolean {
-    const hit = this.history.find((h) => h.key === legacyKey);
-    if (!hit) return false;
-    if (this.getDoc(docKey) === undefined) return false;
+    if (!this.history.some((h) => h.key === legacyKey)) return false;
+    const target = this.getDoc(docKey);
+    if (target === undefined) return false;
+    if (target.scopeId !== this.ctxOf().scopeId) return false;
     this.docs = this.docs.map((e) =>
       e.docKey === docKey
         ? {
@@ -365,17 +364,10 @@ export class DocIndex {
         : e,
     );
     this.history = this.history.filter((h) => h.key !== legacyKey);
-    this.wrote = true;
-    const written = this.persist();
-    const projected = this.project(written);
-    this.projectionFailed = !projected;
-    return projected;
+    return this.commit().projected;
   }
 
-  /**
-   * 用户「忽略」一条历史池记录：只从**呈现**里移除（旧键与 `legacyKeys` 都保留）。
-   * 忽略是可撤销的呈现操作，不是删除——「用户不处理也不丢」。
-   */
+  /** 用户「忽略」一条历史池记录：只从**呈现**移除（旧键与 `legacyKeys` 保留，不处理也不丢） */
   ignoreLegacy(legacyKey: string): void {
     this.history = this.history.filter((h) => h.key !== legacyKey);
   }
@@ -395,13 +387,9 @@ export class DocIndex {
     return runMigration(this, opts);
   }
 
-  // ---------------------------------------------------------------- 迁移模块的状态面
-  //
-  // 这些成员是 `DocIndexState` 的实现细节：`docIndexMigrate.ts` 以显式接口消费，
-  // 而不是反向 import 本类（那会成环，也会把「迁移碰了哪些状态」藏起来）。
-
-
   // ---------------------------------------------------------------- 内部
+  // 下面的成员同时构成 `DocIndexState`（`docIndexMigrate.ts` 以显式接口消费，
+  // 而不是反向 import 本类——那会成环，也会把「迁移碰了哪些状态」藏起来）。
 
   /** 登记（或补齐）一条迁移来的旧条目；幂等：已存在且逐字一致 → `'unchanged'` */
   adoptDoc(input: {
@@ -492,11 +480,21 @@ export class DocIndex {
     this.docs = prev
       ? this.docs.map((e) => (e.docKey === docKey ? next : e))
       : [...this.docs, next];
-    this.wrote = true;
+    const { written, projected } = this.commit();
+    return { entries: [next], written, projected };
+  }
+
+  /**
+   * 本次变更的统一收尾：写索引 → 写投影 → 记下「是否可回退」。
+   * 四个写路径（`mutate` / `setAssetStarred` / `relink` / `migrate`）共用，
+   * 避免任何一处漏写投影而静默破坏 R-B。
+   */
+  commit(): { written: boolean; projected: boolean } {
     const written = this.persist();
     const projected = this.project(written);
+    this.wrote = true;
     this.projectionFailed = !projected;
-    return { entries: [next], written, projected };
+    return { written, projected };
   }
 
   /** 写索引键；失败返回 false（条目仍在内存视图里，调用方据此提示） */
@@ -511,38 +509,16 @@ export class DocIndex {
   }
 
   /**
-   * **降级投影**（§6.3 R-B）：把索引写成旧版本能读懂的形状。返回是否全部成功。
+   * **降级投影**（§6.3 R-B）的委托入口：三张投影表的实现在 `docIndexProject.ts`。
    *
-   * 三张投影表：
-   * ① `mindcanvas.library.v1` ← `{id,name,ts,folder,tags,source?}`，`ts = max(openedAt,savedAt)`，
-   *    `source` 仍只留 8 条（复用 `DocLibrary.replaceAll` 的既有降级：配额满先剥 source）；
-   * ② `mindcanvas.starred.v1` ← 旧式键集合（`fullPath` 或旧 id）；
-   * ③ `mindcanvas-handles` 旧 `docId` 键 ← 裸 `FsFileHandle`（见 `mirrorHandles`）。
-   *
-   * **不是**「旧键还在」：三张都在每次变更后重新写出，
-   * 因此升级后新增的收藏/最近在旧版本里真的读得到。
-   *
-   * 失败不影响主流程（与既有 `putRaw` 容错一致），但该次变更**不可回退** →
-   * 记 `projectionFailed`，经 `projectionStatus()` 在回执与验证里可查。
+   * 契约要点（那里有完整说明）：每次变更后重新写出旧版本能读懂的形状，
+   * 使升级后的收藏/最近**真的**能在旧结构里读到（不是「旧键还在」）；
+   * 返回 `false` = 该次变更不可回退，记入 `projectionFailed` 供
+   * `projectionStatus()` 上报（生产读取方在 `useIndexWiring`）。
    */
   project(indexWritten: boolean): boolean {
     if (!indexWritten) return false;
     return projectLibrary(this) && projectStarred(this);
-  }
-
-  /**
-   * M9 的**写侧**（双写）：把本会话已知可取的裸句柄补写到旧 `docId` 键。
-   * 旧键仍是裸 `FsFileHandle`，回退版本据此仍能写回原文件。
-   */
-  async mirrorHandles(): Promise<void> {
-    for (const id of this.handleIds) {
-      try {
-        const handle: FsFileHandle | null = await getFileHandle(id);
-        if (handle) await setFileHandle(id, handle);
-      } catch {
-        // 句柄双写是增强：失败不阻断（旧裸键仍在，读侧双读不受影响）
-      }
-    }
   }
 
   /**

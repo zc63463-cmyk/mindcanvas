@@ -26,7 +26,12 @@ import {
 } from './fileTreeModel.js';
 import { ContextMenu } from './FileManagerContextMenu.js';
 import { StorageBar, ViewTabs, type FileManagerTab } from './FileManagerChrome.js';
-import { FlatDocList, HistoryPool, MigrateFailedNotice } from './FileManagerViews.js';
+import {
+  FlatDocList,
+  HistoryPool,
+  MigrateFailedNotice,
+  ProjectionFailureNotice,
+} from './FileManagerViews.js';
 import {
   buildTreeCtx,
   docKeyOfEntry,
@@ -129,6 +134,7 @@ export function FileManager({
   const {
     history,
     migrateFailed,
+    projectionFailed,
     historyOpen,
     setHistoryOpen,
     runMigration,
@@ -519,13 +525,18 @@ export function FileManager({
           entries={history}
           open={historyOpen}
           onToggle={() => setHistoryOpen((v) => !v)}
-          onLink={(h) => {
-            const scopeId = useWorkspace && workspace?.scopeId ? workspace.scopeId : null;
-            const target =
-              allDocs.find((d) => d.fullPath === h.key) ??
-              allDocs.find((d) => d.name === h.name);
-            if (!target) return;
-            index.relink(h.key, docKeyOfEntry(target, scopeId));
+          candidates={allDocs.map((d) => ({
+            docKey: docKeyOfEntry(d, useWorkspace && workspace?.scopeId ? workspace.scopeId : null),
+            name: d.fullPath,
+            // 「同名」只是给用户的排序提示（把最可能的一条排在前面），
+            // **不**据此自动绑定：`exact` 在选择前无对应旧记录，故这里恒为 false 之外
+            // 的语义由 HistoryPool 内部按 `h.key` 比较得出（见该组件注释）。
+            exact: false,
+          }))}
+          onLink={(h, targetKey) => {
+            // 用户显式点选的 `docKey` —— 这里不做任何名字回退匹配，
+            // 避免给不可撤销的 `user-confirmed` 证据灌进错误绑定
+            index.relink(h.key, targetKey);
             refresh();
           }}
           onIgnore={(h) => {
@@ -536,6 +547,7 @@ export function FileManager({
       )}
 
       <MigrateFailedNotice count={migrateFailed} />
+      <ProjectionFailureNotice failed={projectionFailed} />
 
       <div
         style={{

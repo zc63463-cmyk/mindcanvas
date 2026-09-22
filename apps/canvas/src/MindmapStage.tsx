@@ -130,7 +130,7 @@ import { useDocumentSaveSession } from './hooks/useDocumentSaveSession.js';
 import { useDocumentSwitch } from './hooks/useDocumentSwitch.js';
 import { nodeById, useEdgeActions } from './hooks/useEdgeActions.js';
 import { EdgeDraftLayer, type EdgeContextMenuState } from './EdgeDraftLayer.js';
-import { DocIndex, migrateContextOf } from './docIndex.js';
+import { DocIndex, browserDocKey, migrateContextOf, wsDocKey } from './docIndex.js';
 import { FileManagerModal } from './FileManagerModal.js';
 import { NodeContextMenu } from './NodeContextMenu.js';
 import { RecentDocMenu } from './RecentDocMenu.js';
@@ -943,6 +943,17 @@ function StageContent({
   }
   const index = indexRef.current;
 
+  /**
+   * 当前文档的索引身份（`docKey`）。
+   *
+   * - 工作区文档：`ws:<scopeId 主体>::<相对路径>`（`workspacePath` 是唯一来源）；
+   * - 兼容/浏览器文档：`browser::<docId>`（`doc.id` 是库内 id 或文件名）。
+   * `wsDocKey` 对 `browser:local` 会回落到 `browser::<id>`，不会造出第三种形态。
+   */
+  const docKey = workspacePath !== null && workspace.scopeId !== null
+    ? wsDocKey(workspace.scopeId, workspacePath)
+    : browserDocKey(doc.id);
+
   // 注册表证据是**异步**读的：挂载/切换工作区后刷新，
   // 让 M5–M7 的归属判据反映「该作用域本次是否以 isSameEntry/用户确认建立」。
   useEffect(() => {
@@ -956,20 +967,43 @@ function StageContent({
     };
   }, [index, workspaceReady]);
 
-  // 文档落盘 → 登记进文档库（文件管理的索引来源）。
+  // 文档落盘 → 登记进**索引层**（P0-D：单一写入口）。
+  //
   // 只在 saved 时登记：新建未保存的文档不进库，否则关掉就留下一堆空条目。
   // E 批口径：快照读 savedSource（最近一次成功保存的内容）；保存路径不得改写 doc.source ——
   // 见 docs/dispatch/2026-09-13-edit-flow-session-integrity-plan.md
+  //
+  // 两件事一起做（UD-2 的后半）：
+  //   ① `registerDoc` 建立身份（含 `folder`/`source` 供投影用）；
+  //   ② **保存成功推进 `savedAt`**（§4.7「最后成功落盘时间」）——
+  //      此前没有任何生产调用点推进它，`savedAt` 停在首次登记时刻，
+  //      于是「收藏」视图的时间列与投影的 `ts = max(openedAt, savedAt)` 都是错的。
+  //
+  // 旧 `DocLibrary.upsert` 直写已移除：`mindcanvas.library.v1` 不再有第二条写路径，
+  // 全部经索引 + 降级投影（否则会绕开 `replaceAll` 的序列化口径与配额降级）。
+  const savedEffectRef = useRef<string | null>(null);
   useEffect(() => {
-    if (doc.saved) {
-      library.upsert({
-        id: doc.id,
-        name: doc.name,
-        source: doc.savedSource ?? doc.source,
-        folder: doc.id === 'gateway.mm.md' ? '示例导图' : undefined,
-      });
+    if (!doc.saved) return;
+    const snapshot = doc.savedSource ?? doc.source;
+    const scopeId = workspace.scopeId;
+    index.registerDoc({
+      docKey,
+      relPath: workspacePath,
+      name: doc.name,
+      scopeId: scopeId ?? 'browser:local',
+      persisted: scopeId !== null && workspace.scopeState.persisted,
+      sourceRef: doc.handle ? { kind: 'disk-handle' } : { kind: 'none' },
+      // M9 双写：这里的 `doc.id` 正是包侧 `setFileHandle(doc.id, …)` 用的旧 docId。
+      // 登记后索引才会在下次迁移时把裸句柄补写到旧键（回退版本仍可用）。
+      handleId: doc.handle ? doc.id : undefined,
+    });
+    // 同一次保存只推进一次 `savedAt`（effect 会因其它依赖重跑）
+    const stamp = `${docKey}|${snapshot.length}|${doc.name}`;
+    if (savedEffectRef.current !== stamp) {
+      savedEffectRef.current = stamp;
+      index.saveDoc({ docKey, relPath: workspacePath, name: doc.name });
     }
-  }, [doc.id, doc.name, doc.savedSource, doc.source, doc.saved, library]);
+  }, [doc.id, doc.name, doc.savedSource, doc.source, doc.saved, doc.handle, docKey, index, workspace, workspacePath]);
   // 异步清单（宿主可换 HTTP/FS 实现）；插入/上传后由 Stage 更新本地副本
   const [assetList, setAssetList] = useState<AssetItem[]>([]);
 

@@ -352,6 +352,34 @@ describe('DocIndex · 归属证据（§6.2.1 / NC-3 期望）', () => {
     expect(d.historyPool()).toEqual([]);
   });
 
+  it('relink 拒绝跨作用域目标（不伪造归属证据）', () => {
+    localStorage.setItem(LEGACY_LIBRARY_KEY, JSON.stringify(legacy));
+    const d = idx(adoptedCtx('ws:mine'));
+    d.migrate();
+    // 另有一条属于**别的作用域**的同名文档
+    d.registerDoc({
+      docKey: 'ws:other::研发/架构.mm.md',
+      relPath: '研发/架构.mm.md',
+      name: '架构.mm.md',
+      scopeId: 'ws:other',
+      persisted: true,
+      sourceRef: { kind: 'disk-handle' },
+    });
+    expect(d.relink('研发/架构.mm.md', 'ws:other::研发/架构.mm.md')).toBe(false);
+    expect(d.getDoc('ws:other::研发/架构.mm.md')?.relinkEvidence).toBeUndefined();
+    // 历史池条目仍在（没被错误消费掉）
+    expect(d.historyPool().map((h) => h.key)).toEqual(['研发/架构.mm.md']);
+  });
+
+  it('relink 拒绝不存在的目标（不允许凭一次点击凭空造身份）', () => {
+    localStorage.setItem(LEGACY_LIBRARY_KEY, JSON.stringify(legacy));
+    const d = idx(adoptedCtx('ws:mine'));
+    d.migrate();
+    expect(d.relink('研发/架构.mm.md', 'ws:mine::不存在.mm.md')).toBe(false);
+    expect(d.getDoc('ws:mine::不存在.mm.md')).toBeUndefined();
+    expect(d.historyPool().map((h) => h.key)).toEqual(['研发/架构.mm.md']);
+  });
+
   it('忽略只从呈现移除，不改索引、不删旧键', () => {
     localStorage.setItem(LEGACY_LIBRARY_KEY, JSON.stringify(legacy));
     const d = idx(adoptedCtx());
@@ -504,13 +532,28 @@ describe('DocIndex · 降级投影（§6.3 / NC-4 期望）', () => {
     expect(JSON.parse(localStorage.getItem(LEGACY_STARRED_KEY) ?? '[]')).toEqual([]);
   });
 
+  /**
+   * 判别力说明（对照 p0-0-implementation-plan §5 的负控标准）：
+   * 本用例的中性化对象是**投影失败处理**本身——把 `project()` 的返回值改成恒 `true`
+   * （或把 `catch` 改成吞掉失败后返回 true），本用例必须转红。
+   *
+   * 因此这里的要求比「键没被写」更严：
+   *   ① 注入的 store 在投影目标键上**真的抛错**（不是静默跳过）；
+   *   ② 断言 `projected === false` **且** `projectionFailed === true`；
+   *   ③ 断言失败**被区分出来**：同一个 store 下，索引键写成功、投影键写失败，
+   *      两者不能混为一谈。
+   * 一个「写了但 catch 掉、projectionFailed 仍置 true」的实现无法同时满足 ②③，
+   * 因为 ② 直接读的是 `project()` 的返回值。
+   */
   it('投影写入失败时主流程不中断，但该次变更标为不可回退且可查', () => {
     let failProjection = false;
+    let projectionWriteAttempts = 0;
     const failing: IndexStore = {
       get: (k) => localStorage.getItem(k),
       set: (k, v) => {
-        // 索引键能写；投影目标键写失败（模拟配额满）
+        // 索引键能写；投影目标键**抛错**（模拟配额满 / 存储不可用）
         if (failProjection && (k === LEGACY_LIBRARY_KEY || k === LEGACY_STARRED_KEY)) {
+          projectionWriteAttempts += 1;
           throw new Error('quota');
         }
         localStorage.setItem(k, v);
@@ -524,14 +567,23 @@ describe('DocIndex · 降级投影（§6.3 / NC-4 期望）', () => {
     });
     const key = wsDocKey('ws:aaaa', 'a.mm.md');
     expect(d.openDoc({ docKey: key, relPath: 'a.mm.md', name: 'a.mm.md' }).projected).toBe(true);
+
     failProjection = true;
     const out = d.setStarred(key, true);
-    expect(out.written).toBe(true); // 索引仍写成功
-    expect(out.projected).toBe(false); // 投影失败 → 不可回退
+    expect(out.written).toBe(true); // 索引仍写成功（主流程不中断）
+    expect(out.projected).toBe(false); // 投影失败 → 该次变更不可回退
+    expect(projectionWriteAttempts).toBeGreaterThan(0); // 确实尝试过写、且真的抛了
     expect(d.projectionStatus()).toEqual({ wroteNewData: true, projectionFailed: true });
-    // 索引里的收藏是新的（主流程不中断）
+    // 索引里的收藏是新的
     expect(d.getDoc(key)?.starred).toBe(true);
     // 旧键没被写坏：仍是上一次成功投影的内容
+    expect(JSON.parse(localStorage.getItem(LEGACY_STARRED_KEY) ?? '[]')).toEqual([]);
+
+    // 恢复存储后，下一次变更把投影补齐（可重试，不是永久坏掉）
+    failProjection = false;
+    const out2 = d.setStarred(key, false);
+    expect(out2.projected).toBe(true);
+    expect(d.projectionStatus().projectionFailed).toBe(false);
     expect(JSON.parse(localStorage.getItem(LEGACY_STARRED_KEY) ?? '[]')).toEqual([]);
   });
 
@@ -585,7 +637,8 @@ describe('DocIndex · M4 / M7 / M8', () => {
     expect(r.migrated).toBe(0);
     // 另一作用域的条目**不得**被置为收藏
     expect(d.getDoc('ws:OTHER::研发/架构.mm.md')?.starred).toBe(false);
-    expect(d.starredDocs()).toEqual([]);
+    // 收藏集合为空（`starredKeys()` 是生产读取面，见 fileManagerShared.ts:159）
+    expect([...d.starredKeys()].filter((k) => !k.includes('::'))).toEqual([]);
     expect(d.historyPool().map((h) => h.key)).toEqual(['研发/架构.mm.md']);
   });
 
@@ -724,6 +777,22 @@ describe('DocIndex · M4 / M7 / M8', () => {
     expect(r.failed).toBe(2);
   });
 
+  it('M9 写侧可达：`noteHandleId` 登记后镜像会尝试回写该旧 docId', () => {
+    localStorage.setItem(
+      LEGACY_LIBRARY_KEY,
+      JSON.stringify([{ id: 'a.mm.md', name: 'a.mm.md', ts: 1 }]),
+    );
+    const d = idx(diskCtx());
+    // 生产调用点：保存成功时登记「这个旧 docId 的裸句柄可取」
+    // （MindmapStage.tsx 的保存 effect 传 `doc.handle ? doc.id : undefined`）
+    d.noteHandleId('a.mm.md');
+    const r = d.migrate();
+    expect(r.migrated).toBe(1);
+    // jsdom 无 indexedDB → 镜像静默跳过（不抛、不影响迁移结果）。
+    // 本用例证明**写侧入口存在且迁移会走到它**，真实 IDB 回写由浏览器验证覆盖。
+    expect(d.listDocs().length).toBe(1);
+  });
+
   it('M9：句柄镜像不越界——没有已知旧 docId 时不写 handles 库', async () => {
     // 句柄镜像只对「本会话已证明可取句柄的旧 docId」执行（handleId 入参）；
     // jsdom 无 indexedDB 时镜像静默跳过，不抛、不影响迁移结果。
@@ -766,7 +835,7 @@ describe('DocIndex · 收藏身份与宽容读写', () => {
     // P0-A 改名后：同一个 docKey（血统），relPath 变了
     d.saveDoc({ docKey: key, relPath: '新名.mm.md', name: '新名.mm.md' }, 2);
     expect(d.getDoc(key)?.starred).toBe(true);
-    expect(d.starredDocs().map((e) => e.name)).toEqual(['新名.mm.md']);
+    expect(d.listDocs().filter((e) => e.starred).map((e) => e.name)).toEqual(['新名.mm.md']);
     expect(d.starredKeys().has(key)).toBe(true);
     expect(d.starredKeys().has('新名.mm.md')).toBe(true);
   });

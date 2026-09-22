@@ -12,6 +12,7 @@
  * ③ `mindcanvas-handles` 旧 `docId` 键 ← 裸句柄（见 `docIndex.ts` 的 `mirrorHandles`）。
  */
 import { BROWSER_SCOPE_ID, DocLibrary } from '@mindcanvas/react';
+import { type FsFileHandle, getFileHandle, setFileHandle } from '@mindcanvas/react';
 import {
   LEGACY_LIBRARY_KEY,
   LEGACY_STARRED_KEY,
@@ -139,3 +140,18 @@ export function projectStarred(index: ProjectionState): boolean {
   }
 }
 
+
+  /**
+   * M9 的**写侧**（双写）：把本会话已知可取的裸句柄补写到旧 `docId` 键。
+   * 旧键仍是裸 `FsFileHandle`，回退版本据此仍能写回原文件。
+   */
+export async function mirrorHandlesImpl(handleIds: ReadonlySet<string>): Promise<void> {
+    for (const id of handleIds) {
+      try {
+        const handle: FsFileHandle | null = await getFileHandle(id);
+        if (handle) await setFileHandle(id, handle);
+      } catch {
+        // 句柄双写是增强：失败不阻断（旧裸键仍在，读侧双读不受影响）
+      }
+    }
+  }

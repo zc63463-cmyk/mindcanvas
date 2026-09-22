@@ -142,14 +142,6 @@ export class DocLibrary {
   }
 
   /**
-   * 读出本库当前落盘的全部条目（**不排序**），供降级投影合并 `source` 等旧库字段。
-   * 与 `list()` 的差别：`list()` 排序会改变写入顺序，而投影要原地改写。
-   */
-  raw(): DocEntry[] {
-    return this.load();
-  }
-
-  /**
    * 登记/更新一条（按 id 去重，更新时间戳）。
    * 超出 SOURCE_KEEP 的旧条目会被剥掉 source。
    */

@@ -369,3 +369,29 @@ export function migrateContextOf(
     handleStoreAvailable,
   };
 }
+
+/**
+ * 收藏键集合：把索引条目的**多个别名**都暴露给 UI。
+ *
+ * 为什么一个条目要贡献三个键：投影会把 `relPath` 写进旧键（`starred.v1`），
+ * 于是「索引侧的身份」与「旧键读取方看到的字符串」必须能互相认出对方，
+ * 否则同一份收藏在两侧显示不一致。
+ */
+export function collectStarredKeys(
+  docs: ReadonlyArray<DocIndexEntry>,
+  assets: ReadonlyArray<AssetIndexEntry>,
+): Set<string> {
+  const out = new Set<string>();
+  for (const e of docs) {
+    if (!e.starred) continue;
+    out.add(e.docKey);
+    if (e.relPath !== null) out.add(e.relPath);
+    for (const k of e.legacyKeys) out.add(k);
+  }
+  for (const a of assets) {
+    if (!a.starred) continue;
+    out.add(a.assetKey);
+    if (a.relPath !== null) out.add(a.relPath);
+  }
+  return out;
+}
