@@ -21,7 +21,6 @@ import {
   nameOf,
   requiredTs,
   str,
-  wsDocKey,
 } from './docIndexCore.js';
 import type {
   AssetIndexEntry,
@@ -60,7 +59,6 @@ export interface DocIndexState {
   readJSON(key: string): { kind: 'absent' | 'ok' | 'corrupt'; value?: unknown };
   persist(): boolean;
   project(indexWritten: boolean): boolean;
-  mirrorHandles(): Promise<void>;
 }
 
   /**
@@ -97,35 +95,54 @@ export function runMigration(index: DocIndexState, opts?: { batch?: number }): M
           const key = item.id;
           const name = str(item.name, key);
           const ts = requiredTs(item.ts);
-          if (!hasOwnershipEvidence(ctx, key)) {
-            // 证据不足（含**唯一同名命中**、legacy adoption 新 scope、ephemeral）→ 历史池
+          // 同一个旧键可能已经以**别的身份**存在于索引里（兼容模式打开过它 → `browser::`）。
+          // 那时不能再造一条 `ws:` 条目——同一份文档两条身份 = 「最近」出现重复行。
+          // 只认领到既有条目上（补 legacyKeys）。
+          //
+          // **必须限定当前作用域**：否则「本区有证据」会变成把他区同名条目标成本区
+          // 历史键的凭据（评审 R2-3）。`browser:local` 就是它自己的作用域，
+          // 故兼容模式那一路仍然命中。
+          const existing = index.docs.find(
+            (e) =>
+              e.scopeId === ctx.scopeId &&
+              (e.relPath === key || e.legacyKeys.includes(`${LEGACY_LIBRARY_KEY}#${key}`)),
+          );
+          if (existing === undefined) {
+            // 没有既有条目：`library.v1` 的 `id` 只是**文件名**，不是目录身份。
+            // 凭「唯一同名命中 + 本区有历史」就造 `ws:<uuid>::<文件名>`，
+            // 等于把同名命中当归属证据（§6.2.1 明文禁止）；`openedAt` 也只能编造。
+            // → 一律进历史池，由用户显式关联（`relink`）。
             pool.push({
               key,
               kind: 'library',
               name,
               openedAt: null, // 旧库只有访问时间，没有真实打开时间 → 不编造（UD-2）
               savedAt: ts,
-              reason: ctx.persisted ? 'no-evidence' : 'ephemeral-scope',
+              // 无证据（§6.2.1）与「本区有证据但索引里没有这条文档」在用户看来
+              // 都只能靠显式「关联到此工作区」解决；作用域已失效（ephemeral）
+              // 则连关联都无意义，要分别标注。
+              reason: !ctx.persisted
+                ? 'ephemeral-scope'
+                : existing === undefined && !ctx.hasHistoryEvidence
+                  ? 'no-evidence'
+                  : 'no-existing-entry',
               legacyKeys: [`${LEGACY_LIBRARY_KEY}#${key}`],
             });
             continue;
           }
-          // 同一个旧键可能已经以**浏览器身份**存在于索引里（兼容模式打开过它）。
-          // 那时不能再造一条 `ws:` 条目——同一份文档两条身份 = 「最近」出现重复行。
-          // 只认领到既有条目上（补 legacyKeys）。
-          const existing = index.docs.find(
-            (e) => e.relPath === key || e.legacyKeys.includes(`${LEGACY_LIBRARY_KEY}#${key}`),
-          );
           const outcome = index.adoptDoc({
-            docKey: existing?.docKey ?? wsDocKey(ctx.scopeId, key),
-            relPath: existing?.relPath ?? key,
-            name: existing?.name ?? name,
+            docKey: existing.docKey,
+            relPath: existing.relPath ?? key,
+            name: existing.name,
             legacyKey: `${LEGACY_LIBRARY_KEY}#${key}`,
-            savedAt: existing?.savedAt ?? ts,
+            // 旧库的访问时间是**真值**：既有条目若是刚在这次会话登记出来的
+            // （`registerDoc` 把 savedAt 记成 now），应当由旧库的 ts 覆盖，
+            // 否则「最近」会把一个旧文档显示成本次会话才动过。
+            savedAt: ts,
             starred: false,
-            scopeId: existing?.scopeId ?? ctx.scopeId,
-            sourceRef: existing?.sourceRef ?? { kind: 'disk-handle' },
-            ...(existing?.ephemeral === true || !ctx.persisted
+            scopeId: existing.scopeId,
+            sourceRef: existing.sourceRef,
+            ...(existing.ephemeral === true || !ctx.persisted
               ? { ephemeral: true as const }
               : {}),
           });
@@ -184,7 +201,8 @@ export function runMigration(index: DocIndexState, opts?: { batch?: number }): M
             relPath: hit.relPath ?? key,
             name: hit.name,
             legacyKey: `${LEGACY_STARRED_KEY}#${key}`,
-            savedAt: hit.savedAt,
+            // M6 不带时间：收藏迁移沿用条目自己的 savedAt（0 = 「别动既有时间」）
+            savedAt: 0,
             starred: true,
             scopeId: hit.scopeId,
             sourceRef: hit.sourceRef,
@@ -222,8 +240,13 @@ export function runMigration(index: DocIndexState, opts?: { batch?: number }): M
             continue;
           }
           const { assetId, selfContained } = parsed;
+          // `existing` 必须限定在当前作用域内：他区的同名资产不得被本区旧键认领。
+          // 否则本条目永远命中「已存在」分支，「无证据 → 历史池」分支不可达
+          // （评审 R2 中风险项：M7 跨作用域复用）。
+          const ownScope = (a: AssetIndexEntry): boolean =>
+            selfContained ? a.scopeId === BROWSER_SCOPE_ID : ctx.persisted && a.scopeId === ctx.scopeId;
           const existing = index.assets.find(
-            (a) => a.assetKey === assetId || a.legacyKeys.includes(key),
+            (a) => ownScope(a) && (a.assetKey === assetId || a.legacyKeys.includes(key)),
           );
           if (existing !== undefined) {
             if (existing.starred) {
@@ -323,13 +346,19 @@ export function runMigration(index: DocIndexState, opts?: { batch?: number }): M
       }
     }
 
-    // ---- M9：旧 `docId` 裸句柄键（双读 + 双写）。
-    //      读侧（新键未命中 → 读旧键）在包侧既有 `getFileHandle`；
-    //      写侧在此：把**本会话已知可取的句柄**补写到旧 `docId` 键，使回退版本仍可用。
-    // M9 写侧（双写）：异步、失败不阻断；显式挂 `.catch` 而不是裸 `void`，
-    // 避免未处理的 rejection（`mirrorHandles` 内部已逐条 try/catch，
-    // 这里的 catch 是最后一道防线）。
-    void index.mirrorHandles().catch(() => undefined);
+    // ---- M9：`mindcanvas-handles` 的双读 + 双写（§6.2）。
+    //
+    //  读侧：包侧 `getFileHandle(docId)` 已经是「新键未命中 → 读旧键」，
+    //        P0-D 不改它（改它属于包 / P0-A 的范围）。
+    //  写侧：规范要求「命中后**同时**写新键（`file-handle.v1:<docKey>` 富记录）
+    //        与旧键（裸句柄）」。富记录键**在包侧尚不存在**——
+    //        `packages/react/src/edit/handleStore.ts` 只有单键 `docId`，
+    //        没有富记录 API。在 P0-D 里凭空造一个「读旧键再写回同一个旧键」
+    //        的镜像**不是双写**（它没有写任何新键，纯属空转），
+    //        只会制造「写侧已实现」的假象。故此处**不实现**，
+    //        如实记为未完成项：M9 写侧依赖包侧富记录 API（不由本包提供）。
+    //
+    // 索引侧仍然登记旧 `docId`（`noteHandleId`），保留给包侧将来消费。
 
     // ---- M11：注册表 legacy adoption 由 P0-0 完成，这里只承接其证据位
     //      （`migrateContextOf` → `hasOwnershipEvidence`），不重做身份解析。

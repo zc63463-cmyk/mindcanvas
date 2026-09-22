@@ -9,10 +9,8 @@
  * 三张投影表（每次变更后都重新写出，旧版本据此**真的读得到**新数据）：
  * ① `mindcanvas.library.v1` ← `{id,name,ts,folder,tags,source?}`，`ts = max(openedAt,savedAt)`；
  * ② `mindcanvas.starred.v1` ← 旧式键集合；
- * ③ `mindcanvas-handles` 旧 `docId` 键 ← 裸句柄（见 `docIndex.ts` 的 `mirrorHandles`）。
  */
 import { BROWSER_SCOPE_ID, DocLibrary } from '@mindcanvas/react';
-import { type FsFileHandle, getFileHandle, setFileHandle } from '@mindcanvas/react';
 import {
   LEGACY_LIBRARY_KEY,
   LEGACY_STARRED_KEY,
@@ -43,14 +41,17 @@ export interface ProjectionState {
 export function projectLibrary(index: ProjectionState): boolean {
     try {
       const prevRead = index.readJSON(LEGACY_LIBRARY_KEY);
-      const prevList =
-        prevRead.kind === 'ok' && Array.isArray(prevRead.value)
-          ? prevRead.value.filter(isRecord)
-          : [];
+      // 旧库里**每一行**都要留底：合法的进 `byId` 参与对齐，非法的（`null`、
+      // 缺 `id`、非对象）原样排在末尾。此前这里 `filter(isRecord)` + 只收集有 `id`
+      // 的行，等于让投影把尚未迁移的畸形行**静默删掉**——而 `registerDoc` 每次
+      // 打开文档都会走一遍投影，于是「升级即丢历史」。
+      const prevList = prevRead.kind === 'ok' && Array.isArray(prevRead.value) ? prevRead.value : [];
       const byId = new Map<string, Record<string, unknown>>();
+      const opaqueRows: unknown[] = [];
       for (const item of prevList) {
-        const id = item.id;
-        if (typeof id === 'string' && id !== '') byId.set(id, item);
+        const id = isRecord(item) ? item.id : undefined;
+        if (isRecord(item) && typeof id === 'string' && id !== '') byId.set(id, item);
+        else opaqueRows.push(item);
       }
       const rows: Array<{
         id: string;
@@ -87,6 +88,8 @@ export function projectLibrary(index: ProjectionState): boolean {
         if (seen.has(id)) continue;
         rows.push(item as (typeof rows)[number]);
       }
+      // 无法表达的畸形行：原样附着在末尾，确保「不处理也不丢」。
+      for (const item of opaqueRows) rows.push(item as (typeof rows)[number]);
 
       // 索引无条目、旧结构也没有（或本就不合法）→ **不写**：
       // `replaceAll([])` 会把旧结构抹成空，既丢数据又白搭一次写。
@@ -140,18 +143,3 @@ export function projectStarred(index: ProjectionState): boolean {
   }
 }
 
-
-  /**
-   * M9 的**写侧**（双写）：把本会话已知可取的裸句柄补写到旧 `docId` 键。
-   * 旧键仍是裸 `FsFileHandle`，回退版本据此仍能写回原文件。
-   */
-export async function mirrorHandlesImpl(handleIds: ReadonlySet<string>): Promise<void> {
-    for (const id of handleIds) {
-      try {
-        const handle: FsFileHandle | null = await getFileHandle(id);
-        if (handle) await setFileHandle(id, handle);
-      } catch {
-        // 句柄双写是增强：失败不阻断（旧裸键仍在，读侧双读不受影响）
-      }
-    }
-  }
