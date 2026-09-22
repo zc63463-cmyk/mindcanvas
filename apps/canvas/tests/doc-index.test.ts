@@ -460,6 +460,7 @@ describe('DocIndex · 降级投影（§6.3 / NC-4 期望）', () => {
     }
     const lib = JSON.parse(localStorage.getItem(LEGACY_LIBRARY_KEY) ?? '[]') as Array<{
       id: string;
+      name: string;
       source?: string;
     }>;
     expect(lib.length).toBe(12); // 11 条索引 + 1 条旧库孤儿（d11）

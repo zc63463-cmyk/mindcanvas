@@ -13,6 +13,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { DocLibrary, type WorkspaceDir, type WorkspaceFile, type WorkspaceNode } from '@mindcanvas/react';
 import { FileManager, type WorkspaceLike } from '../src/FileManager.js';
+import { DocIndex } from '../src/docIndex.js';
+
+/**
+ * 索引层替身/真身（P0-D）：收藏与「最近」已改为**读写索引**，
+ * 不再直接读写 `mindcanvas.starred.v1`。不注入索引时收藏为只读、点击不写任何键
+ * （这正是「不产生第二写入口」的守卫）。
+ */
+function indexFor(): DocIndex {
+  return new DocIndex({
+    ctx: () => ({
+      scopeId: 'browser:local',
+      persisted: true,
+      hasHistoryEvidence: true,
+      handleStoreAvailable: false,
+    }),
+  });
+}
 
 afterEach(() => {
   cleanup();
@@ -436,14 +453,16 @@ describe('文件工作台 · 预设目录与分类 Tab 与星标', () => {
     expect(await screen.findByText('新项目文件夹')).toBeDefined();
   });
 
-  it('分类 Tab 切换：全部目录 ↔ 最近修改 ↔ 收藏星标', async () => {
+  it('分类 Tab 切换：全部目录 ↔ 最近打开 ↔ 收藏星标', async () => {
     const lib = new DocLibrary();
     lib.upsert({ id: 'a.mm.md', name: 'a.mm.md', source: '# A', folder: '工作' });
     lib.upsert({ id: 'b.mm.md', name: 'b.mm.md', source: '# B', folder: '生活' });
 
+    const index = indexFor();
     const { container } = render(
       <FileManager
         library={lib}
+        index={index}
         workspace={null}
         onOpenEntry={vi.fn()}
         onOpenFile={vi.fn()}
@@ -455,7 +474,7 @@ describe('文件工作台 · 预设目录与分类 Tab 与星标', () => {
     // 默认展示树
     expect(container.querySelector('[data-fm-tree]')).not.toBeNull();
 
-    // 切换到「最近修改」
+    // 切换到「最近打开」
     const recentTab = container.querySelector('[data-tab="recent"]') as HTMLButtonElement;
     fireEvent.click(recentTab);
     await waitFor(() => {
@@ -487,6 +506,9 @@ describe('文件工作台 · 预设目录与分类 Tab 与星标', () => {
       expect(flatDocs.length).toBe(1);
       expect(flatDocs[0]?.textContent).toContain('a.mm.md');
     });
+    // 收藏落在**索引**里，并经降级投影同步到旧键（§6.3 / I-21）
+    expect(index.starredKeys().has('a.mm.md')).toBe(true);
+    expect(JSON.parse(localStorage.getItem('mindcanvas.starred.v1') ?? '[]')).toContain('a.mm.md');
   });
 });
 
