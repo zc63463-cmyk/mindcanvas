@@ -34,7 +34,6 @@ export const RECENT_MAX = 8;
  * 浏览器主键的固定前缀（`browser::<docId>`）。
  * 单独导出：`projectLibrary` 要按它判断「这条属于浏览器作用域，没有旧库对应物」。
  */
-export const BROWSER_DOC_PREFIX = `${BROWSER_SCOPE_ID}::`;
 
 // ============================================================ 类型（§4.7）
 
@@ -83,8 +82,15 @@ export interface HistoryPoolEntry {
   /** 无真实打开时间时为 null（不编造） */
   openedAt: number | null;
   savedAt: number;
-  /** 为什么没自动绑定（用户语言在 UI 层再包一层） */
-  reason: 'no-scope' | 'no-evidence' | 'ephemeral-scope' | 'unavailable';
+  /**
+   * 为什么没自动绑定。用户语言由 `formatHistoryReason` 给出（`FileManagerViews`
+   * 的历史池行直接渲染），故这里的取值域必须与实际会产生的态一一对应：
+   *   - `no-evidence`       本作用域无「同一目录」证据（含 legacy adoption 新 scope）
+   *   - `no-existing-entry` 有证据，但索引里根本没有这条文档（旧库只有文件名，不构成归属）
+   *   - `ephemeral-scope`   上次会话的 disk-session，scopeId 已失效
+   *   - `no-scope` / `unavailable` 无法解析作用域 / 句柄库不可用
+   */
+  reason: 'no-scope' | 'no-evidence' | 'no-existing-entry' | 'ephemeral-scope' | 'unavailable';
   legacyKeys: string[];
 }
 
@@ -104,15 +110,6 @@ export interface MigrateResult {
 }
 
 /** 一次索引变更的结果：投影是否真的写成功（§6.3：写失败 → 该次变更不可回退） */
-export interface IndexChangeResult {
-  /** 本次变更涉及的条目（无命中时为空数组） */
-  entries: DocIndexEntry[];
-  /** 索引键是否写成功 */
-  written: boolean;
-  /** 降级投影是否全部写出成功；false = 本次变更**不可回退**（可重试） */
-  projected: boolean;
-}
-
 /** 打开/保存的输入（`docKey` 必填；其余按需覆盖） */
 export interface DocInput {
   docKey: string;
@@ -287,6 +284,22 @@ export function formatRecentWhen(openedAt: number | null, now = Date.now()): str
 /** 历史池的用户语言（文件面板底部）：用户不处理也不丢 */
 export function formatHistoryPool(count: number): string {
   return `${count} 条旧记录未关联工作区`;
+}
+
+/** 历史池每一行为什么不能自动绑定（用户语言；`FileManagerViews` 的历史池行消费） */
+export function formatHistoryReason(reason: HistoryPoolEntry['reason']): string {
+  switch (reason) {
+    case 'no-evidence':
+      return '无法确认属于当前工作区';
+    case 'no-existing-entry':
+      return '当前工作区里找不到这份文档';
+    case 'ephemeral-scope':
+      return '上次临时打开的会话已结束';
+    case 'unavailable':
+      return '句柄库不可用';
+    case 'no-scope':
+      return '尚未打开任何工作区';
+  }
 }
 
 // ============================================================ 归属证据（§6.2.1）

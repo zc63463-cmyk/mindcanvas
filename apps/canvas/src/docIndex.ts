@@ -34,13 +34,12 @@ import {
   relPathOfKey,
 } from './docIndexCore.js';
 import { runMigration } from './docIndexMigrate.js';
-import { mirrorHandlesImpl, projectLibrary, projectStarred } from './docIndexProject.js';
+import { projectLibrary, projectStarred } from './docIndexProject.js';
 import type {
   AssetIndexEntry,
   DocIndexEntry,
   DocInput,
   HistoryPoolEntry,
-  IndexChangeResult,
   IndexStore,
   MigrateContext,
   MigrateResult,
@@ -75,7 +74,6 @@ export class DocIndex {
   /** 最近一次投影写入失败（§6.3：该次变更不可回退，必须可查） */
   projectionFailed = false;
   /** 已证明存在、且句柄可取的旧 `docId`（M9 双写的写侧输入） */
-  private handleIds = new Set<string>();
   /**
    * 惰性迁移进度：旧键 → **已处理过的条目标识集合**（随索引一起写盘）。
    *
@@ -164,9 +162,9 @@ export class DocIndex {
    * 文档**被打开**：推进 `openedAt`（`savedAt` 不动——打开不是保存）。
    * 作用域未持久 → 条目带 `ephemeral: true`。
    */
-  openDoc(input: DocInput, at = this.nowMs()): IndexChangeResult {
+  openDoc(input: DocInput, at = this.nowMs()): void {
     const relPath = input.relPath === undefined ? relPathOfKey(input.docKey) : input.relPath;
-    return this.mutate((prev) => {
+    this.mutate((prev) => {
       const base = prev ?? this.freshEntry(input.docKey, relPath, input, at);
       return this.ephemeralized({
         ...base,
@@ -187,9 +185,9 @@ export class DocIndex {
    * 这是 UD-2 的另一半：保存不改变「最近」的次序——否则每次 Ctrl+S 都会把文档
    * 顶到「最近」顶部，「最近修改」冒充「最近打开」。
    */
-  saveDoc(input: DocInput, at = this.nowMs()): IndexChangeResult {
+  saveDoc(input: DocInput, at = this.nowMs()): void {
     const relPath = input.relPath === undefined ? relPathOfKey(input.docKey) : input.relPath;
-    return this.mutate((prev) => {
+    this.mutate((prev) => {
       const base = prev ?? this.freshEntry(input.docKey, relPath, input, at);
       return this.ephemeralized({
         ...base,
@@ -222,11 +220,8 @@ export class DocIndex {
     openedAt?: number;
     /** 传入即推进保存时间（真实落盘）；缺省保持原值 */
     savedAt?: number;
-    /** 能取到裸句柄的旧 docId（M9 双写的写侧输入） */
-    handleId?: string;
-  }): IndexChangeResult {
-    if (input.handleId !== undefined) this.handleIds.add(input.handleId);
-    return this.mutate((prev) => {
+  }): void {
+    this.mutate((prev) => {
       const base = prev ?? this.freshEntry(input.docKey, input.relPath, input, this.nowMs());
       const next: DocIndexEntry = {
         ...base,
@@ -241,26 +236,9 @@ export class DocIndex {
     }, input.docKey);
   }
 
-  /**
-   * M9 写侧的**登记入口**：告诉索引「这个旧 docId 的裸句柄可取」。
-   *
-   * 生产调用点：保存成功（`MindmapStage` 的保存 effect 传 `doc.handle ? doc.id : undefined`）
-   * 与工作区文件登记（`useIndexWiring.registerDocs` 传相对路径）。
-   * 之所以显式登记而不是遍历所有条目：句柄读取是异步 IDB 调用，
-   * 对没有句柄的条目逐个 `getFileHandle` 会白跑一轮 IDB。
-   */
-  noteHandleId(legacyId: string): void {
-    if (legacyId !== '') this.handleIds.add(legacyId);
-  }
-
-  /** M9 写侧（双写）：把已知可取的裸句柄补写到旧 `docId` 键（实现见 docIndexProject） */
-  async mirrorHandles(): Promise<void> {
-    await mirrorHandlesImpl(this.handleIds);
-  }
-
   /** 收藏/取消收藏（按**稳定身份** `docKey`；`relPath` 变了收藏不丢） */
-  setStarred(docKey: string, starred: boolean, at = this.nowMs()): IndexChangeResult {
-    const out = this.mutate((prev) => {
+  setStarred(docKey: string, starred: boolean, at = this.nowMs()): void {
+    this.mutate((prev) => {
       if (!prev) {
         const created = this.freshEntry(docKey, relPathOfKey(docKey), { docKey }, at);
         return { ...created, starred };
@@ -271,7 +249,6 @@ export class DocIndex {
     // 「用户取消收藏」与「这条还没迁移」（见 `claimKey` 注释）
     const entry = this.getDoc(docKey);
     if (entry !== undefined) this.claimKey(docKey, legacyIdOf(entry));
-    return out;
   }
 
   /**
@@ -292,19 +269,19 @@ export class DocIndex {
    * 先按 `docKey` 找，再按 `relPath` 找（旧键通过 `legacyKeys` 命中），
    * 都没命中 → 以该键为 `relPath` 建新条目（浏览器模式无工作区时的常见情形）。
    */
-  setStarredByPath(pathKey: string, starred: boolean, at = this.nowMs()): IndexChangeResult {
+  setStarredByPath(pathKey: string, starred: boolean, at = this.nowMs()): void {
     const hit =
       this.getDoc(pathKey) ??
       this.docs.find((e) => e.relPath === pathKey) ??
       this.docs.find((e) => e.legacyKeys.includes(pathKey));
     if (hit) {
-      const out = this.setStarred(hit.docKey, starred, at);
+      this.setStarred(hit.docKey, starred, at);
       // 记录路径别名：用户显式操作过的键 = 已被认领（投影据此判定「取消收藏」）
       this.claimKey(hit.docKey, pathKey);
-      return out;
+      return;
     }
     const docKey = pathKey.includes('::') ? pathKey : browserDocKey(pathKey);
-    const created = this.mutate((prev) => {
+    this.mutate((prev) => {
       const base = prev ?? this.freshEntry(docKey, relPathOfKey(docKey) ?? pathKey, { docKey }, at);
       return {
         ...base,
@@ -313,7 +290,6 @@ export class DocIndex {
         legacyKeys: appendUnique(base.legacyKeys, pathKey),
       };
     }, docKey);
-    return created;
   }
 
   /** 某路径是否已收藏（UI 判定星标：`docKey` / `relPath` / 旧键三个别名都认） */
@@ -322,7 +298,7 @@ export class DocIndex {
   }
 
   /** 资产收藏（M4/M7 的写路径） */
-  setAssetStarred(assetKey: string, starred: boolean): IndexChangeResult {
+  setAssetStarred(assetKey: string, starred: boolean): void {
     const prev = this.assets.find((a) => a.assetKey === assetKey);
     const entry: AssetIndexEntry = prev
       ? { ...prev, starred }
@@ -337,8 +313,7 @@ export class DocIndex {
     this.assets = prev
       ? this.assets.map((a) => (a.assetKey === assetKey ? entry : a))
       : [...this.assets, entry];
-    const { written, projected } = this.commit();
-    return { entries: [], written, projected };
+    this.commit();
   }
 
   /**
@@ -364,7 +339,8 @@ export class DocIndex {
         : e,
     );
     this.history = this.history.filter((h) => h.key !== legacyKey);
-    return this.commit().projected;
+    this.commit();
+    return true; // 两道拒绝已在上方返回 false；到这里绑定已写入（投影成败由 projectionStatus 查）
   }
 
   /** 用户「忽略」一条历史池记录：只从**呈现**移除（旧键与 `legacyKeys` 保留，不处理也不丢） */
@@ -407,13 +383,18 @@ export class DocIndex {
     if (prev) {
       const next: DocIndexEntry = {
         ...prev,
-        // **不推进 openedAt / savedAt**：迁移不是打开也不是保存（否则会编造打开时间）
+        // **不推进 openedAt**：迁移不是打开（否则会编造打开时间，UD-2）。
+        // `savedAt`：迁移带来的旧库访问时间**是真值**，可以覆盖既有条目的占位值
+        // （`registerDoc` 会把本次会话的登记时刻写进 savedAt，那不是「上次动过它的时间」）。
+        // 但迁移**不带** savedAt 时（M6/M8 沿用条目自身），绝不改动既有时间。
+        savedAt: input.savedAt > 0 ? input.savedAt : prev.savedAt,
         starred: prev.starred || input.starred,
         relPath: prev.relPath ?? input.relPath,
         name: prev.name || input.name,
         legacyKeys: appendUnique(prev.legacyKeys, input.legacyKey),
       };
       if (
+        prev.savedAt === next.savedAt &&
         prev.starred === next.starred &&
         prev.relPath === next.relPath &&
         prev.name === next.name &&
@@ -474,14 +455,13 @@ export class DocIndex {
   private mutate(
     compute: (prev: DocIndexEntry | undefined) => DocIndexEntry,
     docKey: string,
-  ): IndexChangeResult {
+  ): void {
     const prev = this.getDoc(docKey);
     const next = compute(prev);
     this.docs = prev
       ? this.docs.map((e) => (e.docKey === docKey ? next : e))
       : [...this.docs, next];
-    const { written, projected } = this.commit();
-    return { entries: [next], written, projected };
+    this.commit();
   }
 
   /**
@@ -489,12 +469,12 @@ export class DocIndex {
    * 四个写路径（`mutate` / `setAssetStarred` / `relink` / `migrate`）共用，
    * 避免任何一处漏写投影而静默破坏 R-B。
    */
-  commit(): { written: boolean; projected: boolean } {
+  private commit(): boolean {
     const written = this.persist();
     const projected = this.project(written);
     this.wrote = true;
     this.projectionFailed = !projected;
-    return { written, projected };
+    return projected;
   }
 
   /** 写索引键；失败返回 false（条目仍在内存视图里，调用方据此提示） */
