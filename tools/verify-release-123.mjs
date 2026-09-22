@@ -64,7 +64,7 @@ import {
 } from './lib/releaseAcceptance.mjs';
 import { assertLoadedBundle, checkSnapshotFresh, expectedBundleName } from './lib/snapshotCheck.mjs';
 
-const ROOT = new URL('..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+const ROOT = decodeURIComponent(new URL('..', import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, '$1');
 const argv = process.argv.slice(2);
 const arg = (k) => {
   const hit = argv.find((a) => a.startsWith(`--${k}=`));

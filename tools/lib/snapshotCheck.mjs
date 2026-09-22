@@ -22,8 +22,11 @@ import { execSync } from 'node:child_process';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-/** tools/lib/ → 仓库根 */
-const ROOT = new URL('../..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+/** tools/lib/ → 仓库根；`decodeURIComponent` 负责解掉 `.pathname` 的 `%20` 等编码 */
+const ROOT = decodeURIComponent(new URL('../..', import.meta.url).pathname).replace(
+  /^\/([A-Za-z]:)/,
+  '$1',
+);
 const DIST_INDEX = join(ROOT, 'apps/canvas/dist/index.html');
 /** 参与「产物是否落后于源码」判定的源码根（editor 侧改了都要重建产物） */
 const SRC_ROOTS = [

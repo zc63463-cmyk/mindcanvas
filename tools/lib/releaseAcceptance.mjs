@@ -24,8 +24,15 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 
-/** 仓库根（tools/lib/ → ../..） */
-export const ROOT = new URL('../..', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+/**
+ * 仓库根（tools/lib/ → ../..）。
+ * `decodeURIComponent` 不可省：`.pathname` 是百分号编码片段，路径含空格会得到 `%20`
+ * 而死路径（含中文等非 ASCII 同理）；Windows 盘符场景它还会多出前导斜杠。
+ */
+export const ROOT = decodeURIComponent(new URL('../..', import.meta.url).pathname).replace(
+  /^\/([A-Za-z]:)/,
+  '$1',
+);
 
 export const sha256 = (data) => createHash('sha256').update(data).digest('hex');
 export const hashFile = (abs) => sha256(readFileSync(abs));

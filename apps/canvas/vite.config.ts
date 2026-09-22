@@ -1,10 +1,19 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-/** 解析到 workspace 包源码的绝对路径（不依赖 @types/node） */
+/**
+ * 解析到 workspace 包源码的绝对路径（不依赖 @types/node）。
+ *
+ * 两点都不能省，否则路径里带空格就静默解析失败（Vite 报 UNLOADABLE_DEPENDENCY）：
+ *  1. `decodeURIComponent`：`.pathname` 是**百分号编码**的 URL 片段，空格会原样变成
+ *     `%20`，直接当文件路径用必然 ENOENT。含中文等非 ASCII 路径同理。
+ *  2. 盘符前导斜杠：Windows 下 pathname 形如 `/E:/xxx`，剥掉才是可用的 `E:/xxx`。
+ *
+ * 不用 `node:url` 的 `fileURLToPath`：本包 devDeps 没有 `@types/node`，
+ * 引用 `node:url` 会让 `pnpm typecheck`（tsc -b）报 TS2307。
+ */
 const pkgSrc = (rel: string): string =>
-  // Windows 下 pathname 形如 /E:/xxx —— 去掉前导斜杠才是可用的盘符路径
-  new URL(rel, import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1');
+  decodeURIComponent(new URL(rel, import.meta.url).pathname).replace(/^\/([A-Za-z]:)/, '$1');
 
 /**
  * canvas 应用构建配置：Vite + React 组合入口（kernel + react 渲染器的消费方）。
