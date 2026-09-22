@@ -15,6 +15,15 @@
  */
 
 const LIB_KEY = 'mindcanvas.library.v1';
+/**
+ * 降级投影键：**索引层写入**（`apps/canvas/src/docIndex.ts`），本模块与旧结构只读。
+ *
+ * 为什么定义在包内：P0-D 的降级投影（shared-contracts §6.3）写进的就是
+ * `mindcanvas.library.v1` —— 必须与读取方**同一个字面量**。若索引层自带一份副本，
+ * 任一侧改名就会得到「投影写了但谁也读不到」的静默失败（正是 I-21
+ * 「旧键还在 ≠ 新数据可回退」要防的那类假象）。
+ */
+export const LIBRARY_KEY = 'mindcanvas.library.v1';
 const FOLDERS_KEY = 'mindcanvas.folders.v1';
 /** 默认预置分类目录（开箱自带，空库初始化用） */
 export const DEFAULT_PRESET_FOLDERS: readonly string[] = ['示例导图', '工作项目', '个人笔记', '灵感草稿'];
@@ -116,6 +125,28 @@ export class DocLibrary {
 
   get(id: string): DocEntry | undefined {
     return this.load().find((e) => e.id === id);
+  }
+
+  /**
+   * 把一份**完整的**条目列表按本库的规范落盘（排序 + 只留最近 SOURCE_KEEP 条的 source）。
+   *
+   * 用途（P0-D 降级投影 R-B）：索引层不是「一条条 upsert」而是持有一份视图，
+   * 投影必须整体写出——逐条 upsert 会在索引条目多于旧库时需要 id 映射，
+   * 而 id 映射正是 I-13 禁止的归属猜测。这里复用 `persistSorted`，
+   * 于是投影与 `upsert` 走**同一条**序列化规则（配额降级也一致）。
+   *
+   * 不做逐条合并、不删除任何键；写失败沿用 `save` 的既有静默降级。
+   */
+  replaceAll(list: DocEntry[]): void {
+    this.persistSorted(list.map(normalize));
+  }
+
+  /**
+   * 读出本库当前落盘的全部条目（**不排序**），供降级投影合并 `source` 等旧库字段。
+   * 与 `list()` 的差别：`list()` 排序会改变写入顺序，而投影要原地改写。
+   */
+  raw(): DocEntry[] {
+    return this.load();
   }
 
   /**

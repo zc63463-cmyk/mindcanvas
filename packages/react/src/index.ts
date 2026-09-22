@@ -244,7 +244,7 @@ export {
 export type { SpanReplacement, TextSpan } from './edit/textLinks.js';
 export type { DocEntry } from './edit/docLibrary.js';
 
-export { DocLibrary, SOURCE_KEEP, UNTAGGED } from './edit/docLibrary.js';
+export { DocLibrary, LIBRARY_KEY, SOURCE_KEEP, UNTAGGED } from './edit/docLibrary.js';
 export type {
   DocumentHost,
   MindDoc,

@@ -8,7 +8,7 @@
  *   ② 存储损坏时退化为内存态而不是抛错
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { DocLibrary, UNTAGGED, type DocEntry } from '../src/edit/docLibrary';
+import { DocLibrary, LIBRARY_KEY, SOURCE_KEEP, UNTAGGED, type DocEntry } from '../src/edit/docLibrary';
 
 const KEY = 'mindcanvas.library.v1';
 
@@ -268,5 +268,57 @@ describe('DocLibrary · 目录（树）', () => {
     d.ensurePresetFolders();
     expect(d.folders()).toContain('示例导图');
     expect(d.folders()).toContain('工作项目');
+  });
+});
+
+/**
+ * P0-D：索引层（`apps/canvas/src/docIndex.ts`）的**降级投影**写进的就是本库的键。
+ * 这里只锁「包侧读入口」的契约，投影内容由 `apps/canvas/tests/doc-index.test.ts` 断言：
+ *   ① `LIBRARY_KEY` 必须与 `DocLibrary` 实际使用的键**逐字相同**（两侧各写一份字面量
+ *      就会得到「投影写了但谁也读不到」的静默失败）；
+ *   ② `replaceAll` 是投影的序列化出口，必须与 `upsert` 同规（排序 + 只留 SOURCE_KEEP 条 source）。
+ */
+describe('DocLibrary · P0-D 降级投影读入口', () => {
+  it('LIBRARY_KEY 与 DocLibrary 实际落盘键相同', () => {
+    expect(LIBRARY_KEY).toBe(KEY);
+    lib().upsert({ id: 'a', name: 'A.mm.md', source: '# A' });
+    expect(JSON.parse(localStorage.getItem(LIBRARY_KEY) ?? '[]')).toHaveLength(1);
+  });
+
+  it('replaceAll 按 ts 降序落盘，且只保留最近 SOURCE_KEEP 条 source', () => {
+    const d = lib();
+    const list: DocEntry[] = Array.from({ length: 12 }, (_, i) => ({
+      id: `p-${i}`,
+      name: `P${i}.mm.md`,
+      ts: 5_000 - i,
+      folder: '',
+      tags: [],
+      source: `# P${i}`,
+    }));
+    d.replaceAll(list);
+    const written = JSON.parse(localStorage.getItem(LIBRARY_KEY) ?? '[]') as DocEntry[];
+    expect(written.map((e) => e.id)).toEqual(list.map((e) => e.id)); // ts 降序 → 顺序不变
+    expect(written.slice(0, SOURCE_KEEP).every((e) => typeof e.source === 'string')).toBe(true);
+    expect(written.slice(SOURCE_KEEP).every((e) => e.source === undefined)).toBe(true);
+    // 投影写完后既有读路径（list/get）读到同一份数据
+    expect(d.list().length).toBe(12);
+    expect(d.get('p-0')?.name).toBe('P0.mm.md');
+  });
+
+  it('replaceAll 清洗 folder（与既有 normalize 同规）', () => {
+    const d = lib();
+    d.replaceAll([{ id: 'a', name: 'A.mm.md', ts: 1, folder: '/工作//项目A/', tags: [] }]);
+    expect(d.get('a')?.folder).toBe('工作/项目A');
+  });
+
+  it('raw() 返回落盘顺序（已排序），供投影原地合并旧字段', () => {
+    const d = lib();
+    d.replaceAll([
+      { id: 'old', name: '旧.mm.md', ts: 1, folder: '', tags: [] },
+      { id: 'new', name: '新.mm.md', ts: 9, folder: '', tags: [] },
+    ]);
+    // replaceAll 已按 ts 降序落盘，raw() 不再排序
+    expect(d.raw().map((e) => e.id)).toEqual(['new', 'old']);
+    expect(d.list().map((e) => e.id)).toEqual(['new', 'old']);
   });
 });
