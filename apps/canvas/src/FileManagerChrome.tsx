@@ -8,7 +8,7 @@
  */
 import type React from 'react';
 import { CHROME } from '@mindcanvas/react';
-import { btnBase, formatRelative } from './fileManagerShared.js';
+import { btnBase } from './fileManagerShared.js';
 
 export type FileManagerTab = 'tree' | 'recent' | 'starred';
 
@@ -88,7 +88,10 @@ export function StorageBar({
 
 const TAB_DEFS: ReadonlyArray<{ key: FileManagerTab; label: string }> = [
   { key: 'tree', label: '📂 全部目录' },
-  { key: 'recent', label: '🕒 最近修改' },
+  // P0-D：数据层分记打开时间与保存时间，但**只有一个「最近」**（不拆两个页签）。
+  // 标签从「最近修改」改为「最近打开」，与实际排序依据（`openedAt`）一致——
+  // 否则用户看到的「刚刚」其实来自保存时间（UD-2 禁止的口径混用）。
+  { key: 'recent', label: '🕒 最近打开' },
   { key: 'starred', label: '⭐ 收藏星标' },
 ];
 
@@ -142,18 +145,25 @@ export function ViewTabs({
   );
 }
 
-/** 平铺文档行（「最近修改」/「收藏星标」视图共用） */
+/**
+ * 平铺文档行（「最近打开」/「收藏星标」视图共用）。
+ *
+ * `when` 是**已格式化好的时间文案**：调用方按视图给不同来源——
+ * 「最近打开」传 `formatRecentWhen(openedAt)`（`null` → 「未记录打开时间」），
+ * 「收藏」传 `formatRelative(savedAt)`。行内不再自行把 `ts` 转成「N 天前」，
+ * 否则 `openedAt === null` 会被渲染成「刚刚」，等于用保存时间冒充打开时间（UD-2）。
+ */
 export function FlatDocRow({
   name,
   path,
-  ts,
+  when,
   starred,
   onToggleStar,
   onOpen,
 }: {
   name: string;
   path: string;
-  ts: number;
+  when: string;
   starred: boolean;
   onToggleStar: (e: React.MouseEvent) => void;
   onOpen: () => void;
@@ -213,8 +223,11 @@ export function FlatDocRow({
           📁 {path}
         </span>
       )}
-      <span style={{ fontSize: CHROME.fontSizeSmall, color: CHROME.textMuted, flex: 'none' }}>
-        {formatRelative(ts)}
+      <span
+        data-flat-doc-when
+        style={{ fontSize: CHROME.fontSizeSmall, color: CHROME.textMuted, flex: 'none' }}
+      >
+        {when}
       </span>
     </div>
   );

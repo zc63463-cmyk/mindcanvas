@@ -124,25 +124,42 @@ function loadStarred(): Set<string> {
   }
 }
 
-/** 收藏星标集合（localStorage 持久化；供 FileManager 与未来视图复用） */
-export function useStarredKeys(): {
+/**
+ * `useStarredKeys` 消费的索引面（`DocIndex` 天然满足；测试可注入替身）。
+ *
+ * 只需三个方法：读全部收藏键、判定单个键、按路径键切换。
+ */
+export interface StarredIndexPort {
+  starredKeys(): Set<string>;
+  isStarred(key: string): boolean;
+  setStarredByPath(key: string, starred: boolean): unknown;
+}
+
+/**
+ * 收藏星标集合（**P0-D：读写索引层**，不再直接读写 `mindcanvas.starred.v1`）。
+ *
+ * 为什么换数据源：旧键按 `fullPath` 存，改名即丢；索引按**稳定身份**（`docKey`）存，
+ * 路径变化不影响连续性（P0-A 的改名/移动依赖这一点）。旧键由索引层的降级投影
+ * 同步写出，因此旧版本读到的仍是同一份收藏（§6.3 / I-21）。
+ *
+ * `index` 由 FileManager 注入（唯一索引写入口在 `docIndex.ts`）。**缺省时不写任何键**：
+ * 回落到直接写旧键会绕开降级投影，造成两侧漂移——宁可只读旧值，也不产生第二写入口。
+ */
+export function useStarredKeys(index?: StarredIndexPort | null): {
   starredKeys: Set<string>;
   toggleStar: (key: string, e: { stopPropagation: () => void }) => void;
 } {
-  const [starredKeys, setStarredKeys] = useState<Set<string>>(loadStarred);
-  const toggleStar = useCallback((key: string, e: { stopPropagation: () => void }) => {
-    e.stopPropagation();
-    setStarredKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      try {
-        localStorage.setItem(STARRED_KEY, JSON.stringify([...next]));
-      } catch {
-        // 隐私模式/配额满：忽略，仅内存态生效
-      }
-      return next;
-    });
-  }, []);
+  const [starredKeys, setStarredKeys] = useState<Set<string>>(() =>
+    index ? index.starredKeys() : loadStarred(),
+  );
+  const toggleStar = useCallback(
+    (key: string, e: { stopPropagation: () => void }) => {
+      e.stopPropagation();
+      if (!index) return; // 无索引：只读旧键，不产生第二写入口
+      index.setStarredByPath(key, !index.isStarred(key));
+      setStarredKeys(index.starredKeys());
+    },
+    [index],
+  );
   return { starredKeys, toggleStar };
 }

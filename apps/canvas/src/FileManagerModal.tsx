@@ -12,10 +12,13 @@
  */
 import { useEffect } from 'react';
 import type { DocEntry, DocLibrary, MindDoc, WorkspaceFile } from '@mindcanvas/react';
+import type { DocIndex } from './docIndex.js';
 import { FileManager, type WorkspaceLike } from './FileManager.js';
 
 export interface FileManagerModalProps {
   library: DocLibrary;
+  /** P0-D 索引层（唯一索引写入口）：收藏、「最近」、迁移与降级投影的数据源 */
+  index?: DocIndex | null;
   /** 目录工作区宿主；null/未挂载 → 兼容模式 */
   workspace: WorkspaceLike | null;
   /**
@@ -45,6 +48,7 @@ export interface FileManagerModalProps {
 
 export function FileManagerModal({
   library,
+  index = null,
   workspace,
   applyDoc,
   handleOpen,
@@ -69,6 +73,7 @@ export function FileManagerModal({
   const panel = (
     <FileManager
       library={library}
+      index={index}
       workspace={workspace}
       currentPath={currentPath}
       dirty={dirty}

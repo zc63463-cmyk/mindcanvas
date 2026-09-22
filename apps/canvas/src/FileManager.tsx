@@ -14,6 +14,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  BROWSER_SCOPE_ID,
   CHROME,
   type DocEntry,
   type DocLibrary,
@@ -43,9 +44,19 @@ import {
   formatRelative,
   inlineBarStyle,
   inputStyle,
+  rowBtn,
   useStarredKeys,
   type MenuState,
 } from './fileManagerShared.js';
+import {
+  type DocIndex,
+  type HistoryPoolEntry,
+  RECENT_MAX,
+  browserDocKey,
+  formatHistoryPool,
+  formatRecentWhen,
+  wsDocKey,
+} from './docIndex.js';
 
 /**
  * 工作区能力的最小面（结构化类型，`DirectoryWorkspaceHost` 天然满足）。
@@ -54,6 +65,13 @@ import {
 export interface WorkspaceLike {
   mounted: boolean;
   name: string | null;
+  /**
+   * 工作区身份（P0-0 的 `DirectoryWorkspaceHost` 已提供）。
+   * 索引主键要以它作前缀；缺省（旧替身）按「浏览器/兼容模式」处理。
+   */
+  scopeId?: string | null;
+  /** 运行期身份形态；`persisted === false` → 索引条目带 `ephemeral` */
+  scopeState?: { kind: string; persisted: boolean };
   scan(force?: boolean): Promise<WorkspaceNode[]>;
   createFile(dirPath: string, name: string, text: string): Promise<WorkspaceFile>;
   createDir(parentPath: string, name: string): Promise<WorkspaceDir>;
@@ -63,8 +81,38 @@ export interface WorkspaceLike {
   moveFile(file: WorkspaceFile, targetDirPath: string): Promise<WorkspaceFile>;
 }
 
+/**
+ * 树节点 → 稳定索引身份（`docKey`）。
+ *
+ * 工作区：`ws:<scopeId 主体>::<relPath>`；浏览器/兼容模式：`browser::<docId>`。
+ * `fullPath` 在兼容模式就是旧库 id，在工作区就是相对路径——两种身份的差别全在这里翻译。
+ *
+ * `browser:local` 是**浏览器作用域**（不是磁盘工作区的 `ws:` 身份）：
+ * 它的主键必须是 `browser::<id>`，套 `ws:` 前缀会得到
+ * `ws:browser:local::a.mm.md` 这种谁也对不上的键（实测踩过：
+ * 同一个文档因此同时存在两条条目，「最近」列表出现重复行）。
+ */
+export function docKeyOfEntry(node: TreeNode, scopeId: string | null): string {
+  if (scopeId === null || scopeId === BROWSER_SCOPE_ID) return browserDocKey(node.fullPath);
+  return wsDocKey(scopeId, node.fullPath);
+}
+
+/**
+ * 作用域是否持久（决定索引条目带不带 `ephemeral`）。
+ * `disk-session`（身份不跨刷新）→ false，该类条目的 `scopeId` 下次会话无效。
+ */
+function workspaceScopePersisted(workspace: WorkspaceLike | null): boolean {
+  return workspace?.scopeState?.persisted === true;
+}
+
 export interface FileManagerProps {
   library: DocLibrary;
+  /**
+   * 索引层（P0-D 的唯一索引写入口）。**收藏与「最近」都读它**，
+   * `library` 只保留目录树与兼容模式的打开路径（本轮不改旧键读写语义）。
+   * 缺省（旧调用方/测试）→ 收藏退化为只读旧键，绝不产生第二写入口。
+   */
+  index?: DocIndex | null;
   /** 工作区宿主；null = 兼容模式（走 DocLibrary 虚拟目录） */
   workspace: WorkspaceLike | null;
   /** 兼容模式：打开库条目 */
@@ -87,6 +135,7 @@ export interface FileManagerProps {
 
 export function FileManager({
   library,
+  index = null,
   workspace,
   onOpenEntry,
   onOpenFile,
@@ -114,7 +163,15 @@ export function FileManager({
   const [namingTarget, setNamingTarget] = useState<{ parentPath: string; node?: TreeNode } | null>(
     null,
   );
-  const { starredKeys, toggleStar } = useStarredKeys();
+  const { starredKeys, toggleStar } = useStarredKeys(index);
+  /**
+   * 历史池（§6.2.1）：旧记录**没有归属证据**时的落点。默认折叠，展开后可逐条
+   * 「关联到此工作区」或「忽略」；用户不处理也不丢（旧键与 `legacyKeys` 都保留）。
+   */
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [history, setHistory] = useState<HistoryPoolEntry[]>([]);
+  /** 惰性迁移的可见结果：失败条目数（>0 时提示「未迁移」，不伪报完成） */
+  const [migrateFailed, setMigrateFailed] = useState(0);
 
   const [, forceRender] = useState(0);
   const refresh = useCallback((): void => forceRender((n) => n + 1), []);
@@ -132,17 +189,81 @@ export function FileManager({
   const reload = useCallback(async (): Promise<void> => {
     setLoading(true);
     setError(null);
+    // P0-D：惰性迁移（分批、幂等、可中断续跑）。**没有一键批量入口**——
+    // 每次打开文件面板按批推进；失败条目留在旧库并计数（不伪报完成）。
+    //
+    // 放在树加载**之前**且各自 try：旧库损坏时 `treeFromLibrary` 会抛，
+    // 但「N 条未迁移」这条反馈必须仍然可见（它正是用户唯一能看到的失败信号）。
+    if (index) {
+      try {
+        const migrated = index.migrate({ batch: 64 });
+        if (aliveRef.current) {
+          setHistory(index.historyPool());
+          setMigrateFailed(migrated.failed);
+        }
+      } catch {
+        if (aliveRef.current) setMigrateFailed((n) => Math.max(n, 1));
+      }
+    }
     try {
       const next = useWorkspace && workspace
         ? treeFromWorkspace(await workspace.scan(true))
         : treeFromLibrary(library);
-      if (aliveRef.current) setTree(sortTree(next));
+      if (aliveRef.current) {
+        // 树里的文档补上索引身份（「最近」与收藏要按稳定身份认，见 docKeyOfEntry）
+        setTree(sortTree(next));
+        void refreshIndexDocs(collectDocs(next));
+      }
     } catch (e) {
       if (aliveRef.current) setError(e instanceof Error ? e.message : '扫描工作区失败');
     } finally {
       if (aliveRef.current) setLoading(false);
     }
-  }, [useWorkspace, workspace, library]);
+  }, [useWorkspace, workspace, library, index]);
+
+  /**
+   * 把树里的文档登记进索引（**不推进任何时间**，只建立身份）。
+   *
+   * 为什么不在打开时统一推进 `openedAt`：`openedAt` 的语义是**用户真的打开了它**
+   * （UD-2），扫树/刷新面板不算打开。真实的打开动作在 `onOpenEntry` / `onOpenFile`
+   * 里推进（见 `markOpened`），这里只保证条目存在、身份可认。
+   */
+  const refreshIndexDocs = useCallback(
+    async (docs: readonly TreeNode[]): Promise<void> => {
+      if (!index) return;
+      const scopeId = useWorkspace && workspace?.scopeId ? workspace.scopeId : null;
+      const persisted = workspaceScopePersisted(workspace);
+      for (const d of docs) {
+        const docKey = docKeyOfEntry(d, scopeId);
+        index.registerDoc({
+          docKey,
+          relPath: d.fullPath,
+          name: d.name,
+          scopeId: scopeId ?? 'browser:local',
+          persisted,
+          sourceRef: d.wsFile ? { kind: 'disk-handle' } : { kind: 'none' },
+        });
+      }
+      if (aliveRef.current) {
+        setHistory(index.historyPool());
+        // 索引是**可变对象**（不是 React state）：登记后必须显式触发重渲染，
+        // 否则「最近」/「收藏」两个视图仍用旧的 memo 结果，表现为「面板里空着」。
+        refresh();
+      }
+    },
+    [index, useWorkspace, workspace, refresh],
+  );
+
+  /** 用户**真的打开**了某文档：推进 `openedAt`（「最近」的唯一排序依据） */
+  const markOpened = useCallback(
+    (docKey: string, relPath: string | null, name: string): void => {
+      if (!index) return;
+      index.openDoc({ docKey, relPath, name });
+      setHistory(index.historyPool());
+      refresh();
+    },
+    [index, refresh],
+  );
 
   // 首次挂载 + 工作区挂载状态变化时重新载入
   useEffect(() => {
@@ -237,32 +358,116 @@ export function FileManager({
 
   // ---------------------------------------------------------------- 渲染
 
-  const treeCtx: FileManagerTreeCtx = {
-    tree, expanded, query, dropTarget, dragKey, renamingKey, starredKeys,
-    toggle, setDropTarget, setDragKey, setMenu, dropInto, commitRename,
-    setRenamingKey, toggleStar, onOpenFile, onOpenEntry,
-  };
-
   const menuNode = menu ? findNode(tree, menu.key) : null;
   const widths = variant === 'drawer' ? 320 : 680;
 
   const allDocs = useMemo(() => collectDocs(tree), [tree]);
 
-  const recentDocs = useMemo(() => {
-    const list = [...allDocs].sort((a, b) => b.ts - a.ts);
-    if (!query.trim()) return list;
-    const q = query.trim().toLowerCase();
-    return list.filter((d) => d.name.toLowerCase().includes(q) || d.fullPath.toLowerCase().includes(q));
-  }, [allDocs, query]);
+  /** 打开入口的唯一包装：**推进 `openedAt`**（真实打开才推进，UD-2） */
+  const openNode = useCallback(
+    (node: TreeNode): void => {
+      if (index) {
+        const scopeId = useWorkspace && workspace?.scopeId ? workspace.scopeId : null;
+        markOpened(docKeyOfEntry(node, scopeId), node.fullPath, node.name);
+      }
+      if (node.wsFile) onOpenFile(node.wsFile);
+      else if (node.entry) onOpenEntry(node.entry);
+    },
+    [index, useWorkspace, workspace, markOpened, onOpenFile, onOpenEntry],
+  );
 
-  const starredDocs = useMemo(() => {
+  const treeCtx: FileManagerTreeCtx = {
+    tree,
+    expanded,
+    query,
+    dropTarget,
+    dragKey,
+    renamingKey,
+    starredKeys,
+    toggle,
+    setDropTarget,
+    setDragKey,
+    setMenu,
+    dropInto,
+    commitRename,
+    setRenamingKey,
+    toggleStar,
+    onOpenFile: (file) => {
+      const node = allDocs.find((d) => d.wsFile === file);
+      if (node) openNode(node);
+      else onOpenFile(file);
+    },
+    onOpenEntry: (entry) => {
+      const node = allDocs.find((d) => d.entry === entry);
+      if (node) openNode(node);
+      else onOpenEntry(entry);
+    },
+  };
+
+  /** 树节点查询（「最近」/「收藏」两个视图共用） */
+  const matchQuery = useCallback(
+    (rows: readonly TreeNode[]): TreeNode[] => {
+      if (!query.trim()) return [...rows];
+      const q = query.trim().toLowerCase();
+      return rows.filter(
+        (d) => d.name.toLowerCase().includes(q) || d.fullPath.toLowerCase().includes(q),
+      );
+    },
+    [query],
+  );
+
+  /**
+   * 「最近」：**唯一入口**，按 `openedAt` 降序（索引层的 `compareRecent`），
+   * `openedAt === null` 排末尾并显示「未记录打开时间」——**不回落 mtime**（UD-2）。
+   *
+   * 无索引（旧调用方）时退化为按树里的 `ts` 排序，仅用于保持旧测试/降级可用；
+   * 生产路径由 MindmapStage 注入索引，走上面那条。
+   */
+  const recentRows = useMemo(() => {
+    if (!index) {
+      return matchQuery([...allDocs].sort((a, b) => b.ts - a.ts)).map((d) => ({
+        key: d.key,
+        node: d,
+        when: formatRelative(d.ts),
+        starred: starredKeys.has(d.fullPath) || starredKeys.has(d.key),
+        starKey: d.fullPath || d.key,
+      }));
+    }
+    const nodes = new Map(allDocs.map((d) => [d.key, d]));
+    return index
+      .recentDocs(RECENT_MAX)
+      .flatMap((e) => {
+        const node =
+          nodes.get(`doc:${e.relPath ?? ''}`) ??
+          nodes.get(`doc:${e.docKey}`) ??
+          (e.relPath !== null ? nodes.get(`doc:${e.relPath}`) : undefined);
+        if (!node) return []; // 索引里有、当前树里没有（已删/别的作用域）→ 不在本视图展示
+        return [
+          {
+            key: node.key,
+            node,
+            when: formatRecentWhen(e.openedAt),
+            starred: e.starred || starredKeys.has(node.fullPath) || starredKeys.has(node.key),
+            starKey: node.fullPath || node.key,
+          },
+        ];
+      })
+      .filter((r) => matchQuery([r.node]).length > 0);
+  }, [index, allDocs, matchQuery, starredKeys]);
+
+  /** 收藏：按索引的稳定身份判定（`docKey` / `relPath` / 旧键三个别名都认） */
+  const starredRows = useMemo(() => {
     const list = allDocs
       .filter((d) => starredKeys.has(d.fullPath) || starredKeys.has(d.key))
       .sort((a, b) => b.ts - a.ts);
-    if (!query.trim()) return list;
-    const q = query.trim().toLowerCase();
-    return list.filter((d) => d.name.toLowerCase().includes(q) || d.fullPath.toLowerCase().includes(q));
-  }, [allDocs, starredKeys, query]);
+    return matchQuery(list).map((d) => ({
+      key: d.key,
+      node: d,
+      when: formatRelative(d.ts),
+      starred: true,
+      starKey: d.fullPath || d.key,
+    }));
+  }, [allDocs, starredKeys, matchQuery]);
 
   return (
     <div
@@ -464,45 +669,131 @@ export function FileManager({
             <FileManagerTree nodes={filtered} depth={0} ctx={treeCtx} />
           )
         ) : tab === 'recent' ? (
-          recentDocs.length === 0 ? (
+          recentRows.length === 0 ? (
             <div style={{ padding: '28px 12px', textAlign: 'center', color: CHROME.textMuted }}>
               {query !== '' ? `没有匹配「${query}」的文件。` : '暂无最近打开的文档。'}
             </div>
           ) : (
-            recentDocs.map((d) => (
+            recentRows.map(({ key, node, when, starred, starKey }) => (
               <FlatDocRow
-                key={d.key}
-                name={d.name}
-                path={d.path}
-                ts={d.ts}
-                starred={starredKeys.has(d.fullPath) || starredKeys.has(d.key)}
-                onToggleStar={(e) => toggleStar(d.fullPath || d.key, e)}
-                onOpen={() =>
-                  d.wsFile ? onOpenFile(d.wsFile) : d.entry ? onOpenEntry(d.entry) : undefined
-                }
+                key={key}
+                name={node.name}
+                path={node.path}
+                when={when}
+                starred={starred}
+                onToggleStar={(e) => toggleStar(starKey, e)}
+                onOpen={() => openNode(node)}
               />
             ))
           )
-        ) : starredDocs.length === 0 ? (
+        ) : starredRows.length === 0 ? (
           <div style={{ padding: '28px 12px', textAlign: 'center', color: CHROME.textMuted }}>
             {query !== '' ? `没有匹配「${query}」的收藏。` : '暂无收藏导图。在文档条目上点击 ☆ 即可加入收藏。'}
           </div>
         ) : (
-          starredDocs.map((d) => (
+          starredRows.map(({ key, node, when, starKey }) => (
             <FlatDocRow
-              key={d.key}
-              name={d.name}
-              path={d.path}
-              ts={d.ts}
+              key={key}
+              name={node.name}
+              path={node.path}
+              when={when}
               starred
-              onToggleStar={(e) => toggleStar(d.fullPath || d.key, e)}
-              onOpen={() =>
-                d.wsFile ? onOpenFile(d.wsFile) : d.entry ? onOpenEntry(d.entry) : undefined
-              }
+              onToggleStar={(e) => toggleStar(starKey, e)}
+              onOpen={() => openNode(node)}
             />
           ))
         )}
       </div>
+
+      {/*
+        §6.2.1 历史池：**用户语言**呈现（不暴露「索引」「作用域」这类内部概念）。
+        默认折叠；展开后可逐条「关联到此工作区」或「忽略」。
+        没有归属证据的旧记录**不自动绑定**，但用户不处理也不丢（旧键原样保留）。
+      */}
+      {index && history.length > 0 && (
+        <div
+          data-fm-history
+          style={{
+            borderTop: `1px solid ${CHROME.panelBorder}`,
+            padding: '6px 12px',
+            fontSize: CHROME.fontSizeSmall,
+            color: CHROME.textMuted,
+          }}
+        >
+          <button
+            type="button"
+            data-fm-history-toggle
+            style={{ ...rowBtn, color: CHROME.textMuted }}
+            onClick={() => setHistoryOpen((v) => !v)}
+          >
+            <span>{historyOpen ? '▾' : '▸'}</span>
+            <span>{formatHistoryPool(history.length)}</span>
+          </button>
+          {historyOpen && (
+            <div data-fm-history-list style={{ paddingLeft: 14 }}>
+              {history.map((h) => (
+                <div
+                  key={`${h.kind}:${h.key}`}
+                  data-fm-history-row
+                  data-history-key={h.key}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0' }}
+                >
+                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {h.name}
+                  </span>
+                  <span style={{ flex: 'none' }}>
+                    {formatRecentWhen(h.openedAt)}
+                  </span>
+                  <button
+                    type="button"
+                    data-fm-history-link
+                    style={btnBase}
+                    onClick={() => {
+                      const scopeId = useWorkspace && workspace?.scopeId ? workspace.scopeId : null;
+                      const target =
+                        allDocs.find((d) => d.fullPath === h.key) ??
+                        allDocs.find((d) => d.name === h.name);
+                      if (!target || !index) return;
+                      index.relink(h.key, docKeyOfEntry(target, scopeId));
+                      setHistory(index.historyPool());
+                    }}
+                  >
+                    关联到此工作区
+                  </button>
+                  <button
+                    type="button"
+                    data-fm-history-ignore
+                    style={btnBase}
+                    onClick={() => {
+                      index.ignoreLegacy(h.key);
+                      setHistory(index.historyPool());
+                    }}
+                  >
+                    忽略
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 迁移失败可见：不把「未迁移」伪报成完成（逐条 try/catch 的失败计数） */}
+      {index && migrateFailed > 0 && (
+        <div
+          data-fm-migrate-failed
+          style={{
+            margin: '0 12px 8px',
+            padding: '6px 8px',
+            borderRadius: 6,
+            border: `1px solid ${CHROME.warn}`,
+            color: CHROME.warn,
+            fontSize: CHROME.fontSizeSmall,
+          }}
+        >
+          {migrateFailed} 条旧记录本次未迁移（已保留在原位置，下次打开会再试）。
+        </div>
+      )}
 
       <div
         style={{

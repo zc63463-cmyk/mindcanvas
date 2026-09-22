@@ -180,8 +180,15 @@ export function nameOf(docKey: string): string {
   return seg[seg.length - 1] ?? tail;
 }
 
-/** 工作区主键：`ws:<scopeId 主体>::<relPath>`（§4.7 的主键约定） */
+/**
+ * 工作区主键：`ws:<scopeId 主体>::<relPath>`（§4.7 的主键约定）。
+ *
+ * `browser:local` **不是**工作区身份：传进来一律回落到浏览器主键 `browser::<id>`，
+ * 否则会造出 `ws:browser:local::a.mm.md` —— 一个既不是工作区键、也不是浏览器键的
+ * 第三形态，同一份文档因此会有两条条目（实测：兼容模式的「最近」列表出现重复行）。
+ */
 export function wsDocKey(scopeId: ScopeId, relPath: string): string {
+  if (scopeId === BROWSER_SCOPE_ID) return browserDocKey(relPath);
   const body = scopeId.startsWith('ws:') ? scopeId.slice(3) : scopeId;
   return `ws:${body}::${relPath}`;
 }
@@ -722,16 +729,24 @@ export class DocIndex {
             });
             continue;
           }
+          // 同一个旧键可能已经以**浏览器身份**存在于索引里（兼容模式打开过它）。
+          // 那时不能再造一条 `ws:` 条目——同一份文档两条身份 = 「最近」出现重复行。
+          // 只认领到既有条目上（补 legacyKeys）。
+          const existing = this.docs.find(
+            (e) => e.relPath === key || e.legacyKeys.includes(`${LEGACY_LIBRARY_KEY}#${key}`),
+          );
           const outcome = this.adoptDoc({
-            docKey: wsDocKey(ctx.scopeId, key),
-            relPath: key,
-            name,
+            docKey: existing?.docKey ?? wsDocKey(ctx.scopeId, key),
+            relPath: existing?.relPath ?? key,
+            name: existing?.name ?? name,
             legacyKey: `${LEGACY_LIBRARY_KEY}#${key}`,
-            savedAt: ts,
+            savedAt: existing?.savedAt ?? ts,
             starred: false,
-            scopeId: ctx.scopeId,
-            sourceRef: { kind: 'disk-handle' },
-            ...(ctx.persisted ? {} : { ephemeral: true as const }),
+            scopeId: existing?.scopeId ?? ctx.scopeId,
+            sourceRef: existing?.sourceRef ?? { kind: 'disk-handle' },
+            ...(existing?.ephemeral === true || !ctx.persisted
+              ? { ephemeral: true as const }
+              : {}),
           });
           if (outcome === 'new') result.migrated += 1;
           else result.unchanged += 1;

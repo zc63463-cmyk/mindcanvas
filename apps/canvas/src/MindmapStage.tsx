@@ -37,6 +37,7 @@ import type {
 import {
   AssetPanel,
   anchorOfNode,
+  readWorkspaceRegistry,
   appendEdge,
   assetDiagnostics,
   buildEditable,
@@ -129,6 +130,7 @@ import { useDocumentSaveSession } from './hooks/useDocumentSaveSession.js';
 import { useDocumentSwitch } from './hooks/useDocumentSwitch.js';
 import { nodeById, useEdgeActions } from './hooks/useEdgeActions.js';
 import { EdgeDraftLayer, type EdgeContextMenuState } from './EdgeDraftLayer.js';
+import { DocIndex, migrateContextOf } from './docIndex.js';
 import { FileManagerModal } from './FileManagerModal.js';
 import { NodeContextMenu } from './NodeContextMenu.js';
 import { RecentDocMenu } from './RecentDocMenu.js';
@@ -902,6 +904,57 @@ function StageContent({
     libraryRef.current = lib;
   }
   const library = libraryRef.current;
+
+  // P0-D 索引层：**唯一索引写入口**（收藏、「最近」、迁移与降级投影都走它）。
+  //
+  // 迁移上下文按 P0-0 的运行期身份组装：`browser` → 唯一作用域可直迁；
+  // `disk` → 只有注册表里带 `isSameEntry`/用户确认证据的作用域才算「证据充分」；
+  // `disk-session`（身份不跨刷新）→ 条目标 `ephemeral`，旧键进历史池（§6.2.1）。
+  /** 工作区注册表条目（P0-0 产物）：M5–M7 的归属证据位来自它 */
+  const registryEntriesRef = useRef<
+    ReadonlyArray<{ scopeId: string; associations: ReadonlyArray<{ via: string }> }>
+  >([]);
+  const indexRef = useRef<DocIndex | null>(null);
+  if (indexRef.current === null) {
+    indexRef.current = new DocIndex({
+      ctx: () => {
+        const scope = workspaceRef.current?.scopeState;
+        if (!scope || scope.kind === 'browser') {
+          return migrateContextOf(
+            {
+              kind: 'browser',
+              scopeId: 'browser:local',
+              label: '浏览器素材库',
+              epoch: 0,
+              persisted: true,
+            },
+            [],
+            typeof indexedDB !== 'undefined',
+          );
+        }
+        // 证据位由注册表决定；读不到注册表 → `[]` → 无证据（不猜归属，I-13）
+        return migrateContextOf(
+          scope,
+          registryEntriesRef.current,
+          typeof indexedDB !== 'undefined',
+        );
+      },
+    });
+  }
+  const index = indexRef.current;
+
+  // 注册表证据是**异步**读的：挂载/切换工作区后刷新，
+  // 让 M5–M7 的归属判据反映「该作用域本次是否以 isSameEntry/用户确认建立」。
+  useEffect(() => {
+    let alive = true;
+    void readWorkspaceRegistry().then((read) => {
+      if (!alive) return;
+      registryEntriesRef.current = read.kind === 'ok' ? read.record.entries : [];
+    });
+    return () => {
+      alive = false;
+    };
+  }, [index, workspaceReady]);
 
   // 文档落盘 → 登记进文档库（文件管理的索引来源）。
   // 只在 saved 时登记：新建未保存的文档不进库，否则关掉就留下一堆空条目。
@@ -2484,6 +2537,7 @@ function StageContent({
       {fileManagerOpen && (
         <FileManagerModal
           library={library}
+          index={index}
           workspace={workspaceReady ? workspace : null}
           applyDoc={applyDoc}
           handleOpen={handleOpen}
