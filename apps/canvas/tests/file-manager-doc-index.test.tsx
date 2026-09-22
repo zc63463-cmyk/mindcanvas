@@ -269,3 +269,69 @@ describe('FileManager · 打开工作区文件推进 openedAt', () => {
     });
   });
 });
+
+describe('FileManager · 工作区作用域身份（评审 R2 高风险项的回归守卫）', () => {
+  /**
+   * 生产上「工作区文档被登记成 `browser::<相对路径>`」是最危险的一类回归：
+   * 那样 M5/M6 永远认领不到这些条目、降级投影会把纯相对路径写进旧库的 `id`，
+   * 反过来破坏旧版本的恢复路径。
+   *
+   * 本用例走**真实 FileManager**（不是直接调 DocIndex），用一个带 `scopeId`
+   * 的工作区替身驱动 `registerDocs`，断言产出的确实是 `ws:<scopeId 主体>::<relPath>`。
+   */
+  const wsFile = (path: string) => ({
+    kind: 'file' as const,
+    name: path.split('/').pop() ?? path,
+    path,
+    handle: {
+      name: path,
+      createWritable: async () => ({ write: async () => {}, close: async () => {} }),
+    },
+    ts: 0,
+    size: 0,
+  });
+
+  it('挂了工作区：登记为 ws:<scopeId>::<relPath>（不是 browser::）', async () => {
+    const index = new DocIndex({
+      ctx: () => ({
+        scopeId: 'ws:AAAA',
+        persisted: true,
+        hasHistoryEvidence: true,
+        handleStoreAvailable: false,
+      }),
+    });
+    const workspace = {
+      mounted: true,
+      name: 'notes',
+      scopeId: 'ws:AAAA',
+      scopeState: { kind: 'disk', persisted: true },
+      scan: async () => [wsFile('研发/架构.mm.md')],
+      createFile: vi.fn(),
+      createDir: vi.fn(),
+      renameFile: vi.fn(),
+      removeFile: vi.fn(),
+      removeDir: vi.fn(),
+      moveFile: vi.fn(),
+    };
+    const { container } = render(
+      <FileManager
+        library={new DocLibrary()}
+        index={index}
+        workspace={workspace as never}
+        onOpenEntry={vi.fn()}
+        onOpenFile={vi.fn()}
+        onCreate={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    await waitFor(() => expect(container.querySelector('[data-fm-tree]')).not.toBeNull());
+    await waitFor(() => {
+      expect(index.listDocs().length).toBeGreaterThan(0);
+    });
+    const doc = index.listDocs()[0];
+    expect(doc?.docKey).toBe('ws:AAAA::研发/架构.mm.md');
+    expect(doc?.scopeId).toBe('ws:AAAA');
+    // 绝不能被写成浏览器身份（那会让 M5/M6 与投影全部错位）
+    expect(doc?.docKey.startsWith('browser::')).toBe(false);
+  });
+});

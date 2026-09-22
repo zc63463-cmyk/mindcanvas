@@ -21,6 +21,7 @@ import {
   DocIndex,
   compareRecent,
   evidenceFromRegistry,
+  fileNameOf,
   formatRecentWhen,
   hasOwnershipEvidence,
   migrateContextOf,
@@ -70,6 +71,24 @@ function diskCtx(scopeId = 'ws:aaaa', over: Partial<MigrateContext> = {}): Migra
 /** 无历史证据的磁盘作用域（legacy adoption 新生成的 scopeId） */
 function adoptedCtx(scopeId = 'ws:adopted'): MigrateContext {
   return diskCtx(scopeId, { hasHistoryEvidence: false });
+}
+
+/**
+ * §6.2.1 生效后，M5/M6 只**认领既有条目**，不再凭旧库/旧收藏键的字符串
+ * 凭空造 `ws:` 身份（「唯一同名命中 ≠ 归属证据」，且造出来的 entry 的
+ * `openedAt` 只能靠编造）。所以凡是需要「迁移结果里出现条目」的用例，
+ * 必须先把该文档按真实句柄登记进索引——这正是生产里的先后顺序：
+ * 用户先在工作区打开它（`registerDoc`），下次启动才跑迁移。
+ */
+function seedRegistered(d: DocIndex, relPath = '架构.mm.md', scopeId = 'ws:aaaa'): void {
+  d.registerDoc({
+    docKey: wsDocKey(scopeId, relPath),
+    relPath,
+    name: fileNameOf(relPath),
+    scopeId,
+    persisted: true,
+    sourceRef: { kind: 'disk-handle' },
+  });
 }
 
 function idx(ctx: MigrateContext, now = 1_000): DocIndex {
@@ -130,8 +149,18 @@ describe('DocIndex · openedAt / savedAt（UD-2）', () => {
       LEGACY_LIBRARY_KEY,
       JSON.stringify([{ id: '旧.mm.md', name: '旧.mm.md', ts: 9_999_999, folder: '', tags: [] }]),
     );
-    // 无历史证据 → 进历史池，不建条目；改成一个有证据的作用域来建条目
+    // 无历史证据 → 进历史池，不建条目；改成一个有证据的作用域来建条目。
+    // 注意：M5 只认领**既有**条目（`library.v1` 的 id 只是文件名，不是目录身份），
+    // 所以这里必须先有一条由真实句柄注册出来的条目，而不是凭空迁移。
     const d2 = idx(diskCtx());
+    d2.registerDoc({
+      docKey: wsDocKey('ws:aaaa', '旧.mm.md'),
+      relPath: '旧.mm.md',
+      name: '旧.mm.md',
+      scopeId: 'ws:aaaa',
+      persisted: true,
+      sourceRef: { kind: 'disk-handle' },
+    });
     localStorage.setItem(
       LEGACY_LIBRARY_KEY,
       JSON.stringify([{ id: '旧.mm.md', name: '旧.mm.md', ts: 9_999_999, folder: '', tags: [] }]),
@@ -146,6 +175,14 @@ describe('DocIndex · openedAt / savedAt（UD-2）', () => {
     expect(d2.recentDocs().map((e) => e.name)).toEqual(['新.mm.md', '旧.mm.md']);
     expect(formatRecentWhen(migrated.openedAt)).toBe('未记录打开时间');
     expect(d.listDocs()).toEqual([]); // 无证据作用域：一条条目都不建
+  });
+
+  it('`formatRecentWhen`：只有 `null` 是「未记录打开时间」，`0` 是真实时间戳', () => {
+    // 签名是 `number | null`，`0` 不是哨兵值（不会由 `openedAt` 的缺省产生）——
+    // 缺省一律是 `null`（见 `DocIndexEntry.openedAt` 的注释与 UD-2）。
+    // 若把 `0` 也当「未记录」，一个真实打开于 epoch 0 的条目会被显示成从没开过。
+    expect(formatRecentWhen(null, 1_000)).toBe('未记录打开时间');
+    expect(formatRecentWhen(0, 1_000)).toBe('刚刚'); // 0 是「很久以前」→ 落到日期分支
   });
 
   it('compareRecent 的 null 分支按 savedAt 降序稳定排列', () => {
@@ -220,7 +257,9 @@ describe('DocIndex · 损坏旧数据仍可用（NC-1 期望）', () => {
       LEGACY_LIBRARY_KEY,
       JSON.stringify([{ id: '好.mm.md', name: '好.mm.md', ts: 10 }, null, { name: '缺 id' }]),
     );
-    const r = idx(diskCtx()).migrate();
+    const d = idx(diskCtx());
+    seedRegistered(d, '好.mm.md');
+    const r = d.migrate();
     expect(r.migrated).toBe(1);
     expect(r.failed).toBe(2);
   });
@@ -244,10 +283,13 @@ describe('DocIndex · 迁移幂等与续跑（NC-2 期望）', () => {
     localStorage.setItem(LEGACY_STARRED_KEY, JSON.stringify(['架构.mm.md']));
   };
 
+
+
   it('同一旧键迁移两次结果一致（条目、时间、legacyKeys 全不动）', () => {
     seedLegacy();
     const ctx = diskCtx();
     const d = idx(ctx);
+    seedRegistered(d);
     const run1 = d.migrate();
     const snapshot = JSON.stringify(d.listDocs());
     const run2 = d.migrate();
@@ -275,28 +317,33 @@ describe('DocIndex · 迁移幂等与续跑（NC-2 期望）', () => {
     // batch=2 的第一批会连第 3 条（前一个 seed 的条目）一起处理。
     localStorage.setItem(LEGACY_LIBRARY_KEY, JSON.stringify(many));
     const d = idx(diskCtx());
+    for (let i = 0; i < 5; i += 1) seedRegistered(d, `d${i}.mm.md`);
 
     // 每批只认领 batch 条：游标必须**持久化**，否则每次都从旧键第 0 条重来，
     // 第 2、3 批永远停在原地（进度不推进 = 用户点了半天还在同一批）。
+    // 被认领条目的计数用 **legacyKeys 命中数**而不是 listDocs().length：
+    // 五条 `ws:` 条目在登记时就已存在（`seedRegistered`），长度恒为 5。
+    const claimed = (): number =>
+      d.listDocs().filter((e) => e.legacyKeys.some((k) => k.startsWith(LEGACY_LIBRARY_KEY)))
+        .length;
     const r1 = d.migrate({ batch: 2 });
     expect(r1.migrated).toBe(2);
-    expect(d.listDocs().length).toBe(2); // ← 只处理了 2 条
+    expect(claimed()).toBe(2); // ← 只认领了 2 条
     const r2 = d.migrate({ batch: 2 });
     expect(r2.migrated).toBe(2);
-    expect(d.listDocs().length).toBe(4);
+    expect(claimed()).toBe(4);
     const r3 = d.migrate({ batch: 2 });
     expect(r3.migrated).toBe(1); // 最后一条
-    expect(d.listDocs().length).toBe(5);
+    expect(claimed()).toBe(5);
 
     // 五条旧键全部最终被认领，无明显漏项
-    expect(
-      d.listDocs().every((e) => e.legacyKeys.some((k) => k.startsWith(LEGACY_LIBRARY_KEY))),
-    ).toBe(true);
+    expect(claimed()).toBe(5);
   });
 
   it('续跑不依赖内存状态：新实例（模拟刷新）重跑得到同样结果且不重复', () => {
     seedLegacy();
     const ctx = diskCtx();
+    seedRegistered(idx(ctx));
     idx(ctx).migrate();
     const after = JSON.parse(localStorage.getItem(DOC_INDEX_KEY) ?? '{}') as {
       entries: unknown[];
@@ -315,6 +362,63 @@ describe('DocIndex · 迁移幂等与续跑（NC-2 期望）', () => {
 describe('DocIndex · 归属证据（§6.2.1 / NC-3 期望）', () => {
   const legacy = [{ id: '研发/架构.mm.md', name: '架构.mm.md', ts: 7, folder: '研发', tags: [] }];
 
+  it('M5：他区同名条目不被他区旧库键认领（existing 查找须限定当前作用域）', () => {
+    // 当前作用域 ws:bbbb（无证据）的旧库里有一条与 ws:aaaa 条目同 relPath 的记录。
+    // 若不限定作用域，M5 会把 ws:aaaa 的条目标上 ws:bbbb 的 legacyKeys，
+    // 等于把别人的条目当成本区的历史。
+    //
+    // 注意必须让**当前作用域有证据**（`diskCtx`，而非 `adoptedCtx`）：
+    // 无证据时 M5 会先走「证据不足 → 历史池」直接 continue，`existing` 根本不被查——
+    // 那样这条用例就测不到被评审指出的分支（我第一版正是这么写错的）。
+    localStorage.setItem(
+      LEGACY_LIBRARY_KEY,
+      JSON.stringify([{ id: '研发/笔记.mm.md', name: '笔记.mm.md', ts: 5, folder: '研发', tags: [] }]),
+    );
+    const d = idx(diskCtx('ws:bbbb'));
+    d.registerDoc({
+      docKey: 'ws:aaaa::研发/笔记.mm.md',
+      relPath: '研发/笔记.mm.md',
+      name: '笔记.mm.md',
+      scopeId: 'ws:aaaa',
+      persisted: true,
+      sourceRef: { kind: 'disk-handle' },
+    });
+    seedRegistered(d, '研发/笔记.mm.md', 'ws:bbbb');
+    d.migrate();
+    // ① 他区的条目**不得**被本区的旧键污染
+    expect(d.getDoc('ws:aaaa::研发/笔记.mm.md')?.legacyKeys).toEqual([]);
+    // ② 本区条目认领自己的旧键（本区有自己的真实句柄证据）
+    expect(d.getDoc('ws:bbbb::研发/笔记.mm.md')?.legacyKeys).toContain(
+      `${LEGACY_LIBRARY_KEY}#研发/笔记.mm.md`,
+    );
+    // ③ 两条条目各自独立，`legacyKeys` 不串
+    expect(d.listDocs().length).toBe(2);
+    expect(d.historyPool()).toEqual([]);
+  });
+
+  it('M5：浏览器身份条目仍可被同 relPath 的旧库键认领（兼容模式打开过它）', () => {
+    localStorage.setItem(
+      LEGACY_LIBRARY_KEY,
+      JSON.stringify([{ id: 'a.mm.md', name: 'a.mm.md', ts: 5, folder: '', tags: [] }]),
+    );
+    // 浏览器作用域（scopeId 就是 BROWSER_SCOPE_ID）→ existing 命中是合法的
+    const d = idx(diskCtx('browser:local'));
+    d.registerDoc({
+      docKey: 'browser::a.mm.md',
+      relPath: 'a.mm.md',
+      name: 'a.mm.md',
+      scopeId: 'browser:local',
+      persisted: true,
+      sourceRef: { kind: 'none' },
+    });
+    const r = d.migrate();
+    expect(r.migrated).toBeGreaterThan(0);
+    expect(d.getDoc('browser::a.mm.md')?.legacyKeys).toContain(
+      `${LEGACY_LIBRARY_KEY}#a.mm.md`,
+    );
+    expect(d.listDocs().length).toBe(1); // 不重复建条目
+  });
+
   it('唯一同名命中不自动绑定，进历史池', () => {
     localStorage.setItem(LEGACY_LIBRARY_KEY, JSON.stringify(legacy));
     // legacy adoption 新生成的 scopeId：无历史证据
@@ -331,11 +435,55 @@ describe('DocIndex · 归属证据（§6.2.1 / NC-3 期望）', () => {
     expect(kept.map((e) => e.id)).toEqual(['研发/架构.mm.md']);
   });
 
+  it('M5：本区有证据但索引里没有这条文档 → 不凭空造 `ws:` 条目（旧库 id 只是文件名）', () => {
+    // `library.v1` 的 `id` 是 `doc.id` = **文件名**（`document.ts:151` 的
+    // `upsert({ id: doc.id, ... })`）。文件名不是目录身份：本区「有历史证据」
+    // 只证明**目录**没错，不证明这个文件名对应的就是工作区里的那一份
+    // （§6.2.1「唯一同名命中 ≠ 归属证据」）。也没有既有条目可供 `openedAt`——
+    // 凭空造出来的条目只能把注册时刻当打开时间（违反 UD-2）。
+    localStorage.setItem(LEGACY_LIBRARY_KEY, JSON.stringify(legacy));
+    const d = idx(diskCtx('ws:aaaa')); // 有证据，但索引里**没有**这条文档
+    const r = d.migrate();
+    expect(r.migrated).toBe(0);
+    expect(d.listDocs()).toEqual([]); // ← 不造条目
+    expect(d.historyPool().map((h) => h.key)).toEqual(['研发/架构.mm.md']);
+    expect(first(d.historyPool()).reason).toBe('no-existing-entry');
+  });
+
+  it('投影不得抹掉尚未迁移的畸形旧行（`null` / 缺 id）', () => {
+    // `registerDoc` → `persist` → `project()` 会在**每次打开文档**时重写
+    // `library.v1`。若投影只写得出「有 id 的合法行」，这些畸形行会被静默删除，
+    // 于是「升级即丢历史」，且 M5 再也读不到它们（`failed` 恒为 0）。
+    localStorage.setItem(
+      LEGACY_LIBRARY_KEY,
+      JSON.stringify([{ id: '好.mm.md', name: '好.mm.md', ts: 10 }, null, { name: '缺 id' }]),
+    );
+    const d = idx(diskCtx());
+    seedRegistered(d, '好.mm.md');
+    const r = d.migrate();
+    expect(r.failed).toBe(2); // ← 畸形行仍在旧库里被逐条判定
+    const kept = JSON.parse(localStorage.getItem(LEGACY_LIBRARY_KEY) ?? '[]') as unknown[];
+    expect(kept).toHaveLength(3); // ← 一行没少
+    expect(kept[1]).toBeNull();
+    expect(kept[2]).toEqual({ name: '缺 id' });
+  });
+
   it('有 isSameEntry 证据的作用域下，精确 relPath 命中才迁移', () => {
     localStorage.setItem(LEGACY_LIBRARY_KEY, JSON.stringify(legacy));
     const d = idx(diskCtx('ws:proven'));
+    // 「精确命中」的命中对象是**索引里已有的条目**（它由真实句柄登记而来），
+    // 不是旧库字符串本身——§6.2.1 要求证据来自目录身份，而非同名。
+    d.registerDoc({
+      docKey: 'ws:proven::研发/架构.mm.md',
+      relPath: '研发/架构.mm.md',
+      name: '架构.mm.md',
+      scopeId: 'ws:proven',
+      persisted: true,
+      sourceRef: { kind: 'disk-handle' },
+    });
     expect(d.migrate().migrated).toBe(1);
     expect(first(d.listDocs()).docKey).toBe('ws:proven::研发/架构.mm.md');
+    expect(first(d.listDocs()).legacyKeys).toContain(`${LEGACY_LIBRARY_KEY}#研发/架构.mm.md`);
     expect(d.historyPool()).toEqual([]);
   });
 
@@ -566,13 +714,15 @@ describe('DocIndex · 降级投影（§6.3 / NC-4 期望）', () => {
       ctx: () => diskCtx(),
     });
     const key = wsDocKey('ws:aaaa', 'a.mm.md');
-    expect(d.openDoc({ docKey: key, relPath: 'a.mm.md', name: 'a.mm.md' }).projected).toBe(true);
+    // 写方法返回 void；投影结果经 `projectionStatus()`（生产读取面：
+    // `useIndexWiring.syncProjectionState`）暴露——这是 §6.3「不可回退且可查」的查证入口。
+    d.openDoc({ docKey: key, relPath: 'a.mm.md', name: 'a.mm.md' });
+    expect(d.projectionStatus()).toEqual({ wroteNewData: true, projectionFailed: false });
 
     failProjection = true;
-    const out = d.setStarred(key, true);
-    expect(out.written).toBe(true); // 索引仍写成功（主流程不中断）
-    expect(out.projected).toBe(false); // 投影失败 → 该次变更不可回退
+    d.setStarred(key, true);
     expect(projectionWriteAttempts).toBeGreaterThan(0); // 确实尝试过写、且真的抛了
+    // 投影失败 → 该次变更不可回退，但主流程不中断（索引里已是新值）
     expect(d.projectionStatus()).toEqual({ wroteNewData: true, projectionFailed: true });
     // 索引里的收藏是新的
     expect(d.getDoc(key)?.starred).toBe(true);
@@ -581,8 +731,7 @@ describe('DocIndex · 降级投影（§6.3 / NC-4 期望）', () => {
 
     // 恢复存储后，下一次变更把投影补齐（可重试，不是永久坏掉）
     failProjection = false;
-    const out2 = d.setStarred(key, false);
-    expect(out2.projected).toBe(true);
+    d.setStarred(key, false);
     expect(d.projectionStatus().projectionFailed).toBe(false);
     expect(JSON.parse(localStorage.getItem(LEGACY_STARRED_KEY) ?? '[]')).toEqual([]);
   });
@@ -595,9 +744,9 @@ describe('DocIndex · 降级投影（§6.3 / NC-4 期望）', () => {
       },
     };
     const d = new DocIndex({ store: broken, ctx: () => diskCtx() });
-    const out = d.openDoc({ docKey: 'browser::x', name: 'x.mm.md' });
-    expect(out.written).toBe(false);
-    expect(out.projected).toBe(false);
+    d.openDoc({ docKey: 'browser::x', name: 'x.mm.md' });
+    // 索引键写失败 → 投影也无从写出（`project(written=false)` 直接返回 false），
+    // 状态如实记为「不可回退」，不伪报成功。
     expect(d.projectionStatus().projectionFailed).toBe(true);
   });
 });
@@ -833,34 +982,22 @@ describe('DocIndex · M4 / M7 / M8', () => {
     expect(r.failed).toBe(2);
   });
 
-  it('M9 写侧可达：`noteHandleId` 登记后镜像会尝试回写该旧 docId', () => {
+  it('M9 写侧**未实现**：迁移全程不触碰 `mindcanvas-handles`', async () => {
+    // 规范 M9 的写侧要求「同时写新键（`file-handle.v1:<docKey>` 富记录）与旧键」。
+    // 富记录键在包侧（`packages/react/src/edit/handleStore.ts`）**尚不存在**，
+    // P0-D 不越界实现它，也不造假镜像（读旧键再写回同一个旧键不是双写）。
+    // 本用例把「未实现」钉成可回归的事实：迁移不读写该库、也不写它的 localStorage 影子。
     localStorage.setItem(
       LEGACY_LIBRARY_KEY,
       JSON.stringify([{ id: 'a.mm.md', name: 'a.mm.md', ts: 1 }]),
     );
+    expect(typeof indexedDB).toBe('undefined'); // jsdom：句柄库根本不可用
     const d = idx(diskCtx());
-    // 生产调用点：保存成功时登记「这个旧 docId 的裸句柄可取」
-    // （MindmapStage.tsx 的保存 effect 传 `doc.handle ? doc.id : undefined`）
-    d.noteHandleId('a.mm.md');
+    seedRegistered(d, 'a.mm.md');
     const r = d.migrate();
-    expect(r.migrated).toBe(1);
-    // jsdom 无 indexedDB → 镜像静默跳过（不抛、不影响迁移结果）。
-    // 本用例证明**写侧入口存在且迁移会走到它**，真实 IDB 回写由浏览器验证覆盖。
-    expect(d.listDocs().length).toBe(1);
-  });
-
-  it('M9：句柄镜像不越界——没有已知旧 docId 时不写 handles 库', async () => {
-    // 句柄镜像只对「本会话已证明可取句柄的旧 docId」执行（handleId 入参）；
-    // jsdom 无 indexedDB 时镜像静默跳过，不抛、不影响迁移结果。
-    localStorage.setItem(
-      LEGACY_LIBRARY_KEY,
-      JSON.stringify([{ id: 'a.mm.md', name: 'a.mm.md', ts: 1 }]),
-    );
-    expect(typeof indexedDB).toBe('undefined');
-    const r = idx(diskCtx()).migrate();
     await Promise.resolve();
-    expect(r.migrated).toBe(1);
-    expect(localStorage.getItem(HANDLES_DB_HINT)).toBeNull();
+    expect(r.failed).toBe(0); // 迁移本身正常完成
+    expect(localStorage.getItem(HANDLES_DB_HINT)).toBeNull(); // 不落任何影子键
   });
 
   it('旧键一律不删除（DS-10 由主控决定）', () => {
