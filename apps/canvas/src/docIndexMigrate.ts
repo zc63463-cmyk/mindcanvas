@@ -161,10 +161,12 @@ export function runMigration(index: DocIndexState, opts?: { batch?: number }): M
           //   ③ 该作用域本次以 isSameEntry / 用户确认建立（`hasOwnershipEvidence`）。
           // 少任何一条就退到「证据不足」→ 历史池：宁可让用户显式关联，
           // 也不能把「恰好同名」当成「就是它」。
+          // 两道命中都要**同时**满足作用域条件：`docKey` 分支也必须查作用域
+          // （`ws:OTHER::x` 是另一工作区的条目，不能替当前作用域认领这条旧键）。
           const hit = index.docs.find(
-            (e) => e.docKey === key || (e.relPath === key && e.scopeId === ctx.scopeId),
+            (e) => e.scopeId === ctx.scopeId && (e.docKey === key || e.relPath === key),
           );
-          const bound = hit !== undefined && hit.ephemeral !== true && hit.scopeId === ctx.scopeId;
+          const bound = hit !== undefined && hit.ephemeral !== true;
           if (!bound || !hasOwnershipEvidence(ctx, hit.relPath ?? key)) {
             pool.push({
               key,

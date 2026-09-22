@@ -642,6 +642,62 @@ describe('DocIndex · M4 / M7 / M8', () => {
     expect(d.historyPool().map((h) => h.key)).toEqual(['研发/架构.mm.md']);
   });
 
+  it('M6：证据充分但命中条目属于**别的**作用域 → 仍不认领（作用域是本条硬条件）', () => {
+    localStorage.setItem(LEGACY_STARRED_KEY, JSON.stringify(['研发/架构.mm.md']));
+    // 关键：当前作用域**有**历史证据（hasOwnershipEvidence 返回 true），
+    // 所以「证据不足」这条退路不成立 —— 只有「命中条目必须同作用域」这道限定
+    // 才能拦住错误绑定。否则索引里任意作用域的同名条目都会被这道旧键点亮。
+    const d = idx(diskCtx('ws:aaaa'));
+    d.registerDoc({
+      docKey: 'ws:OTHER::研发/架构.mm.md',
+      relPath: '研发/架构.mm.md',
+      name: '架构.mm.md',
+      scopeId: 'ws:OTHER',
+      persisted: true,
+      sourceRef: { kind: 'disk-handle' },
+    });
+    d.migrate();
+    expect(d.getDoc('ws:OTHER::研发/架构.mm.md')?.starred).toBe(false);
+    expect(d.historyPool().map((h) => h.key)).toEqual(['研发/架构.mm.md']);
+  });
+
+  it('M6：证据充分但命中条目是 `ephemeral` → 仍不认领（作用域已失效）', () => {
+    localStorage.setItem(LEGACY_STARRED_KEY, JSON.stringify(['会话文档.mm.md']));
+    // 手写一条 ephemeral 条目（模拟上次会话的 disk-session 残留），
+    // scopeId 与当前作用域**相同** —— 只有 `ephemeral` 这一道限定能拦住它。
+    localStorage.setItem(
+      DOC_INDEX_KEY,
+      JSON.stringify({
+        entries: [
+          {
+            docKey: 'ws:aaaa::会话文档.mm.md',
+            scopeId: 'ws:aaaa',
+            relPath: '会话文档.mm.md',
+            lineageId: 'l1',
+            name: '会话文档.mm.md',
+            title: null,
+            openedAt: null,
+            savedAt: 0,
+            starred: false,
+            sourceRef: { kind: 'none' },
+            ephemeral: true,
+            legacyKeys: [],
+          },
+        ],
+      }),
+    );
+    const d = new DocIndex({
+      store: store(),
+      now: () => 1,
+      makeLineageId: () => 'l2',
+      ctx: () => diskCtx('ws:aaaa'),
+    });
+    expect(d.getDoc('ws:aaaa::会话文档.mm.md')?.ephemeral).toBe(true);
+    d.migrate();
+    expect(d.getDoc('ws:aaaa::会话文档.mm.md')?.starred).toBe(false);
+    expect(d.historyPool().map((h) => h.key)).toEqual(['会话文档.mm.md']);
+  });
+
   it('M6：索引里的 `ephemeral` 条目不被旧收藏键认领（§6.2.1 第 5 行）', () => {
     localStorage.setItem(LEGACY_STARRED_KEY, JSON.stringify(['会话文档.mm.md']));
     const d = idx(diskCtx('ws:session', { persisted: false, hasHistoryEvidence: false }));
