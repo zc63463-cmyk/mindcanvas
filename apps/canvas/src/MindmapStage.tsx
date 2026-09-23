@@ -24,6 +24,7 @@ import { parseLinkAnchor, resolveLinkAnchor } from '@mindcanvas/kernel';
 import type {
   AssetHost,
   AssetItem,
+  AssetInsertAction,
   Center,
   DocumentHost,
   EdgeManual,
@@ -32,11 +33,16 @@ import type {
   MapStats,
   MindDoc,
   ResolvedSection,
+  UploadOptions,
   WorkspaceFile,
 } from '@mindcanvas/react';
 import {
   AssetPanel,
   anchorOfNode,
+  AssetWriteLedger,
+  formatAssetWriteNotice,
+  isWriteConfirmed,
+  normalizeForInsert,
   readWorkspaceRegistry,
   appendEdge,
   assetDiagnostics,
@@ -154,6 +160,39 @@ import { applyBeamCommit } from './beamEdit.js';
 import { PerfPanel } from './PerfPanel.js';
 import { SidePanels } from './SidePanels.js';
 import { StartupScreen } from './StartupScreen.js';
+
+/**
+ * 「写入已完成但作用域已切换」的用户文案（P0-B ①，契约 §4.5.4 规则 4 原文）。
+ *
+ * 之所以要这条：丢弃 UI 回填**不是**撤销磁盘写入。不告诉用户，他会以为上传失败
+ * 而重复上传，或切回后看到一份「不知道哪来的」文件（`asset-library.md` §6.2 的反例）。
+ */
+const UNCONFIRMED_WRITE_NOTICE =
+  '图片已写入原文件夹的 assets/，但工作区已切换；切回后可在素材库看到。';
+
+/** 路径末段（落点文案的工作区名；无分隔符时整体即名字） */
+function fileNameOfPath(path: string): string {
+  const seg = path.split('/').filter((s) => s !== '');
+  return seg[seg.length - 1] ?? path;
+}
+
+/**
+ * 归一化被拒的文案（I-10 规则 3；`asset-library.md` §4.9）。
+ *
+ * 三条理由的**恢复路径不同**，不得合并成一句「插入失败」：
+ *  - `no-workspace`：用户该去「打开本地文件夹」；
+ *  - `unsupported-format`：该资产不适合内联（位图 / 大 SVG），同样需要工作区；
+ *  - `write-failed`：写入真的失败了（含用户取消同名冲突），可重试。
+ */
+function refusedNoticeOf(reason: 'no-workspace' | 'unsupported-format' | 'write-failed'): string {
+  if (reason === 'no-workspace') {
+    return '先打开一个文件夹作为工作区，才能把这张图片插入文档。';
+  }
+  if (reason === 'unsupported-format') {
+    return '这张图片不能内联进文档；先打开一个文件夹作为工作区再插入。';
+  }
+  return '图片没能写入工作区，插入已取消（文档未改动）。';
+}
 
 /** gateway 实体标题表（缺口 → unresolved 演示；同 gateway.mm.md refs） */
 const GATEWAY_TITLES: Record<string, { title: string; status?: string }> = {
@@ -1062,16 +1101,61 @@ function StageContent({
 
   // 批次 4：Ctrl+Shift+A 图库面板（资产实体化；点资产 → 插入 @img/@draw 引用到选中节点下）
   // 图库资产宿主（P0）：清单/解析/上传全部经宿主注入；demo 宿主 = 打包资产 + objectURL 会话上传
-  const assetHostRef = useRef<AssetHost | null>(null);
+  const assetHostRef = useRef<WorkspaceAssetHost | null>(null);
   // FA2-T4：包一层工作区宿主 —— 挂载工作区后大资产写进磁盘 ./assets/（相对路径引用），
   // 未挂载时完全退回 IndexedDB（行为不变）。用 getter 传工作区：挂载发生在宿主创建之后。
+  //
+  // P0-B：一并注入**作用域来源**（第四个参数）——宿主在写入前捕获 `{scopeId, epoch}`，
+  // 用于「写入已完成但作用域已切换」的记账（§4.5.4 / I-22）。同样用 getter：
+  // 挂载 / 切换 / 断开都发生在宿主创建之后。
   if (assetHostRef.current === null) {
     assetHostRef.current = new WorkspaceAssetHost(
       new IdbAssetHost(DEMO_ASSETS, '/'),
       () => workspace,
+      '',
+      () => ({ scopeId: workspace.scopeId, scopeEpoch: workspace.scopeEpoch }),
     );
   }
   const assetHost = assetHostRef.current;
+
+  /**
+   * 资产写入账本（P0-B ①）：记录「写入已发生」这个事实，与 UI 回填是否被丢弃无关（I-22）。
+   * 实例跨渲染复用（`useRef`），否则每次渲染都会重读 localStorage 并丢掉本次会话的记账。
+   */
+  const ledgerRef = useRef<AssetWriteLedger | null>(null);
+  if (ledgerRef.current === null) ledgerRef.current = new AssetWriteLedger();
+  const writeLedger = ledgerRef.current;
+
+  /** 资产落点/失败提示（P0-B ⑦）：单条内联文案，不用原生对话框 */
+  const [assetNotice, setAssetNotice] = useState<string | null>(null);
+
+  /** 当前工作区名（落点文案里用；未挂载时由文案回落「工作区」，不编造名字） */
+  const workspaceNameOf = workspacePath === null ? undefined : fileNameOfPath(workspacePath);
+
+  /**
+   * 卡片落点徽章（P0-B ⑦）。
+   *
+   * 判据优先级（**不猜**）：
+   *  1. 内置项 → `builtin`（自包含，永远可用）；
+   *  2. 账本里有该 `AssetKey` 的记录 → 用**记录的 store**（写入时的真实事实）；
+   *  3. 其余 → 当前是否挂载：挂了且 id 是 `assets/` 形态 → 工作区；否则浏览器素材库。
+   *
+   * 第 3 条是**兜底**（清单里来自磁盘扫描、或上一次会话留下的项），不是主判据 ——
+   * 主判据是账本，因为「落点」是写入时刻的决定，读取时无法从 id 反推。
+   */
+  const storeOf = useCallback(
+    (item: AssetItem): 'workspace-assets' | 'browser-idb' | 'builtin' | null => {
+      if (item.source === 'builtin') return 'builtin';
+      const scopeKey = assetHost.scopeMark().scopeKey;
+      const recorded = writeLedger
+        .entriesOf(scopeKey)
+        .find((e) => e.assetKey === item.id || e.relPath === item.id);
+      if (recorded !== undefined) return recorded.store;
+      if (workspaceReady && item.id.startsWith('assets/')) return 'workspace-assets';
+      return 'browser-idb';
+    },
+    [assetHost, writeLedger, workspaceReady],
+  );
 
   // 文档库（文件管理的索引层）：只登记已落盘的文档，
   // 新建未保存的不进库（否则关掉就留下一堆空条目）。
@@ -1190,12 +1274,69 @@ function StageContent({
   // 异步清单（宿主可换 HTTP/FS 实现）；插入/上传后由 Stage 更新本地副本
   const [assetList, setAssetList] = useState<AssetItem[]>([]);
 
-  // 图库上传（P1-1）：上传按钮 / 面板拖拽 / 画布 drop 共用的「入清单」原语（不插节点）
-  const uploadToGallery = useCallback(async (file: File) => {
-    const item = await assetHost.uploadAsset(file);
-    setAssetList((prev) => (prev.some((a) => a.id === item.id) ? prev : [...prev, item]));
-    return item;
-  }, [assetHost]);
+  /**
+   * 图库上传（P1-1）：上传按钮 / 面板拖拽 / 画布 drop 共用的「入清单」原语（不插节点）。
+   *
+   * **P0-B（① 作用域捕获 + 记账 / ② 三态 / ⑦ 落点文案）**：
+   *  1. 上传**之前**捕获作用域标记（`epoch` 可能在写入过程中变化，§6.2）；
+   *  2. 用 `uploadAssetDetailed` 拿三态——不再把 `AssetItem` 当成功凭据（R-08）；
+   *  3. 结果返回后校验 `isCurrent(捕获值)`：不匹配 → **不回填清单**（避免串图）、
+   *     写一条开发诊断，但**仍然记账**（`unconfirmed: true`，I-22）；
+   *  4. 落点文案由 `formatAssetWriteNotice` 单点给出（不得各处手写「已保存」）。
+   */
+  const uploadToGallery = useCallback(
+    async (file: File, options: UploadOptions = {}): Promise<AssetItem | null> => {
+      const captured = assetHost.scopeMark();
+      const result = await assetHost.uploadAssetDetailed(file, undefined, options);
+      if (result.kind === 'failed') {
+        setAssetNotice(result.error.code === 'E-ABORT' ? null : '上传失败，请重试。');
+        return null;
+      }
+      const item = result.item;
+      const store = result.kind === 'written' ? result.store : null;
+      const confirmed = isWriteConfirmed(captured, assetHost.scopeMark());
+      writeLedger.record(
+        {
+          assetKey: item.id,
+          scopeId: captured.scopeKey,
+          kind: item.kind,
+          name: item.name,
+          relPath: item.id.startsWith('assets/') ? item.id : null,
+          store: store ?? 'browser-idb',
+          bytes: result.kind === 'written' ? result.bytes : null,
+        },
+        confirmed,
+      );
+      if (!confirmed) {
+        // 丢弃 UI 回填（避免串图），但**不是**撤销磁盘写入（I-22）
+        setAssetNotice(UNCONFIRMED_WRITE_NOTICE);
+        return item;
+      }
+      setAssetNotice(formatAssetWriteNotice(store, workspaceNameOf));
+      setAssetList((prev) => (prev.some((a) => a.id === item.id) ? prev : [...prev, item]));
+      return item;
+    },
+    [assetHost, writeLedger, workspaceNameOf],
+  );
+
+  /**
+   * 清单加载 + **重新发现**（§4.5.4 规则 3）：该作用域挂载后 `listAssets` 看到了文件，
+   * 清除对应 `unconfirmed` 标记 —— 这正是「专项二」负控要钉住的那条链。
+   */
+  useEffect(() => {
+    let alive = true;
+    void assetHost.listAssets().then((list) => {
+      if (!alive) return;
+      setAssetList(list);
+      writeLedger.confirmDiscovered(
+        assetHost.scopeMark().scopeKey,
+        list.map((a) => a.id),
+      );
+    });
+    return () => {
+      alive = false;
+    };
+  }, [assetHost, writeLedger, workspaceReady]);
 
   // B3：失效诊断入解析层——parse 诊断 + 资产缺失诊断（清单更新后自动重算）
   const allDiags = useMemo(
@@ -2270,6 +2411,7 @@ function StageContent({
           void (async () => {
             for (const file of images) {
               const item = await uploadToGallery(file);
+              if (item === null) continue; // 上传失败/取消：不改文档（零副作用）
               const parentId = controller.selectedId ?? controller.root.id;
               const id = controller.addEntityChild(parentId, { kind: item.kind, id: item.id });
               setEntities((prev) => {
@@ -2329,6 +2471,34 @@ function StageContent({
           }}
         >
           ⚠ {commandNotice}
+        </div>
+      )}
+
+      {/* P0-B ⑦：资产落点/失败提示条（与命令告警同形但独立一条 —— 落点提示不是错误，
+          用中性底色；内容全部来自 `assetStoreCopy.ts` 的单点文案表，不得就地硬编码）。 */}
+      {assetNotice !== null && (
+        <div
+          data-asset-notice
+          onClick={() => setAssetNotice(null)}
+          style={{
+            position: 'absolute',
+            top: 100,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            maxWidth: 460,
+            padding: '8px 14px',
+            borderRadius: 8,
+            background: 'rgba(120, 170, 255, 0.12)',
+            border: '1px solid rgba(120, 170, 255, 0.45)',
+            color: CHROME.text,
+            fontFamily: 'inherit',
+            fontSize: 12,
+            lineHeight: 1.6,
+            zIndex: 5,
+            cursor: 'pointer',
+          }}
+        >
+          {assetNotice}
         </div>
       )}
 
@@ -2800,6 +2970,46 @@ function StageContent({
           setExpandedQaId(null);
           focusNode(id);
         }}
+        // P0-B（I-10）：插入前归一化 —— 把所选资产变成「重开后仍能解析」的引用。
+        // 已挂载 → 字节落 <workspace>/assets/（同名走三选，默认保留两份）；
+        // 未挂载 → 只允许可净化的小 SVG / 内置图标内联，其余拒绝（零副作用）。
+        normalizeInsert={async (item, action: AssetInsertAction) => {
+          const result = await normalizeForInsert(
+            item,
+            { workspace: workspaceReady ? workspace : null },
+            assetHost,
+          );
+          if (result.kind === 'refused') {
+            setAssetNotice(refusedNoticeOf(result.reason));
+            return null;
+          }
+          // 归一化产生了一次真实磁盘写入 → 记进同一本账（§4.9「同样要计入」）
+          if (result.store === 'workspace-assets' && result.relPath !== null) {
+            const captured = assetHost.scopeMark();
+            writeLedger.record(
+              {
+                assetKey: result.relPath,
+                scopeId: captured.scopeKey,
+                kind: item.kind,
+                name: item.name,
+                relPath: result.relPath,
+                store: 'workspace-assets',
+                bytes: null,
+              },
+              isWriteConfirmed(captured, assetHost.scopeMark()),
+            );
+          }
+          if (result.renamed) {
+            setAssetNotice(`已在工作区 assets/ 保存了一份副本（${result.refId}）。`);
+          } else if (action === 'media' || action === 'icon') {
+            setAssetNotice(null);
+          }
+          return { refId: result.refId };
+        }}
+        onInsertRefused={(reason) => setAssetNotice(reason)}
+        // P0-B ⑦ 落点徽章：判据是**账本里记过的事实**，不是 id 前缀猜测（R-12）。
+        // 内置项自包含；有账本记录 → 用记录的 store；否则按「当前是否有工作区」降级。
+        storeOf={storeOf}
         onClose={() => setPanel(null)}
       />
 

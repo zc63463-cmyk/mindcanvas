@@ -15,7 +15,12 @@ export {
   BUILTIN_ASSET_ITEMS,
 } from './chrome/AssetPanel.js';
 // FA1-T4：内置矢量图标集
-export { BUILTIN_ICONS, builtinIconById, matchBuiltinIcons } from './chrome/assetIcons.js';
+export {
+  BUILTIN_ICONS,
+  builtinIconById,
+  INLINE_SVG_LIMIT,
+  matchBuiltinIcons,
+} from './chrome/assetIcons.js';
 export type { BuiltinIcon } from './chrome/assetIcons.js';
 // FA1-T5：SVG 主题染色与自包含
 export {
@@ -36,10 +41,72 @@ export {
   isImageFileName,
   kindOfFileName,
 } from './chrome/assetHost.js';
+// P0-B：资产三态 / 作用域 / 可携带性 / 同名三选（契约 §4.5.1 §4.5.2 §6.2）
+export {
+  ASSET_CONFLICT_LABEL,
+  ASSET_CONFLICT_ORDER,
+  assetFavKey,
+  assetKeyOf,
+  BROWSER_SCOPE_KEY,
+  browserScopeMark,
+  cacheKeyOf,
+  copyNameFor,
+  DEFAULT_ASSET_CONFLICT_CHOICE,
+  durabilityOfStore,
+  isExternalRef,
+  isSelfContainedRef,
+  isWorkspaceAssetRef,
+  portabilityOfStore,
+  uniqueAssetName,
+} from './chrome/assetHost.js';
+export type {
+  AssetConflict,
+  AssetConflictChoice,
+  AssetDurability,
+  AssetHostV2,
+  AssetPortability,
+  AssetResolution,
+  AssetScopeMark,
+  AssetSessionReason,
+  AssetStore,
+  AssetWriteResult,
+} from './chrome/assetHost.js';
+// P0-B：插入归一化（I-10）+ 内置图标的 child 内联修正（CE-05）
+export {
+  builtinInlineRef,
+  fileNameOfAsset,
+  inlineRefOf,
+  isInlineableAsset,
+  normalizeForInsert,
+} from './chrome/assetInsert.js';
+export type { NormalizeEnv, NormalizeResult } from './chrome/assetInsert.js';
+// P0-B：作用域感知 objectURL 缓存（R-07 / R-16 / LRU）
+export { ScopedObjectUrls } from './chrome/assetObjectUrls.js';
+export type { RevokeEnv } from './chrome/assetObjectUrls.js';
+// P0-B：资产写入记账（§4.5.4 / I-22：epoch 变化只丢弃 UI 回填，写入必须记账）
+export { AssetWriteLedger, isWriteConfirmed, readAssetLedger } from './chrome/assetWriteLedger.js';
+export type {
+  AssetLedgerData,
+  AssetWriteEntry,
+  LedgerReadResult,
+} from './chrome/assetWriteLedger.js';
+// P0-B：落点 / 可携带性徽章文案（§1.7 允许与禁止的文案表）
+export {
+  ASSET_PORTABILITY_COPY,
+  ASSET_STORE_BADGE,
+  formatAssetStoreDetail,
+  formatAssetWriteNotice,
+  isForbiddenAssetCopy,
+} from './chrome/assetStoreCopy.js';
+export type { AssetStoreCopy } from './chrome/assetStoreCopy.js';
 export { IdbAssetHost } from './chrome/idbAssetHost.js';
 // FA2-T4：工作区资产真落盘（写入 ./assets/，相对路径引用）
 export { WorkspaceAssetHost } from './chrome/workspaceAssetHost.js';
-export type { WorkspaceWriter } from './chrome/workspaceAssetHost.js';
+export type {
+  UploadOptions,
+  WorkspaceScopeSource,
+  WorkspaceWriter,
+} from './chrome/workspaceAssetHost.js';
 export { ContextMenu, type ContextMenuItem, type ContextMenuProps } from './chrome/ContextMenu.js';
 export type { DescBlockProps } from './chrome/DescBlock.js';
 export {

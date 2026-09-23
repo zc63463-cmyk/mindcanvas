@@ -15,6 +15,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CHROME } from '../theme/tokens.js';
 import { BUILTIN_ICONS, type BuiltinIcon } from './assetIcons.js';
+import type { AssetStore } from './assetHost.js';
 import { AssetCard, AssetRow } from './assetViews.js';
 import type { AssetInsertAction, AssetItem } from './assetTypes.js';
 
@@ -59,6 +60,14 @@ export interface AssetPanelProps {
    * 产品壳（apps/canvas）传 'grid' 呈现现代网格。
    */
   defaultView?: 'grid' | 'list';
+  /**
+   * 落点徽章（P0-B ⑦）：由调用方按当前 `AssetKey` / 作用域判定。
+   *
+   * 缺省 → 全部按会话级渲染（`null` → 「⚠ 仅本次会话」）。
+   * **不臆测落点**：靠 id 前缀猜落点正是 R-12（落点语义未接线）的成因，
+   * 因此这里要求调用方显式给出，而不是在本组件里写 `id.startsWith('assets/')`。
+   */
+  storeOf?: (item: AssetItem) => AssetStore | null;
 }
 
 /** 虚拟滚动行高（px）：项 + 2px 间距（与渲染样式一致） */
@@ -126,6 +135,7 @@ export function AssetPanel({
   onActionChange,
   onPaste,
   defaultView = 'list',
+  storeOf,
 }: AssetPanelProps) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -364,6 +374,7 @@ export function AssetPanel({
               resolve={resolve}
               missing={isMissing?.(a) ?? false}
               fav={favs.has(`${a.kind}:${a.id}`)}
+              store={storeOf?.(a) ?? null}
               onToggleFav={() => toggleFav(`${a.kind}:${a.id}`)}
               onInsert={() => insert(a)}
             />
@@ -380,6 +391,7 @@ export function AssetPanel({
                 top={(range.start + i) * ROW_H}
                 rowHeight={ROW_H}
                 missing={isMissing?.(a) ?? false}
+                store={storeOf?.(a) ?? null}
                 onInsert={() => insert(a)}
               />
             ))}

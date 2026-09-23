@@ -9,11 +9,31 @@
  *   上传时即建缓存；未命中（静态打包资产）回落 baseUrl + id
  * - 同名上传 = 替换语义（同 id put 覆盖，清单去重）
  * - 静态清单（打包 demo 资产）与 IDB 清单并集，同 id 时 IDB 优先
+ *
+ * ── P0-B 增量 ────────────────────────────────────────────────────────────
+ * - **R-08 三态**：`putRecord` 失败时**不再静默**返回同一个 `AssetItem`
+ *   （旧 `:146-150`），而是由 `uploadAssetDetailed` 如实给出
+ *   `session-only` + `reason: 'idb-failed'`；`uploadAsset` 保留为薄包装。
+ * - **可携带性**：IDB 落点的 `store = 'browser-idb'`、`portability = 'browser-local'`，
+ *   由 `portabilityOfStore` 单点推导（禁止各处手写，避免同一 store 两种说法）。
+ * - **缓存键作用域化**：`objectUrls` → 键含 scopeKey（与工作区宿主同一缓存实现）。
+ * - **§6.3 释放**：`disposeScope` / `disposeAll`。
  */
-import { mimeOfFileName, kindOfFileName } from './assetHost.js';
+import {
+  BROWSER_SCOPE_KEY,
+  cacheKeyOf,
+  kindOfFileName,
+  mimeOfFileName,
+  portabilityOfStore,
+} from './assetHost.js';
+import type {
+  AssetHostV2,
+  AssetScopeMark,
+  AssetWriteResult,
+} from './assetHost.js';
+import { ScopedObjectUrls } from './assetObjectUrls.js';
 import { INLINE_SVG_LIMIT } from './assetIcons.js';
 import type { AssetItem } from './assetTypes.js';
-import type { AssetHost } from './assetHost.js';
 
 /** IDB 库名/store 名（每导图一个资产空间 = 每库一份；当前单文档应用共用一库） */
 const DB_NAME = 'mindcanvas-assets';
@@ -49,19 +69,48 @@ function isAssetRecordArray(v: unknown): v is AssetRecord[] {
   );
 }
 
-export class IdbAssetHost implements AssetHost {
+export class IdbAssetHost implements AssetHostV2 {
   readonly baseUrl: string;
   /** 静态打包清单（构造注入；resolve 回落 baseUrl+id） */
   private staticItems: AssetItem[];
   /** 全量清单缓存（静态 + IDB 并集；listAssets 首次加载后就绪） */
   private items: AssetItem[] | null = null;
-  /** 资产 id → objectURL（listAssets 预热 / uploadAsset 即建；会话内缓存） */
-  private objectUrls = new Map<string, string>();
+  /** 作用域感知 objectURL 缓存（P0-B：键含 scopeKey + 统一 revoke + LRU） */
+  private urls: ScopedObjectUrls;
+  /** 作用域来源（可选：浏览器素材库是唯一作用域，未接线时按 `browser:local`） */
+  private scopeOf: (() => AssetScopeMark) | null;
   private dbPromise: Promise<IDBDatabase> | null = null;
 
-  constructor(staticItems: AssetItem[] = [], baseUrl = '/') {
+  constructor(staticItems: AssetItem[] = [], baseUrl = '/', scopeOf: (() => AssetScopeMark) | null = null) {
     this.staticItems = [...staticItems];
     this.baseUrl = baseUrl;
+    this.scopeOf = scopeOf;
+    this.urls = new ScopedObjectUrls({
+      revokeObjectURL: (url) => URL.revokeObjectURL(url),
+    });
+  }
+
+  /**
+   * 作用域标记。浏览器素材库**只有唯一作用域**（`browser:local`），
+   * 故 `scopeKey` 恒定；`epoch` 由注入源给出（用于「写入已完成但作用域已切换」的记账）。
+   */
+  scopeMark(): AssetScopeMark {
+    return this.scopeOf?.() ?? { scopeKey: BROWSER_SCOPE_KEY, epoch: 0 };
+  }
+
+  /** 释放某个作用域的全部 objectURL（浏览器宿主只有 `browser:local`） */
+  disposeScope(scopeKey: string): number {
+    return this.urls.releaseScope(scopeKey);
+  }
+
+  /** 释放全部（组件卸载） */
+  disposeAll(): number {
+    return this.urls.releaseAll();
+  }
+
+  /** 当前缓存的 URL 数（诊断与测试用） */
+  cachedUrlCount(): number {
+    return this.urls.size;
   }
 
   private db(): Promise<IDBDatabase> {
@@ -100,6 +149,7 @@ export class IdbAssetHost implements AssetHost {
 
   async listAssets(): Promise<AssetItem[]> {
     if (this.items) return [...this.items];
+    const mark = this.scopeMark();
     const idbItems: AssetItem[] = [];
     try {
       for (const rec of await this.allRecords()) {
@@ -107,11 +157,9 @@ export class IdbAssetHost implements AssetHost {
         if (typeof rec.svg === 'string') item.svg = rec.svg;
         idbItems.push(item);
         // 预热 objectURL：让同步 resolveAsset 在清单加载后立即可用（接口零变更）
-        if (!this.objectUrls.has(rec.id)) {
-          this.objectUrls.set(
-            rec.id,
-            URL.createObjectURL(new Blob([rec.data], { type: rec.mime })),
-          );
+        const key = cacheKeyOf(mark, rec.id);
+        if (!this.urls.has(key)) {
+          this.urls.set(key, URL.createObjectURL(new Blob([rec.data], { type: rec.mime })));
         }
       }
     } catch {
@@ -125,12 +173,20 @@ export class IdbAssetHost implements AssetHost {
   }
 
   resolveAsset(item: Pick<AssetItem, 'kind' | 'id'>): string {
-    const url = this.objectUrls.get(item.id);
-    if (url) return url;
+    const url = this.urls.get(cacheKeyOf(this.scopeMark(), item.id));
+    if (url !== null) return url;
     return this.baseUrl + item.id;
   }
 
-  async uploadAsset(file: File, kind?: 'img' | 'draw'): Promise<AssetItem> {
+  /**
+   * 上传（**三态可判别**，R-08）。旧实现在 `putRecord` 失败时 `catch` 掉错误
+   * 并返回同一个 `AssetItem`，上层无法区分「写进了 IDB」与「只在内存里」。
+   *
+   * `session-only.reason = 'idb-failed'` 是**唯一**的「写失败但本次可用」出口，
+   * 对应 A3 的「仅本次会话」徽章与「没有写入持久存储」文案。
+   */
+  async uploadAssetDetailed(file: File, kind?: 'img' | 'draw'): Promise<AssetWriteResult> {
+    const mark = this.scopeMark();
     const item: AssetItem = {
       kind: kind ?? kindOfFileName(file.name),
       id: `assets/${file.name}`,
@@ -143,21 +199,41 @@ export class IdbAssetHost implements AssetHost {
     const svg =
       item.kind === 'draw' && file.size <= INLINE_SVG_LIMIT ? await file.text() : undefined;
     if (svg !== undefined) item.svg = svg;
+
+    let persisted = true;
     try {
       await this.putRecord({ ...item, mime, data });
     } catch {
-      // 持久化失败：降级会话级（objectURL 已建，本次会话内可用）
+      // 持久化失败：**如实降级**（不再冒充成功）——objectURL 已建，本次会话内可用
+      persisted = false;
     }
-    const prevUrl = this.objectUrls.get(item.id);
-    if (prevUrl !== undefined) URL.revokeObjectURL(prevUrl);
-    this.objectUrls.set(item.id, URL.createObjectURL(new Blob([data], { type: mime })));
+    const key = cacheKeyOf(mark, item.id);
+    this.urls.set(key, URL.createObjectURL(new Blob([data], { type: mime })));
     // 替换语义：清单同 id 去重（null 清单 = 尚未 listAssets，仅并入静态）
     const base = this.items ?? [...this.staticItems];
     this.items = [...base.filter((a) => a.id !== item.id), item];
-    return item;
+
+    if (!persisted) return { kind: 'session-only', item, reason: 'idb-failed' };
+    return {
+      kind: 'written',
+      item,
+      store: 'browser-idb',
+      refId: item.id,
+      bytes: file.size,
+    };
+  }
+
+  /** 既有签名不变：薄包装（契约 §4.5.1「uploadAsset 保留为薄包装」） */
+  async uploadAsset(file: File, kind?: 'img' | 'draw'): Promise<AssetItem> {
+    const result = await this.uploadAssetDetailed(file, kind);
+    if (result.kind === 'failed') throw new Error(result.error.detail ?? result.error.code);
+    return result.item;
   }
 
   hasAsset(item: Pick<AssetItem, 'kind' | 'id'>): boolean {
     return (this.items ?? this.staticItems).some((a) => a.kind === item.kind && a.id === item.id);
   }
 }
+
+/** `store` → `portability` 在此再导出，供调用方单点取用（避免各处手写映射） */
+export { portabilityOfStore };

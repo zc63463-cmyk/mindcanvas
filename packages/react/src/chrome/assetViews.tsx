@@ -4,11 +4,43 @@
  * 拆分动因：AssetPanel.tsx 一度逼近 900 行，其中「卡片 / 列表行 / data URL 编码」
  * 是与面板状态完全无关的**纯展示与纯函数**部分，留在原地只增加阅读成本。
  * 面板主组件只负责状态与虚拟滚动，视觉细节归此处。
+ *
+ * P0-B ⑦：卡片新增**落点**与**可携带性**两个徽章（文案由 `assetStoreCopy.ts` 单点给出，
+ * 禁止在本文件硬编码「已保存」类表述 —— §1.7 的允许/禁止文案表）。
  */
 import { useMemo, useState } from 'react';
 import { CHROME } from '../theme/tokens.js';
 import { matchBuiltinIcons, type BuiltinIcon } from './assetIcons.js';
+import { badgesFor } from './assetStoreCopy.js';
+import type { AssetStore } from './assetHost.js';
 import type { AssetItem } from './assetTypes.js';
+
+/**
+ * 落点徽章（P0-B ⑦）。`store === null` → 「⚠ 仅本次会话」。
+ *
+ * 单列一个组件而不是内联：卡片与列表行都要用，且「a1 与 b1 显示不同徽章」
+ * 正是 A1 验收要看到的（两个作用域的同名卡片不互相覆盖）。
+ */
+function StoreBadge({ store }: { store: AssetStore | null }) {
+  const { badge, portability } = badgesFor(store);
+  return (
+    <span
+      data-asset-store={store ?? 'session'}
+      title={`${badge} · ${portability}`}
+      style={{
+        fontSize: 9,
+        lineHeight: 1.4,
+        color: CHROME.textMuted,
+        maxWidth: '100%',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {badge}
+    </span>
+  );
+}
 
 /** 网格卡片：图标 48×48 居中矢量；图片 80×60 保宽高比缩略 */
 export function AssetCard({
@@ -16,6 +48,7 @@ export function AssetCard({
   resolve,
   missing,
   fav,
+  store,
   onToggleFav,
   onInsert,
 }: {
@@ -23,6 +56,8 @@ export function AssetCard({
   resolve?: (item: AssetItem) => string;
   missing: boolean;
   fav: boolean;
+  /** 落点（P0-B）：缺省 → 会话级徽章（`store: null`） */
+  store?: AssetStore | null;
   onToggleFav: () => void;
   onInsert: () => void;
 }) {
@@ -110,6 +145,7 @@ export function AssetCard({
         {item.name}
         {missing ? '（失效）' : ''}
       </span>
+      <StoreBadge store={store ?? null} />
     </div>
   );
 }
@@ -121,6 +157,7 @@ export function AssetRow({
   top,
   rowHeight,
   missing,
+  store,
   onInsert,
 }: {
   item: AssetItem;
@@ -128,6 +165,8 @@ export function AssetRow({
   top: number;
   rowHeight: number;
   missing: boolean;
+  /** 落点（P0-B）：缺省 → 会话级徽章 */
+  store?: AssetStore | null;
   onInsert: () => void;
 }) {
   const [failed, setFailed] = useState(false);
@@ -191,6 +230,7 @@ export function AssetRow({
         {item.name}
         {missing ? '（失效）' : ''}
       </span>
+      <StoreBadge store={store ?? null} />
     </div>
   );
 }
