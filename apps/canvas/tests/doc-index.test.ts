@@ -466,42 +466,21 @@ describe('DocIndex · 归属证据（§6.2.1 / NC-3 期望）', () => {
     expect(first(d.historyPool()).reason).toBe('no-existing-entry');
   });
 
-  it('M5：本区「有既有条目但无历史证据」→ 当前实现**认领**（与复核回执的期望相反，已停工待裁）', () => {
-    // ⚠️ 本条**记录一个三方矛盾，不是守点**。按派单边界第 7 条（「发现回执/契约/代码
-    // 三方矛盾：并列原文与行号，停工待裁决，不自行择一」），本用例**只陈述当前行为**，
-    // 不假装它是对的、也不为迎合回执而把断言写成「必须不认领」。
+  it('M5：本区「有既有条目但无历史证据」→ 不得认领，进历史池（归属证据位最具判别力的场景）', () => {
+    // **负控 (b)**。场景：同作用域**已有**索引条目，但当前作用域无历史证据
+    // （legacy adoption 新生成的 scopeId）→ M5 不得把旧库键认领到该条目上。
     //
-    // 复核回执 2026-09-23-P0-D-review.md §3.2 末段的探针表把这个场景判为「被错误认领」，
-    // 并把它列为「hasOwnershipEvidence 最具判别力的场景、默认套件零覆盖」，
-    // 要求补一条负控断言 `migrated === 0` + 进历史池。**但代码不是这么走的**：
-    //   - `docIndexMigrate.ts:105-109` 找 `existing` 时**只看作用域与
-    //     relPath/legacyKeys 命中**，命中即 `adoptDoc`（:133-150）——
-    //     **全程不调用 `hasOwnershipEvidence`**；
-    //   - `hasOwnershipEvidence` 在本函数里只被 M6（:187）与 M7（:265）使用，
-    //     **M5 一次都没用**（`grep -n hasOwnershipEvidence docIndexMigrate.ts` → :187/:265）。
-    // 即：M5 的归属判据是「作用域相同 + relPath 精确命中」，不是「本次已证明同一目录」。
+    // 为什么这是 `hasOwnershipEvidence` 最具判别力的场景（复核回执 §3.2 末段）：
+    //   - 无既有条目 + 无证据 → 由「无 existing 则不造条目」拦下（不经过证据位）；
+    //   - 有既有条目 + 无证据 → **旧的 M5 实现会直接认领**（不查证据位），
+    //     只有补上证据位判定才能拦住 —— 即本用例钉住的那一条。
+    // 主控裁决：契约 §6.2 M5 行「只有具备 §6.2.1 证据的才绑定」，M6(:187)/M7(:265)
+    // 都查证据，M5 不查属无文档记载的遗漏 → M5 必须调用归属证据位。
     //
-    // 三方并列：
-    //   ① 契约 §6.2 M5 行（shared-contracts.md:861）：
-    //      「**只有具备 §6.2.1 证据的才绑定 scopeId/relPath**，否则进历史池」
-    //      → 按此，本场景（`hasHistoryEvidence: false`）**应**进历史池、不认领。
-    //   ② 契约 §6.2.1（:875）：「旧键能与某路径命中，但该 scopeId 是 legacy adoption
-    //      新生成的（无历史证据）→ 证据不足 → 进历史池」→ 同 ①。
-    //   ③ 实现 `docIndexMigrate.ts:105-150`：命中既有条目即认领，**无证据位检查**
-    //      → 与 ①② 相反。实测 `migrated=1`、`historyPool=0`、`legacyKeys` 被写入。
-    //
-    // 为什么我没有自行择一：
-    //   - 若按 ①② 断言「必须不认领」，则本用例在**当前实现**下必红——而本轮门禁要求全绿，
-    //     且 M5 不查证据位可能是**有意为之**（`existing` 命中意味着「这条文档已经在这个
-    //     作用域里以真实身份存在过」，与 M6/M7 凭旧键字符串猜归属不同）；
-    //   - 若按 ③ 断言「认领」，则等于把复核指出的问题判成「不是问题」——那是主控的裁决权。
-    // 两种改法我都无权单方面决定，故**如实记录实测行为**，把裁决交回主控。
-    //
-    // 另注：复核 §3.2 把「`:422` 的名字与实际守点脱节」归因于本场景缺测——
-    // 该归因**在当前代码下不成立**：`:422` 的绿色来自 M5「无 existing 则不造条目」
-    // （:110-132），而非归属证据守卫；本场景即便补测也**钉不住** `hasOwnershipEvidence`
-    // （M5 根本不调用它）。真正能被 `hasOwnershipEvidence` 判别的是 `:422` 之外
-    // 的 M6/M7 路径（M6 已有 `M6：证据充分但命中条目属于别的作用域` 等三条用例覆盖）。
+    // **既有条目从落盘状态读出来，不能用 `registerDoc` 现场登记**：
+    // `registerDoc` 是「工作区打开/保存时用真实句柄登记」，本身代表「目录已证明」；
+    // 用它构造会把 ctx 的证据位与条目来源混为一谈。故直接写 `DOC_INDEX_KEY`
+    // 造一条**先前会话留下的**条目，而本会话作用域是 legacy adoption（无证据）。
     localStorage.setItem(LEGACY_LIBRARY_KEY, JSON.stringify(legacy));
     localStorage.setItem(
       DOC_INDEX_KEY,
@@ -524,18 +503,99 @@ describe('DocIndex · 归属证据（§6.2.1 / NC-3 期望）', () => {
       }),
     );
     const d = idx(adoptedCtx('ws:aaaa'));
-    expect(d.getDoc('ws:aaaa::研发/架构.mm.md')).toBeDefined(); // 既有条目确实在
+    const legacyKey = `${LEGACY_LIBRARY_KEY}#研发/架构.mm.md`;
+    // 前置：条目确实在索引里（否则退化成「无既有条目」那一格，测的就不是这个守点）
+    expect(d.getDoc('ws:aaaa::研发/架构.mm.md')).toBeDefined();
+    const before = JSON.stringify(d.listDocs());
 
     const r = d.migrate();
 
-    // ↓↓↓ 以下是**实测行为**（不是「期望」）：当前实现认领了它。
+    // ① 不认领：既有条目的 legacyKeys 不得被写入这条旧键
+    expect(d.getDoc('ws:aaaa::研发/架构.mm.md')?.legacyKeys).not.toContain(legacyKey);
+    expect(d.getDoc('ws:aaaa::研发/架构.mm.md')?.legacyKeys).toEqual([]);
+    // ② 条目本身逐字未动
+    expect(JSON.stringify(d.listDocs())).toBe(before);
+    // ③ 不记成已迁移
+    expect(r.migrated).toBe(0);
+    // ④ 旧键进历史池，原因是**无证据**（不是「找不到文档」——文档明明在）
+    expect(d.historyPool().map((h) => h.key)).toEqual(['研发/架构.mm.md']);
+    expect(first(d.historyPool()).reason).toBe('no-evidence');
+    // ⑤ 旧键保留（用户不处理也不丢）
+    expect(localStorage.getItem(LEGACY_LIBRARY_KEY)).not.toBeNull();
+
+    // 判别力自证：把 M5 的 `bound` 判定中性化（去掉 `hasOwnershipEvidence` 调用，
+    // 退回「命中既有条目即认领」），①③④ 同时转红 —— 见本轮回执 §3.2。
+  });
+
+  it('M5：既有条目带 `ephemeral`（上次会话身份已失效）→ 不得认领，进历史池', () => {
+    // 上一条的姊妹场景（§6.2.1 第 5 行）：条目在索引里、作用域 id 也相同，
+    // 但它是上次会话 `disk-session` 留下的 → 该 scopeId 本次已无效，不得认领。
+    // 这一支与 M6 的 `bound` 判定同形（`:186`），是本轮新增守卫的另一半。
+    localStorage.setItem(LEGACY_LIBRARY_KEY, JSON.stringify(legacy));
+    localStorage.setItem(
+      DOC_INDEX_KEY,
+      JSON.stringify({
+        entries: [
+          {
+            docKey: 'ws:aaaa::研发/架构.mm.md',
+            scopeId: 'ws:aaaa',
+            relPath: '研发/架构.mm.md',
+            lineageId: 'l-session',
+            name: '架构.mm.md',
+            title: null,
+            openedAt: null,
+            savedAt: 7,
+            starred: false,
+            sourceRef: { kind: 'disk-handle' },
+            ephemeral: true,
+            legacyKeys: [],
+          },
+        ],
+      }),
+    );
+    // 作用域**有证据**（排除「无证据」这条退路）——只有 `ephemeral` 能拦住它
+    const d = idx(diskCtx('ws:aaaa'));
+    expect(d.getDoc('ws:aaaa::研发/架构.mm.md')?.ephemeral).toBe(true);
+
+    const r = d.migrate();
+
+    expect(r.migrated).toBe(0);
+    expect(d.getDoc('ws:aaaa::研发/架构.mm.md')?.legacyKeys).toEqual([]);
+    expect(d.historyPool().map((h) => h.key)).toEqual(['研发/架构.mm.md']);
+    expect(first(d.historyPool()).reason).toBe('ephemeral-scope');
+  });
+
+  it('M5：本区有证据 + 既有条目 → 正常认领（新守卫不得把合法迁移一并拦掉）', () => {
+    // 对照：前两条是中段守卫，这一条证明守卫**只拦证据不足**，
+    // 有证据的正常路径照旧认领 —— 否则「补证据位」会变成「M5 再也迁不了」。
+    localStorage.setItem(LEGACY_LIBRARY_KEY, JSON.stringify(legacy));
+    localStorage.setItem(
+      DOC_INDEX_KEY,
+      JSON.stringify({
+        entries: [
+          {
+            docKey: 'ws:aaaa::研发/架构.mm.md',
+            scopeId: 'ws:aaaa',
+            relPath: '研发/架构.mm.md',
+            lineageId: 'l-prev',
+            name: '架构.mm.md',
+            title: null,
+            openedAt: null,
+            savedAt: 7,
+            starred: false,
+            sourceRef: { kind: 'disk-handle' },
+            legacyKeys: [],
+          },
+        ],
+      }),
+    );
+    const d = idx(diskCtx('ws:aaaa')); // 有历史证据 + 非 ephemeral
+    const r = d.migrate();
     expect(r.migrated).toBe(1);
     expect(d.getDoc('ws:aaaa::研发/架构.mm.md')?.legacyKeys).toEqual([
       `${LEGACY_LIBRARY_KEY}#研发/架构.mm.md`,
     ]);
     expect(d.historyPool()).toEqual([]);
-    // 旧键保留（不删旧数据这一条与证据无关，始终成立）
-    expect(localStorage.getItem(LEGACY_LIBRARY_KEY)).not.toBeNull();
   });
 
   it('投影不得抹掉尚未迁移的畸形旧行（`null` / 缺 id）', () => {

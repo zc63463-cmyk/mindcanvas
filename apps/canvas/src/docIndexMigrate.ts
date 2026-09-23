@@ -107,11 +107,42 @@ export function runMigration(index: DocIndexState, opts?: { batch?: number }): M
               e.scopeId === ctx.scopeId &&
               (e.relPath === key || e.legacyKeys.includes(`${LEGACY_LIBRARY_KEY}#${key}`)),
           );
-          if (existing === undefined) {
+          // **既有条目本身也不是归属证据**（§6.2 M5 + §6.2.1 第 2 行 + 第 5 行）。
+          // 这一道是主控裁决补上的：M6（`:230`）/ M7（`:308`）都查证据位，M5 不查
+          // 属无文档记载的遗漏。契约 §6.2 M5 行明写「**只有具备 §6.2.1 证据的才绑定
+          // `scopeId`/`relPath`**，否则进历史池」——「既有条目」只是让这条旧键
+          // **有地方可认领**，不等于「这个目录本次已被证明是当初那个」。
+          //
+          // 为什么“既有条目”不足以充当证据：条目存在只说明「上次用过的身份还在索引里」。
+          // legacy adoption 新生成的 scopeId（`hasHistoryEvidence: false`）下，
+          // 目录身份**本次并没有被证明**（可能是同名同结构的另一个文件夹）；
+          // 此时把旧库键认领到它头上，等于把「上次那条还在」当成「就是它」，
+          // 与 I-13「当前目录恰好存在同名项不构成证据」同一类错误。
+          //
+          // **本区条目带 `ephemeral` 时同样不认领**（§6.2.1 第 5 行：无效 scopeId）：
+          // 上次会话的 disk-session 身份本次已失效，认领它等于把旧键绑到一个死身份上。
+          // 与 M6 的 `bound` 判定同形（`:186`）。
+          //
+          // **browser 作用域不需要旁路**（实读两个兄弟后的决定，理由如下）：
+          // `migrateContextOf`（`docIndexCore.ts:368-376`）对 `scope.kind === 'browser'`
+          // 直接给 `persisted: true, hasHistoryEvidence: true`——浏览器素材库作用域唯一，
+          // 不存在「猜归属」问题（与 M7 给自包含引用直接放行的理由同源，契约 M7 行明文）。
+          // 故兼容模式（`browser:local`）那一路**天然通过** `hasOwnershipEvidence`，
+          // 既有用例「M5：浏览器身份条目仍可被同 relPath 的旧库键认领」不改仍绿。
+          // 若在此再写一条 `ctx.scopeId === BROWSER_SCOPE_ID` 的旁路，
+          // 反而会把「browser 直迁」这个**上下文层**的保证复制进迁移层——
+          // 与 M6/M7 的既有形状（都在 ctx 层统一给证据，迁移层不特判作用域）不一致。
+          const bound =
+            existing !== undefined &&
+            existing.ephemeral !== true &&
+            hasOwnershipEvidence(ctx, existing.relPath ?? key);
+          if (!bound) {
             // 没有既有条目：`library.v1` 的 `id` 只是**文件名**，不是目录身份。
             // 凭「唯一同名命中 + 本区有历史」就造 `ws:<uuid>::<文件名>`，
             // 等于把同名命中当归属证据（§6.2.1 明文禁止）；`openedAt` 也只能编造。
             // → 一律进历史池，由用户显式关联（`relink`）。
+            // 有既有条目但无证据（或条目已失效）：同上，进历史池——
+            // 契约 §6.2.1 第 2 行明写「legacy adoption 新生成的 scopeId → 证据不足 → 进历史池」。
             pool.push({
               key,
               kind: 'library',
@@ -121,11 +152,23 @@ export function runMigration(index: DocIndexState, opts?: { batch?: number }): M
               // 无证据（§6.2.1）与「本区有证据但索引里没有这条文档」在用户看来
               // 都只能靠显式「关联到此工作区」解决；作用域已失效（ephemeral）
               // 则连关联都无意义，要分别标注。
+              //
+              // 取值域是 `HistoryPoolEntry['reason']`（`docIndexCore.ts:93`），
+              // 用户语言由 `formatHistoryReason` 给出。三种态分别对应：
+              //   - 作用域未持久 / 条目 `ephemeral` → `ephemeral-scope`（连关联都无意义）
+              //   - **无历史证据**（含「本区有既有条目但本次未证明同一目录」）→ `no-evidence`
+              //     ⇒ 这是本轮 M5 补证据位后**新落到这里**的一类：既有条目在，
+              //       但证据不足。用户语言「无法确认属于当前工作区」对该类**准确**。
+              //   - 有证据但索引里没有这条文档 → `no-existing-entry`
+              //     （用户语言「当前工作区里找不到这份文档」——**仅当真没有条目时**才准确，
+              //      故必须与上一类分开判定，不能像旧代码那样把「有既有条目」也算进来）
               reason: !ctx.persisted
                 ? 'ephemeral-scope'
-                : existing === undefined && !ctx.hasHistoryEvidence
-                  ? 'no-evidence'
-                  : 'no-existing-entry',
+                : existing !== undefined && existing.ephemeral === true
+                  ? 'ephemeral-scope'
+                  : !ctx.hasHistoryEvidence
+                    ? 'no-evidence'
+                    : 'no-existing-entry',
               legacyKeys: [`${LEGACY_LIBRARY_KEY}#${key}`],
             });
             continue;
