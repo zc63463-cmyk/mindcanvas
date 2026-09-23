@@ -492,11 +492,11 @@ describe('P0-A：*Safe 变体（四态可判别 + 错误码归因）', () => {
   });
 
   it('statFile：文件读不到 → null（不可复查，调用方须保守不删）', async () => {
-    const { host, root } = await mount((r) => r.file('a.mm.md', '#'));
+    const { host } = await mount((r) => r.file('a.mm.md', '#'));
     const [f] = flattenFiles(await host.scan());
     if (!f) throw new Error('没扫到文件');
+    // 句柄读不到文件（权限撤回 / 实现差异）→ statOf 回落 {0,0} → statFile 返回 null
     Object.defineProperty(f.handle, 'getFile', { configurable: true, value: undefined });
-    await root.scan; // 保持 root 引用（避免未使用告警）
     expect(await host.statFile(f)).toBeNull();
   });
 
