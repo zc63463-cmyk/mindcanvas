@@ -1,0 +1,167 @@
+[snapshot] 产物构建于 2026-09-23 18:57:09 · 引用的入口 = main-EMdokVhU.js
+[snapshot] 最新源码 2026-09-23 18:30:40 · HEAD 提交 2026-09-23 16:27:34
+[snapshot] 页面实际加载 = main-EMdokVhU.js
+{
+  "script": "verify-f1f2-browser",
+  "base": "http://localhost:5175",
+  "checks": {
+    "F1③.0 文档已 durable（磁盘含上一次保存内容）": {
+      "ok": true,
+      "detail": {
+        "attempts": 1,
+        "s2gBlockedTimes": 0
+      }
+    },
+    "F1③.0b 保存后文档 clean（保存指示为「已保存」）": {
+      "ok": true,
+      "detail": {
+        "saveState": "✓ 已保存"
+      }
+    },
+    "F1③.2 租约期间提示**不是** busy-physical（「上一份写入还没有结束」）": {
+      "ok": true,
+      "detail": {
+        "leaseNotice": []
+      }
+    },
+    "F1③.3 3 次 Ctrl+S 期间 `saving` 不闪（从未出现「保存中…」）": {
+      "ok": true,
+      "detail": {
+        "stateSamples": [
+          "✓ 已保存",
+          "✓ 已保存",
+          "✓ 已保存"
+        ]
+      }
+    },
+    "F1③.4 租约期间 dirty 不变（起始与结束一致，且 3 次采样恒定）": {
+      "ok": true,
+      "detail": {
+        "dirtyAtLeaseStart": false,
+        "dirtyDuring": false,
+        "stateAtLeaseStart": "✓ 已保存",
+        "stateSamples": [
+          "✓ 已保存",
+          "✓ 已保存",
+          "✓ 已保存"
+        ]
+      }
+    },
+    "F1③.5 租约期间**零新增写入**（Ctrl+S 未触发任何写盘；旧文件内容不变）": {
+      "ok": true,
+      "detail": {
+        "writesAtLeaseStart": 2,
+        "duringWrites": 2,
+        "sameText": true,
+        "note": "基线在点「保留两份」之后、第 1 次 Ctrl+S 之前采样：此时改名的「写目标/删源」尚被 5s 延迟挂起，故该窗口内任何写入都只能来自 Ctrl+S。"
+      }
+    },
+    "F1③.6 租约结束后改名成功（旧路径不再存在，出现新路径）": {
+      "ok": true,
+      "detail": {
+        "listAfter": [
+          "f1-renamed 999.mm.md"
+        ]
+      }
+    },
+    "F1③.7 改名后再 Ctrl+S 写入**新路径**（不是旧路径）": {
+      "ok": true,
+      "detail": {
+        "lastWrite": {
+          "ws": "ws-f1",
+          "path": "f1-renamed 999.mm.md",
+          "bytes": 21
+        },
+        "renamedTo": "f1-renamed 999.mm.md"
+      }
+    },
+    "F2.0 组合态确实建立（编辑框有未上屏文本）": {
+      "ok": true,
+      "detail": {
+        "composing": "zhong"
+      }
+    },
+    "F2.1 组合进行中删除：**不弹**三选模态": {
+      "ok": true,
+      "detail": {
+        "modalVisible": false
+      }
+    },
+    "F2.2 组合进行中删除：文档**未被删除**（仍在磁盘）": {
+      "ok": true,
+      "detail": {
+        "stillOnDisk": true
+      }
+    },
+    "F1③/F2.5 全程零原生对话框调用": {
+      "ok": true,
+      "detail": {
+        "dialogs": []
+      }
+    }
+  },
+  "unconfirmed": [
+    {
+      "label": "F1③.1 租约期间的 busy-lease 文案（「正在处理上一步操作…」）",
+      "reason": "本 harness 在租约窗口内连按 3 次 Ctrl+S，**未观测到**「正在处理上一步操作」这句 busy-lease 文案（已观测 leaseNotice=[]；同一窗口的 F1③.2~③.5 均通过，说明拒绝行为成立但提示未必以该句呈现，或提示通道/时机与此 harness 的采样错开）。不冒充已验证：busy-lease 文案保持 unconfirmed。"
+    },
+    {
+      "label": "F2.3 结束组合后的**自动续跑**（第 ④ 条）",
+      "reason": "CDP 组合事件确实到达产品（compEvents=[\"start\",\"end\"]），但结束后未出现确认条/三选（{\"threeWay\":false,\"confirmBar\":false}）。以真实 IME 复现「候选串上屏 → compositionend」的时机本 harness 无法保证，按 §8.2 纪律保持 unconfirmed，不冒充已验证。"
+    },
+    {
+      "label": "F2 IME 第 ⑤ 条（候选串完整上屏 / 候选窗口行为）",
+      "reason": "CDP Input.imeSetComposition 能驱动真实 composition 事件，但**候选窗口与上屏时机**不可复现；按 P0-A §8.2 的纪律，第 ⑤ 条保持 unconfirmed，不用合成事件冒充。"
+    }
+  ],
+  "findings": [],
+  "durableAttempts": 1,
+  "s2gBlocked": false,
+  "conflictShownOnFreeName": false,
+  "conflictText": "",
+  "leaseNotice": [],
+  "stateSamples": [
+    "✓ 已保存",
+    "✓ 已保存",
+    "✓ 已保存"
+  ],
+  "dirtyDuring": false,
+  "stateAtLeaseStart": "✓ 已保存",
+  "dirtyAtLeaseStart": false,
+  "writesAtLeaseStart": 2,
+  "duringWrites": 2,
+  "textAtLeaseStart": null,
+  "listAfterRename": [
+    "f1-renamed 999.mm.md"
+  ],
+  "renamedTo": "f1-renamed 999.mm.md",
+  "lastWrite": {
+    "ws": "ws-f1",
+    "path": "f1-renamed 999.mm.md",
+    "bytes": 21
+  },
+  "compEventsAfterStart": [
+    "start"
+  ],
+  "compositionValue": "zhong",
+  "hasDeleteMenu": true,
+  "imeNotice": [],
+  "modalVisibleDuringComposition": false,
+  "compEventsAfterEnd": [
+    "start",
+    "end"
+  ],
+  "afterCommit": {
+    "threeWay": false,
+    "confirmBar": false
+  },
+  "f2BodyDiag": {
+    "hasFm": true,
+    "hasFmConfirm": false,
+    "hasConflict": false,
+    "bodySnippet": " mindcanvas·经典贴纸玻璃◆ 插件已载✓ 已保存适配视图图库关系○ 浏览模式↶↷保存zhong甲乙帧 epoch2节点3 / 3连线2LODfull后端svg裁剪计算0.00 ms● 调度：dirty-flag 单帧（空闲零 rAF）f2.mm.md●新建打开最近保存另存为导出导出 PNG文件管理FLIPCARD点击画布节点查看笔记正面：节点摘要NOTE（该节点无笔记） .ring { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 60; } /* ② 二级环：子环在外圈（z 58 = 主环之下），一级降透明（非当前级） */ .sub-ring { z-index: 58; } .ring-dim { opacity: .3; } .ring-in {"
+  },
+  "dialogs": [],
+  "result": "PASS",
+  "pass": true
+}
