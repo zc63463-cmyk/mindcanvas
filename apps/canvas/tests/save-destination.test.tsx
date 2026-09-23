@@ -296,3 +296,115 @@ describe('保存目的地 · 另存为与排队写入（复核 R1）', () => {
     expect(h.notice).toHaveBeenCalledWith(SAVE_FAILED_NOTICE);
   });
 });
+
+describe('P0-A · 目的地单一事实源（I-20）与租约的交互', () => {
+  it('rebindDestination 换作用域/相对路径，且 getDestination 与 getDestinationInfo 描述同一事实', () => {
+    const session = new DocumentSaveSession({ readContent: () => null });
+    session.rebindDestination({
+      kind: 'disk',
+      scopeId: 'ws:aaa',
+      relPath: '研发/架构.mm.md',
+      name: '架构.mm.md',
+      handle: OLD_HANDLE,
+    });
+    // 两个读入口必须同源（不得「新方法与旧字段」各存一份）
+    expect(session.getDestination()).toBe(OLD_HANDLE);
+    expect(session.getDestinationInfo()).toEqual({
+      kind: 'disk',
+      relPath: '研发/架构.mm.md',
+      name: '架构.mm.md',
+      durable: true,
+    });
+  });
+
+  it('setDestination（兼容写入口）归一化为同一字段：信息随之更新', () => {
+    const session = new DocumentSaveSession({ readContent: () => null });
+    session.rebindDestination({
+      kind: 'disk',
+      scopeId: 'ws:aaa',
+      relPath: '旧路径.mm.md',
+      name: '旧路径.mm.md',
+      handle: OLD_HANDLE,
+    });
+    session.setDestination(NEW_HANDLE);
+    expect(session.getDestination()).toBe(NEW_HANDLE);
+    // 换了句柄 → 相对路径也必须跟着换（不能留着旧路径）
+    expect(session.getDestinationInfo().relPath).toBe('new.mm.md');
+  });
+
+  it('setDestination 传同一句柄 → 保住作用域与相对路径（不被空值冲掉）', () => {
+    const session = new DocumentSaveSession({ readContent: () => null });
+    session.rebindDestination({
+      kind: 'disk',
+      scopeId: 'ws:aaa',
+      relPath: '研发/架构.mm.md',
+      name: '架构.mm.md',
+      handle: OLD_HANDLE,
+    });
+    session.setDestination(OLD_HANDLE);
+    expect(session.getDestinationInfo().relPath).toBe('研发/架构.mm.md');
+    expect(session.getDestinationInfo().kind).toBe('disk');
+  });
+
+  it('setDestination(undefined) → kind=none 且 durable=false（改名/移动的 I-14 前置判据）', () => {
+    const session = new DocumentSaveSession({ readContent: () => null });
+    session.setDestination(undefined);
+    expect(session.getDestination()).toBeUndefined();
+    expect(session.getDestinationInfo()).toEqual({
+      kind: 'none',
+      relPath: null,
+      name: null,
+      durable: false,
+    });
+  });
+
+  it('★改名重绑后：后续 auto 写新目的地（R-01 的正例）', async () => {
+    const h = makeHarness();
+    const { view } = h;
+    // 模拟改名成功后的重绑（生产由 MindmapStage.onRebound 完成）
+    h.session.rebindDestination({
+      kind: 'disk',
+      scopeId: 'ws:aaa',
+      relPath: '架构设计.mm.md',
+      name: '架构设计.mm.md',
+      handle: NEW_HANDLE,
+    });
+    act(() => {
+      h.controller.updateText(h.root.id, '改名后的编辑');
+    });
+    view.rerender();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(h.writes).toHaveLength(1);
+    expect(h.writes[0]?.handle).toBe(NEW_HANDLE);
+    expect(h.writes[0]?.source).toContain('改名后的编辑');
+  });
+
+  it('★租约期间 auto 不写盘；释放后补写（含补写用的 flushTick 通道）', async () => {
+    const h = makeHarness();
+    const { view } = h;
+    const lease = h.session.beginExclusiveOp('rename');
+    expect(lease.kind).toBe('granted');
+
+    act(() => {
+      h.controller.updateText(h.root.id, '租约期间的编辑');
+    });
+    view.rerender();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(320);
+    });
+    // 租约挡回了入口：零写入（不是靠清定时器）
+    expect(h.writes).toHaveLength(0);
+
+    if (lease.kind === 'granted') h.session.endExclusiveOp(lease.leaseId);
+    act(() => {
+      h.controller.updateText(h.root.id, '释放后的编辑');
+    });
+    view.rerender();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(320);
+    });
+    expect(h.writes).toHaveLength(1);
+  });
+});

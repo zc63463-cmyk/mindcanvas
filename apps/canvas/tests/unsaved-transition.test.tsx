@@ -774,3 +774,67 @@ describe('离开决策器 · 异步目标（MG-R3）', () => {
     expect(view.result.current.prompt).toBeNull();
   });
 });
+
+/**
+ * P0-A：离开决策器与**文件操作**的共用通道（F2 同族）。
+ *
+ * 本轮**不改**决策器（排除项），所以这里只钉住两件事：
+ *  ① 决策器的 `flushEdits` 与 F2 用的是**同一族**信号 —— `'composing'` 暂缓、
+ *     `'failed'` 保留草稿，两者对「组合/草稿失败」的处理必须一致（不得一个放行一个拦住）；
+ *  ② 租约期间 `isSaving()` 为假的语义边界：租约不是「在保存」，但提交确实被挡回 ——
+ *     决策器据此走的仍是「干净则直接执行」那条路（文件操作自己会拒绝）。
+ */
+describe('P0-A · 离开决策器与文件操作同族的信号一致', () => {
+  it('★组合未结束：决策器暂缓（非模态），与 F2 的 composing 分支同判', async () => {
+    const port = makePort({ flushEdits: () => 'composing' as const });
+    const { view } = setup(port);
+    let switched = false;
+    await act(async () => {
+      void view.result.current.requestLeave(() => {
+        switched = true;
+      });
+    });
+    // 不弹模态（模态聚焦会把未确认候选串当正文提交）
+    expect(view.result.current.prompt).toBeNull();
+    expect(view.result.current.blockedNotice).toBe(LEAVE_COMPOSITION_DEFERRED_NOTICE);
+    expect(switched).toBe(false);
+  });
+
+  it('★草稿提交失败：保留草稿、不离开，与 F2 的 draft-failed 分支同判', async () => {
+    const port = makePort({ flushEdits: () => 'failed' as const });
+    const { view } = setup(port);
+    let switched = false;
+    await act(async () => {
+      void view.result.current.requestLeave(() => {
+        switched = true;
+      });
+    });
+    expect(switched).toBe(false);
+    // 与 F2 一致：草稿失败的请求保持活动（可修正后重试），模态带可读提示
+    expect(view.result.current.prompt?.notice).toBeTruthy();
+  });
+
+  it('干净且无 I/O → 直接执行目标（与文件操作无关的路径不受 P0-A 影响）', async () => {
+    const { view } = setup(makePort());
+    let switched = false;
+    await act(async () => {
+      await view.result.current.requestLeave(() => {
+        switched = true;
+      });
+    });
+    expect(switched).toBe(true);
+  });
+
+  it('★租约不改变决策器判据：isSaving 为假即视为「无 I/O」（文件操作自行拒绝）', async () => {
+    // 语义边界：租约不是「在保存」。决策器不该因为租约存在就把用户锁在文档里；
+    // 真正的互斥由文件操作自己的 beginExclusiveOp 负责（P0-A 的租约）。
+    const port = makePort({ isDirty: () => true, isSaving: () => false });
+    const { view } = setup(port);
+    await act(async () => {
+      void view.result.current.requestLeave(() => undefined);
+    });
+    // dirty 且无 I/O → 三选模态（而不是被租约误判成「正在保存」）
+    expect(view.result.current.prompt).not.toBeNull();
+    expect(view.result.current.prompt?.busy).toBe(false);
+  });
+});

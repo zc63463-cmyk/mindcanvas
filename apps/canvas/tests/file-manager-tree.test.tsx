@@ -138,6 +138,14 @@ const dirRow = (c: HTMLElement, path: string): HTMLElement => {
   if (!el) throw new Error(`找不到目录行 ${path}`);
   return el as HTMLElement;
 };
+/** 展开目录：切换按钮在目录行**内部**（点行 DIV 不会展开） */
+const expandDir = (c: HTMLElement, path: string): void => {
+  const row = c.querySelector(`[data-dir-path="${path}"]`);
+  if (!row) throw new Error(`找不到目录行 ${path}`);
+  const btn = row.querySelector('button');
+  if (!btn) throw new Error(`目录行 ${path} 没有切换按钮`);
+  fireEvent.click(btn);
+};
 const docRow = (c: HTMLElement, name: string): HTMLElement => {
   const el = c.querySelector(`[data-doc-name="${name}"]`);
   if (!el) throw new Error(`找不到文件行 ${name}`);
@@ -514,4 +522,178 @@ describe('文件工作台 · 预设目录与分类 Tab 与星标', () => {
 
 beforeEach(() => {
   localStorage.clear();
+});
+
+/**
+ * P0-A：当前文档操作的**分流**（只有当前文档走租约/重绑，其余节点语义不变）。
+ *
+ * 判别核心：面板必须按「这个文件是不是当前正在编辑的那份」分流 ——
+ * 分流错了会出现两种事故：当前文档走旧路径（目的地不重绑，R-01），
+ * 或普通文件走新路径（无谓地占用租约、动离开语义）。
+ */
+describe('P0-A · 当前文档操作分流', () => {
+  function setupWithCurrent(currentPath: string | null) {
+    const { ws, calls } = fakeWorkspace(TREE);
+    const ops = {
+      renamed: [] as Array<{ path: string; name: string; overwrite?: boolean }>,
+      moved: [] as Array<{ path: string; dir: string }>,
+      deleted: [] as string[],
+      duplicated: [] as string[],
+      notices: [] as string[],
+      dismissed: 0,
+    };
+    const ui = { dirtyChoice: null, partial: null, notice: null };
+    const currentDocOps = {
+      currentPath,
+      ui,
+      rename: async (f: WorkspaceFile, name: string, overwrite?: boolean) => {
+        ops.renamed.push({ path: f.path, name, overwrite });
+      },
+      move: async (f: WorkspaceFile, targetDir: string) => {
+        ops.moved.push({ path: f.path, dir: targetDir });
+      },
+      duplicate: async (f: WorkspaceFile) => {
+        ops.duplicated.push(f.path);
+      },
+      delete: async (f: WorkspaceFile) => {
+        ops.deleted.push(f.path);
+      },
+      resolveConflictName: async (_dir: string, name: string) => name,
+      dismissNotice: () => {
+        ops.dismissed += 1;
+      },
+    };
+    const utils = render(
+      <FileManager
+        library={new DocLibrary()}
+        workspace={ws}
+        currentDocOps={currentDocOps}
+        currentPath={currentPath}
+        onOpenEntry={vi.fn()}
+        onOpenFile={vi.fn()}
+        onCreate={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    return { ...utils, calls, ops };
+  }
+
+  it('★非当前文档保持既有语义（不走 currentDocOps）', async () => {
+    const { container, calls, ops } = setupWithCurrent('研发/架构.mm.md');
+    await waitFor(() => expect(screen.getByText('首页.mm.md')).toBeDefined());
+    // 「首页.mm.md」不是当前文档 → 拖拽归位应走既有 moveFile
+    const src = docRow(container, '首页.mm.md');
+    const target = dirRow(container, '日记');
+    fireEvent.dragStart(src);
+    fireEvent.dragOver(target);
+    fireEvent.drop(target);
+    await waitFor(() => expect(calls.moved.length).toBe(1));
+    expect(ops.moved).toHaveLength(0); // 编排一次都没被调用
+  });
+
+  it('★当前文档删除 → 走 F2 流程（不走既有确认条）', async () => {
+    const { container, ops } = setupWithCurrent('研发/架构.mm.md');
+    await waitFor(() => expect(dirRow(container, '研发')).not.toBeNull());
+    // 展开目录才能看到嵌套文档（树默认只展开根）
+    expandDir(container, '研发');
+    await waitFor(() => expect(container.querySelector('[data-doc-path="研发/架构.mm.md"]')).not.toBeNull());
+    fireEvent.contextMenu(docRow(container, '架构.mm.md'));
+    await waitFor(() => expect(container.querySelector('[data-menu-delete]')).not.toBeNull());
+    fireEvent.click(container.querySelector('[data-menu-delete]')!);
+    // 当前文档：直接进 F2 流程，**不**出现既有确认条
+    await waitFor(() => expect(ops.deleted).toEqual(['研发/架构.mm.md']));
+    expect(container.querySelector('[data-fm-confirm]')).toBeNull();
+  });
+
+  it('★非当前文档删除 → 仍走既有内联确认条（零弱化）', async () => {
+    const { container, calls, ops } = setupWithCurrent('研发/架构.mm.md');
+    await waitFor(() => expect(screen.getByText('首页.mm.md')).toBeDefined());
+    fireEvent.contextMenu(docRow(container, '首页.mm.md'));
+    await waitFor(() => expect(container.querySelector('[data-menu-delete]')).not.toBeNull());
+    fireEvent.click(container.querySelector('[data-menu-delete]')!);
+    await waitFor(() => expect(container.querySelector('[data-fm-confirm]')).not.toBeNull());
+    expect(ops.deleted).toHaveLength(0);
+    expect(calls.removed).toHaveLength(0); // 确认条未确认 → 零删除
+  });
+
+  it('★右键菜单有「创建副本」入口 → 走 currentDocOps.duplicate', async () => {
+    const { container, ops } = setupWithCurrent('研发/架构.mm.md');
+    await waitFor(() => expect(screen.getByText('首页.mm.md')).toBeDefined());
+    fireEvent.contextMenu(docRow(container, '首页.mm.md'));
+    const dup = await waitFor(() => container.querySelector('[data-menu-duplicate]'));
+    fireEvent.click(dup!);
+    await waitFor(() => expect(ops.duplicated).toEqual(['首页.mm.md']));
+  });
+
+  it('★F5：同名不同目录 —— 只有真正打开的那一份被当作当前文档', async () => {
+    // 前置：研发/笔记.mm.md 与 个人/笔记.mm.md 同名；当前打开的是研发那一份。
+    // 判别：对「个人」那一份做删除必须走**既有确认条**（它不是当前文档），
+    // 对「研发」那一份必须走 F2 —— 若按名字判定当前文档，两者会分错。
+    const { ws, calls } = fakeWorkspace([
+      dir('研发', [file('研发/笔记.mm.md')]),
+      dir('个人', [file('个人/笔记.mm.md')]),
+    ]);
+    const ops = { deleted: [] as string[] };
+    const currentDocOps = {
+      currentPath: '研发/笔记.mm.md',
+      ui: { dirtyChoice: null, partial: null, notice: null },
+      rename: vi.fn(async () => {}),
+      move: vi.fn(async () => {}),
+      duplicate: vi.fn(async () => {}),
+      delete: async (f: WorkspaceFile) => {
+        ops.deleted.push(f.path);
+      },
+      resolveConflictName: async (_d: string, n: string) => n,
+      dismissNotice: vi.fn(),
+    };
+    const { container } = render(
+      <FileManager
+        library={new DocLibrary()}
+        workspace={ws}
+        currentDocOps={currentDocOps}
+        currentPath="研发/笔记.mm.md"
+        onOpenEntry={vi.fn()}
+        onOpenFile={vi.fn()}
+        onCreate={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    // 展开两个目录（展开态是 Set，互不影响）
+    await waitFor(() => expect(dirRow(container, '研发')).not.toBeNull());
+    expandDir(container, '研发');
+    expandDir(container, '个人');
+    await waitFor(() => expect(container.querySelectorAll('[data-doc-name="笔记.mm.md"]').length).toBe(2));
+
+    // 「个人」那一份：同名但**不是**当前文档 → 既有确认条
+    const personal = container.querySelector(
+      '[data-doc-path="个人/笔记.mm.md"]',
+    ) as HTMLElement | null;
+    if (personal === null) throw new Error('找不到 个人/笔记.mm.md 行');
+    fireEvent.contextMenu(personal);
+    await waitFor(() => expect(container.querySelector('[data-menu-delete]')).not.toBeNull());
+    fireEvent.click(container.querySelector('[data-menu-delete]')!);
+    await waitFor(() => expect(container.querySelector('[data-fm-confirm]')).not.toBeNull());
+    expect(ops.deleted).toHaveLength(0); // 不是当前文档 → 没进 F2
+    expect(calls.removed).toHaveLength(0); // 确认条未确认 → 零删除
+    fireEvent.click(container.querySelector('[data-fm-confirm-cancel]')!);
+  });
+
+  it('未注入 currentDocOps（旧调用方）→ 不渲染副本入口且不报错', async () => {
+    const { ws } = fakeWorkspace(TREE);
+    const { container } = render(
+      <FileManager
+        library={new DocLibrary()}
+        workspace={ws}
+        onOpenEntry={vi.fn()}
+        onOpenFile={vi.fn()}
+        onCreate={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText('首页.mm.md')).toBeDefined());
+    fireEvent.contextMenu(docRow(container, '首页.mm.md'));
+    await waitFor(() => expect(container.querySelector('[data-menu-delete]')).not.toBeNull());
+    expect(container.querySelector('[data-menu-duplicate]')).toBeNull();
+  });
+
 });

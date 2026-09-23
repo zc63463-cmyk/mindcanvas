@@ -249,3 +249,130 @@ describe('FileManager · 新建文件夹命名（内联输入，替代 window.pr
     expect(calls.dirs[0]).toEqual({ parent: '日记', name: '子目录' });
   });
 });
+
+/**
+ * P0-A：删除确认的内容分级（§3.6「确认内容分级」）与当前文档的 F2 分流。
+ *
+ * 既有四条用例（普通文档 / 目录 / 兼容路径）保持不变 —— 它们锚定「内联确认条」这一层。
+ * 本组补的是 P0-A 新增的两件事：
+ *  ① 当前打开的文档：删除必须走 F2 流程（草稿/组合/未保存三选），**不**直接进确认条；
+ *  ② 其余文档仍走确认条（零弱化）。
+ */
+describe('P0-A · 当前文档删除走 F2 分流', () => {
+  function setupWithOps(currentPath: string | null) {
+    const { ws, calls } = fakeWorkspace(TREE);
+    const ops = { deleted: [] as string[], dismissed: 0 };
+    const currentDocOps = {
+      currentPath,
+      ui: { dirtyChoice: null, partial: null, notice: null },
+      rename: vi.fn(async () => {}),
+      move: vi.fn(async () => {}),
+      duplicate: vi.fn(async () => {}),
+      delete: async (f: WorkspaceFile) => {
+        ops.deleted.push(f.path);
+      },
+      resolveConflictName: async (_d: string, n: string) => n,
+      dismissNotice: () => {
+        ops.dismissed += 1;
+      },
+    };
+    const utils = render(
+      <FileManager
+        library={new DocLibrary()}
+        workspace={ws}
+        currentDocOps={currentDocOps}
+        currentPath={currentPath}
+        onOpenEntry={vi.fn()}
+        onOpenFile={vi.fn()}
+        onCreate={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    return { ...utils, calls, ops };
+  }
+
+  it('★当前文档：点删除 → 直接进 F2（确认条不出现，删除由流程决定）', async () => {
+    const { container, ops } = setupWithOps('首页.mm.md');
+    await waitFor(() => expect(screen.getByText('首页.mm.md')).toBeDefined());
+    fireEvent.contextMenu(docRow(container, '首页.mm.md'));
+    await waitFor(() => expect(container.querySelector('[data-menu-delete]')).not.toBeNull());
+    fireEvent.click(container.querySelector('[data-menu-delete]')!);
+    await waitFor(() => expect(ops.deleted).toEqual(['首页.mm.md']));
+    // 关键：**不**出现既有确认条 —— 当前文档的确认由 F2 自己的状态机负责
+    expect(container.querySelector('[data-fm-confirm]')).toBeNull();
+  });
+
+  it('★非当前文档：仍走既有确认条（零弱化）', async () => {
+    const { container, calls, ops } = setupWithOps('研发/架构.mm.md');
+    await waitFor(() => expect(screen.getByText('首页.mm.md')).toBeDefined());
+    fireEvent.contextMenu(docRow(container, '首页.mm.md'));
+    await waitFor(() => expect(container.querySelector('[data-menu-delete]')).not.toBeNull());
+    fireEvent.click(container.querySelector('[data-menu-delete]')!);
+    await waitFor(() => expect(container.querySelector('[data-fm-confirm]')).not.toBeNull());
+    expect(ops.deleted).toHaveLength(0);
+    // 确认后走既有 removeFile（既有断言边界不动）
+    fireEvent.click(container.querySelector('[data-fm-confirm-ok]')!);
+    await waitFor(() => expect(calls.removed).toEqual(['首页.mm.md']));
+  });
+
+  it('提示条：notice 非空 → 渲染并可「知道了」关闭', async () => {
+    const { ws } = fakeWorkspace(TREE);
+    let dismissed = 0;
+    const notice = '没有写入权限：请重新授权后重试。';
+    const currentDocOps = {
+      currentPath: '首页.mm.md',
+      ui: { dirtyChoice: null, partial: null, notice },
+      rename: vi.fn(async () => {}),
+      move: vi.fn(async () => {}),
+      duplicate: vi.fn(async () => {}),
+      delete: vi.fn(async () => {}),
+      resolveConflictName: async (_d: string, n: string) => n,
+      dismissNotice: () => {
+        dismissed += 1;
+      },
+    };
+    const { container } = render(
+      <FileManager
+        library={new DocLibrary()}
+        workspace={ws}
+        currentDocOps={currentDocOps}
+        onOpenEntry={vi.fn()}
+        onOpenFile={vi.fn()}
+        onCreate={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    const bar = await waitFor(() => container.querySelector('[data-fm-op-notice]'));
+    expect(bar!.textContent).toContain('没有写入权限');
+    fireEvent.click(container.querySelector('[data-fm-op-notice-dismiss]')!);
+    expect(dismissed).toBe(1);
+  });
+
+  it('空 notice（如「与源同名」的静默取消）→ **不渲染**提示条', async () => {
+    const { ws } = fakeWorkspace(TREE);
+    const currentDocOps = {
+      currentPath: '首页.mm.md',
+      ui: { dirtyChoice: null, partial: null, notice: '' },
+      rename: vi.fn(async () => {}),
+      move: vi.fn(async () => {}),
+      duplicate: vi.fn(async () => {}),
+      delete: vi.fn(async () => {}),
+      resolveConflictName: async (_d: string, n: string) => n,
+      dismissNotice: vi.fn(),
+    };
+    const { container } = render(
+      <FileManager
+        library={new DocLibrary()}
+        workspace={ws}
+        currentDocOps={currentDocOps}
+        onOpenEntry={vi.fn()}
+        onOpenFile={vi.fn()}
+        onCreate={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText('首页.mm.md')).toBeDefined());
+    // 静默取消 = 没有反馈就是正确反馈
+    expect(container.querySelector('[data-fm-op-notice]')).toBeNull();
+  });
+});

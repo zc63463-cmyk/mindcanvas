@@ -18,6 +18,7 @@ import type { RefObject } from 'react';
 import type { DocumentHost, EditorController, FsFileHandle, MindDoc } from '@mindcanvas/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SAVE_FAILED_NOTICE } from '../src/documentLifecycle';
+import { makeTextNode } from '@mindcanvas/kernel';
 import { useAutoSave } from '../src/hooks/useAutoSave';
 import { DocumentSaveSession } from '../src/hooks/useDocumentSaveSession';
 import { SAVE_BLOCKED_NOTICE } from '../src/hooks/saveGuard';
@@ -48,6 +49,8 @@ function setup(
     doc?: Partial<MindDoc>;
     /** S2G：同步标记初值；缺省 = 与 doc.source 同源（现行为） */
     synced?: string | null;
+    /** P0-A：租约释放后的补写触发器 */
+    flushTick?: number;
   } = {},
 ) {
   const controller = makeController(over.controller);
@@ -82,6 +85,7 @@ function setup(
       autoSaveTimer,
       syncedSourceRef,
       onBlockedSave,
+      flushTick: over.flushTick ?? 0,
     }),
   );
   return {
@@ -279,5 +283,90 @@ describe('useAutoSave · S2G 同步守卫', () => {
 
     expect(docHost.save).toHaveBeenCalledTimes(1);
     expect(controller.markSaved).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('P0-A · 租约对自动保存的拦截（I-16/I-18）', () => {
+  it('★租约期间 auto 提交被挡回 blocked，且**不入队**（saving 不闪）', async () => {
+    const h = setup();
+    h.session.beginExclusiveOp('rename');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(320);
+    });
+    expect(h.docHost.save).not.toHaveBeenCalled();
+    // 不入队 → 会话不认为自己「在保存」（saving 不闪）
+    expect(h.session.isSaving()).toBe(false);
+    expect(h.savingLog.every((v) => v === false)).toBe(true);
+  });
+
+  it('★租约挡回时**不发**守卫拦截文案（那是另一类原因，文案不得混用）', async () => {
+    const h = setup();
+    h.session.beginExclusiveOp('rename');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(320);
+    });
+    // blocked 会发 SAVE_BLOCKED_NOTICE；但绝不能声称「写入忙」或「已保存」
+    expect(h.onBlockedSave).toHaveBeenCalledWith(SAVE_BLOCKED_NOTICE);
+    expect(h.onBlockedSave).not.toHaveBeenCalledWith(SAVE_FAILED_NOTICE);
+  });
+
+  it('★释放租约后 flushTick 递增 → 真的补写一次（内容引用未变也生效）', async () => {
+    // 这条锚定 onAfterRelease **必须**靠显式触发器：租约期间内容变化的路径上，
+    // 补写时 `content` 引用已经稳定（与上次 effect 相同），仅靠 deps 的 content 不会重排，
+    // 那条内容就会一直留在内存里（I-18 时序表末行要挡的正是它）。
+    const tickRef = { current: 0 };
+    // root 用真实节点形状（`EditorController.root` 是 EditableNode，不是任意对象）
+    const root = makeTextNode('稳定内容');
+    const controller = makeController({ dirty: true, root, serialize: () => 'SRC' });
+    const docHost = makeDocHost();
+    const doc: MindDoc = {
+      id: 'a.mm.md',
+      name: 'a.mm.md',
+      source: 'OLD',
+      handle: HANDLE,
+      saved: true,
+      ts: 0,
+    };
+    const setDoc = vi.fn();
+    const autoSaveTimer: RefObject<ReturnType<typeof setTimeout> | null> = { current: null };
+    const session = new DocumentSaveSession({ readContent: () => controller.root });
+    const syncedSourceRef: RefObject<string | null> = { current: 'OLD' };
+    const view = renderHook(() =>
+      useAutoSave({
+        controller,
+        docHost,
+        doc,
+        setDoc,
+        session,
+        autoSaveTimer,
+        syncedSourceRef,
+        flushTick: tickRef.current,
+      }),
+    );
+
+    // 第一次：内容未变（root 引用相同）→ 定时器排定一次，写一次
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(320);
+    });
+    expect(docHost.save).toHaveBeenCalledTimes(1);
+
+    // 模拟「租约期间改了内容但被挡回、释放后补写」：root 引用**不变**，只递增 tick
+    tickRef.current += 1;
+    view.rerender();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(320);
+    });
+    // ★必须再写一次：若 flushTick 没进 deps，这里会停在 1 → 转红
+    expect(docHost.save).toHaveBeenCalledTimes(2);
+  });
+
+  it('★物理写在途时 auto 仍可继续（physicalWrites 只挡新租约，不挡写入本身）', async () => {
+    const h = setup();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(320);
+    });
+    // 写入结束后计数回落，不会永久卡住后续的 beginExclusiveOp
+    expect(h.session.physicalWritesInFlight).toBe(0);
+    expect(h.session.beginExclusiveOp('rename').kind).toBe('granted');
   });
 });

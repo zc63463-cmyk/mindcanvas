@@ -102,6 +102,9 @@ export function FileManagerTree({
         key={n.key}
         data-doc-row
         data-doc-name={n.name}
+        // 完整相对路径：同名不同目录的判别要靠它
+        // （只按 `data-doc-name` 取行会在 F5 场景里命中两份，无法区分）
+        data-doc-path={n.fullPath}
         draggable={!renaming}
         onDragStart={() => ctx.setDragKey(n.key)}
         onDragEnd={() => {
