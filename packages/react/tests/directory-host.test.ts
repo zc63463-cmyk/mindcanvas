@@ -304,6 +304,209 @@ describe('文件增删改（真实句柄操作）', () => {
   });
 });
 
+/**
+ * P0-A：`*Safe` 变体（contracts §4.4）。
+ *
+ * 上方既有 `renameFile` / `moveFile` / `removeFile` / `removeDir` 的用例**期望不动**
+ * （成功路径语义不变，见 acceptance §4「必须一起核对的既有断言边界」）；
+ * 本组只覆盖新出口：可判别四态 + 错误码归因 + 「能力缺失不静默成功」。
+ */
+describe('P0-A：*Safe 变体（四态可判别 + 错误码归因）', () => {
+  /** 让某个目录的 removeEntry 抛指定错误（模拟权限被撤回） */
+  function breakRemove(dir: FakeDir, error: Error): void {
+    Object.defineProperty(dir, 'removeEntry', {
+      configurable: true,
+      value: async (): Promise<void> => {
+        throw error;
+      },
+    });
+  }
+  /** 让某个目录**失去** removeEntry 能力（模拟句柄实现差异） */
+  function dropRemove(dir: FakeDir): void {
+    Object.defineProperty(dir, 'removeEntry', { configurable: true, value: undefined });
+  }
+
+  it('renameFileSafe 成功 → ok，新文件内容 = 旧内容', async () => {
+    const { host, root } = await mount((r) => r.file('旧.mm.md', '# 正文'));
+    const [f] = flattenFiles(await host.scan());
+    if (!f) throw new Error('没扫到文件');
+    const out = await host.renameFileSafe(f, '新.mm.md');
+    expect(out.kind).toBe('ok');
+    expect(out.kind === 'ok' ? out.value.path : null).toBe('新.mm.md');
+    expect(root.children.has('旧.mm.md')).toBe(false);
+    expect((root.children.get('新.mm.md') as FakeFile).content).toBe('# 正文');
+  });
+
+  it('★改名：删源抛 E-PERMISSION → partial（目标已建、源仍在），created 是新文件', async () => {
+    // R-02 的核心：旧实现只抛异常，调用方无从知道目标已经建成
+    const { host, root } = await mount((r) => r.file('旧.mm.md', '# 正文'));
+    breakRemove(root, Object.assign(new Error('拒绝'), { name: 'NotAllowedError' }));
+    const [f] = flattenFiles(await host.scan());
+    if (!f) throw new Error('没扫到文件');
+    const out = await host.renameFileSafe(f, '新.mm.md');
+    expect(out.kind).toBe('partial');
+    if (out.kind !== 'partial') throw new Error('期望 partial');
+    expect(out.sourceRetained).toBe(true);
+    expect(out.created.name).toBe('新.mm.md');
+    expect(out.error.code).toBe('E-PERMISSION');
+    expect(out.error.retryable).toBe(true);
+    // 磁盘现状：两份都在（这正是 UI 必须说「两份」的事实依据）
+    expect(root.children.has('新.mm.md')).toBe(true);
+    expect(root.children.has('旧.mm.md')).toBe(true);
+  });
+
+  it('★移动：删源抛 E-PERMISSION → partial，created 在目标目录（F3 前置）', async () => {
+    const { host, root } = await mount((r) => {
+      r.file('架构.mm.md', '# 架构');
+      r.dir('归档');
+    });
+    breakRemove(root, Object.assign(new Error('拒绝'), { name: 'NotAllowedError' }));
+    const [f] = flattenFiles(await host.scan());
+    if (!f) throw new Error('没扫到文件');
+    const out = await host.moveFileSafe(f, '归档');
+    expect(out.kind).toBe('partial');
+    if (out.kind !== 'partial') throw new Error('期望 partial');
+    expect(out.created.path).toBe('归档/架构.mm.md');
+    expect(root.children.has('架构.mm.md')).toBe(true);
+    expect(root.dir('归档').children.has('架构.mm.md')).toBe(true);
+  });
+
+  it('移动：写目标失败 → failed(write)，**源未动**（可安全重试）', async () => {
+    const { host, root } = await mount((r) => {
+      r.file('a.mm.md', '# A');
+      r.dir('目标');
+    });
+    Object.defineProperty(root.dir('目标'), 'getFileHandle', {
+      configurable: true,
+      value: undefined,
+    });
+    const [f] = flattenFiles(await host.scan());
+    if (!f) throw new Error('没扫到文件');
+    const out = await host.moveFileSafe(f, '目标');
+    expect(out.kind).toBe('failed');
+    if (out.kind !== 'failed') throw new Error('期望 failed');
+    expect(out.stage).toBe('write');
+    expect(out.error.code).toBe('E-UNAVAILABLE');
+    // 源一字未动
+    expect(root.children.has('a.mm.md')).toBe(true);
+    expect((root.children.get('a.mm.md') as FakeFile).content).toBe('# A');
+  });
+
+  it('移动：同目录 → ok 且不制造副本、不删源（零操作）', async () => {
+    const { host, root } = await mount((r) => r.file('a.mm.md', '# A'));
+    const [f] = flattenFiles(await host.scan());
+    if (!f) throw new Error('没扫到文件');
+    const out = await host.moveFileSafe(f, '');
+    expect(out.kind).toBe('ok');
+    expect(root.children.has('a.mm.md')).toBe(true);
+    expect(root.children.size).toBe(1);
+  });
+
+  it('★removeFileSafe：removeEntry 能力缺失 → E-UNAVAILABLE，**不得静默成功**', async () => {
+    // 旧 `removeFile` 写 `await dir.removeEntry?.(...)`：能力缺失时整句 = await undefined，
+    // 静默成功（UI 以为删掉了，磁盘上还在）。这条把新行为钉死。
+    const { host, root } = await mount((r) => r.file('a.mm.md', '#'));
+    dropRemove(root);
+    const [f] = flattenFiles(await host.scan());
+    if (!f) throw new Error('没扫到文件');
+    const out = await host.removeFileSafe(f);
+    expect(out.kind).toBe('failed');
+    if (out.kind !== 'failed') throw new Error('期望 failed');
+    expect(out.error.code).toBe('E-UNAVAILABLE');
+    expect(out.error.retryable).toBe(false);
+    // 文件确实还在 —— 这正是「静默成功」会掩盖的事实
+    expect(root.children.has('a.mm.md')).toBe(true);
+  });
+
+  it('removeFileSafe 成功 → ok；removeDirSafe 能力缺失同样不静默', async () => {
+    const { host, root } = await mount((r) => {
+      r.file('a.mm.md', '#');
+      r.dir('子');
+    });
+    const [f] = flattenFiles(await host.scan());
+    if (!f) throw new Error('没扫到文件');
+    expect((await host.removeFileSafe(f)).kind).toBe('ok');
+    expect(root.children.has('a.mm.md')).toBe(false);
+
+    const tree = await host.scan();
+    const dir = tree.find((n) => n.kind === 'dir');
+    if (dir?.kind !== 'dir') throw new Error('没扫到目录');
+    dropRemove(root);
+    const out = await host.removeDirSafe(dir);
+    expect(out.kind).toBe('failed');
+    expect(out.kind === 'failed' ? out.error.code : null).toBe('E-UNAVAILABLE');
+    expect(root.children.has('子')).toBe(true);
+  });
+
+  it('removeDirSafe：权限被拒 → failed(permission) + E-PERMISSION', async () => {
+    const { host, root } = await mount((r) => r.dir('子'));
+    const tree = await host.scan();
+    const dir = tree.find((n) => n.kind === 'dir');
+    if (dir?.kind !== 'dir') throw new Error('没扫到目录');
+    breakRemove(root, Object.assign(new Error('拒绝'), { name: 'NotAllowedError' }));
+    const out = await host.removeDirSafe(dir);
+    expect(out.kind).toBe('failed');
+    expect(out.kind === 'failed' ? out.stage : null).toBe('permission');
+    expect(out.kind === 'failed' ? out.error.code : null).toBe('E-PERMISSION');
+  });
+
+  it('duplicateFileSafe：同目录建副本，**源一字不改**，内容一致', async () => {
+    const { host, root } = await mount((r) => r.file('架构.mm.md', '# 原文'));
+    const [f] = flattenFiles(await host.scan());
+    if (!f) throw new Error('没扫到文件');
+    const out = await host.duplicateFileSafe(f);
+    expect(out.kind).toBe('ok');
+    if (out.kind !== 'ok') throw new Error('期望 ok');
+    expect(out.value.name).toBe('架构 副本.mm.md');
+    expect((root.children.get('架构 副本.mm.md') as FakeFile).content).toBe('# 原文');
+    expect((root.children.get('架构.mm.md') as FakeFile).content).toBe('# 原文');
+  });
+
+  it('duplicateFileSafe：副本已存在 → 加序号，不覆盖既有副本', async () => {
+    const { host, root } = await mount((r) => {
+      r.file('架构.mm.md', '# 原文');
+      r.file('架构 副本.mm.md', '# 旧副本');
+    });
+    const src = flattenFiles(await host.scan()).find((n) => n.name === '架构.mm.md');
+    if (!src) throw new Error('没扫到源文件');
+    const out = await host.duplicateFileSafe(src);
+    expect(out.kind === 'ok' ? out.value.name : null).toBe('架构 副本 2.mm.md');
+    expect((root.children.get('架构 副本.mm.md') as FakeFile).content).toBe('# 旧副本');
+  });
+
+  it('statFile 读出快照；内容被外部改写后 size 不一致（L4 复查依据）', async () => {
+    const { host, root } = await mount((r) => r.file('a.mm.md', '# 原文'));
+    const [f] = flattenFiles(await host.scan());
+    if (!f) throw new Error('没扫到文件');
+    const before = await host.statFile(f);
+    if (before === null) throw new Error('快照应可读');
+    expect(before.size).toBeGreaterThan(0);
+    // 应用外修改：内容变长（size 变）—— 正是「必须停下来复查」的场景。
+    // 注意 FakeFile 不模拟 mtime 推进（内存替身无真实时钟），故这里只钉 size 维度；
+    // mtime 维度的判据由 file-ops.test.ts 的 statUnchanged 逐条覆盖（纯函数层）。
+    const file = root.children.get('a.mm.md') as FakeFile;
+    file.content = '# 被外部改长了';
+    const after = await host.statFile(f);
+    if (after === null) throw new Error('快照应可读');
+    expect(after.size).not.toBe(before.size);
+  });
+
+  it('statFile：文件读不到 → null（不可复查，调用方须保守不删）', async () => {
+    const { host, root } = await mount((r) => r.file('a.mm.md', '#'));
+    const [f] = flattenFiles(await host.scan());
+    if (!f) throw new Error('没扫到文件');
+    Object.defineProperty(f.handle, 'getFile', { configurable: true, value: undefined });
+    await root.scan; // 保持 root 引用（避免未使用告警）
+    expect(await host.statFile(f)).toBeNull();
+  });
+
+  it('resolveCopyName：为冲突三选「保留两份」算出可用名', async () => {
+    const { host } = await mount((r) => r.file('架构.mm.md', '#'));
+    expect(await host.resolveCopyName('', '架构.mm.md')).toBe('架构 2.mm.md');
+    expect(await host.resolveCopyName('', '新名.mm.md')).toBe('新名.mm.md');
+  });
+});
+
 describe('T4：资产写入 ./assets/', () => {
   it('writeAsset 在工作区根创建 assets/ 并落盘，返回相对路径', async () => {
     const { host, root } = await mount(() => {});
