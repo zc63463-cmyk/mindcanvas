@@ -393,6 +393,32 @@ export type {
   WorkspaceFile,
   WorkspaceNode,
 } from './edit/directoryTypes.js';
+// P0-A：文件操作结果类型与错误码（纯函数层；`*Safe` 变体的返回类型）
+export {
+  FILE_OP_ERROR_CODES,
+  checkFileName,
+  classifyFileOpError,
+  duplicateName,
+  failFileOp,
+  fileOpCreated,
+  fileOpFacts,
+  fileOpValue,
+  isRetryable,
+  partialFileOp,
+  splitDocExt,
+  statUnchanged,
+  toFileOpError,
+  uniqueCopyName,
+} from './edit/fileOps.js';
+export type {
+  FileNameProblem,
+  FileOpError,
+  FileOpErrorCode,
+  FileOpFailStage,
+  FileOpFacts,
+  FileOpOutcome,
+  FileStatSnapshot,
+} from './edit/fileOps.js';
 export { DemoPlugin } from './plugins/demoPlugin.js';
 export type {
   BackendKind,

@@ -14,6 +14,15 @@
  * 宿主保持 `null` 状态，调用方回落既有的 `LocalDocHost`（单文件句柄闭环）。
  */
 import { isAbortError } from './fsError.js';
+import {
+  type FileOpOutcome,
+  type FileStatSnapshot,
+  duplicateName,
+  failFileOp,
+  partialFileOp,
+  toFileOpError,
+  uniqueCopyName,
+} from './fileOps.js';
 import { getDirectoryHandle, verifyPermission, writeWorkspaceRegistry } from './handleStore.js';
 import { BROWSER_SCOPE, applyIdentity, markDormant } from './scopeIdentity.js';
 import type { ScopeId, ScopeState } from './workspaceScope.js';
@@ -95,6 +104,11 @@ function splitExt(name: string): { base: string; ext: string } {
 /** 路径拼接：根目录下 path 为 ''，不再产生前导斜杠 */
 function joinPath(parent: string, name: string): string {
   return parent === '' ? name : `${parent}/${name}`;
+}
+
+/** 取所在目录路径（根目录直属文件 → ''） */
+function parentOf(path: string): string {
+  return path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
 }
 
 /** 取文件的 mtime/size；读不到（权限/实现差异）不抛，回落 0 */
@@ -395,6 +409,226 @@ export class DirectoryWorkspaceHost {
       }
     }
     return candidate;
+  }
+
+  // ---------------------------------------------------------------- P0-A：*Safe 变体
+  //
+  // 既有 `renameFile` / `moveFile` / `removeFile` / `removeDir` 保持签名与抛错行为不变
+  // （既有用例 `directory-host.test.ts` 的期望不因此改动）；UI 一律改调这里的 `*Safe`。
+  //
+  // 为什么必须有 `*Safe`：移动/改名 = 「复制到目标 → 删源」，**不是原子操作**。
+  // 旧实现下「目标已建、删源失败」只能靠 `catch` 收到一个异常，调用方无从知道目标是否
+  // 已经建成（R-02 孤儿副本；R-03 无用户可见通道）。`partial` 这一态把这个事实显式化。
+
+  /** 取文件尺寸/时间戳快照（部分成功后的「外部修改复查」用；读不到 → null = 不可复查） */
+  async statFile(file: WorkspaceFile): Promise<FileStatSnapshot | null> {
+    const { ts, size } = await statOf(file.handle);
+    if (ts === 0 && size === 0) return null;
+    return { size, lastModified: ts };
+  }
+
+  /**
+   * 改名（安全变体）：读旧内容 → 建新文件 → 删旧。
+   *
+   * @param overwrite `false`（缺省）= 不静默加序号也不覆盖，同名直接 `E-EXISTS` 失败，
+   *   由 UI 走冲突三选后带明确的 `overwrite`/`newName` 重入。
+   *   旧 `renameFile` 的静默加序号行为保留在它自己身上，不改（既有用例锚定该行为）。
+   */
+  async renameFileSafe(
+    file: WorkspaceFile,
+    newName: string,
+    overwrite = false,
+  ): Promise<FileOpOutcome<WorkspaceFile>> {
+    let text: string;
+    try {
+      text = await this.readFile(file);
+    } catch (e) {
+      return failFileOp('read', e);
+    }
+    const parentPath = parentOf(file.path);
+    return this.writeThenRemoveSource(parentPath, newName, text, file, overwrite);
+  }
+
+  /**
+   * 移动（安全变体）：复制到目标目录 → 删源。
+   *
+   * 返回 `partial` 时 `created` 就是新位置的文件 —— 调用方应把**会话目的地重绑到它**
+   * （file-management §5.3「当前目的地 = 新文件」），并保留「重试删除原始 / 保留两份 /
+   * 撤销新副本」三条出路。
+   */
+  async moveFileSafe(
+    file: WorkspaceFile,
+    targetDirPath: string,
+    overwrite = false,
+  ): Promise<FileOpOutcome<WorkspaceFile>> {
+    if (parentOf(file.path) === targetDirPath) {
+      // 同目录「移动」是空操作：不制造副本、不删源
+      return { kind: 'ok', value: file };
+    }
+    let text: string;
+    try {
+      text = await this.readFile(file);
+    } catch (e) {
+      return failFileOp('read', e);
+    }
+    return this.writeThenRemoveSource(targetDirPath, file.name, text, file, overwrite);
+  }
+
+  /**
+   * 「复制到目标 → 删源」的共同步骤（改名与移动只差目标目录与目标名）。
+   *
+   * 分步结果归因：
+   *  - 目标写入失败 → `failed('write')`，**源未动**（磁盘上仍只有原件，可安全重试）；
+   *  - 源删除失败 → `partial`（两份都在；这是必须让用户看见的事实，不是普通失败）。
+   */
+  private async writeThenRemoveSource(
+    targetDirPath: string,
+    targetName: string,
+    text: string,
+    source: WorkspaceFile,
+    overwrite: boolean,
+  ): Promise<FileOpOutcome<WorkspaceFile>> {
+    let created: WorkspaceFile;
+    try {
+      const dir = await dirAt(this.requireRoot(), targetDirPath);
+      if (typeof dir.getFileHandle !== 'function' || typeof dir.removeEntry !== 'function') {
+        return {
+          kind: 'failed',
+          stage: 'write',
+          error: toFileOpError(Object.assign(new Error('目录句柄不可写'), { name: 'NotSupportedError' })),
+        };
+      }
+      const finalName = overwrite ? targetName : await this.uniqueName(dir, targetName);
+      const handle = await dir.getFileHandle(finalName, { create: true });
+      created = {
+        kind: 'file',
+        name: finalName,
+        path: joinPath(targetDirPath, finalName),
+        handle,
+        ts: Date.now(),
+        size: text.length,
+      };
+      await this.writeFile(created, text);
+    } catch (e) {
+      return failFileOp('write', e);
+    }
+    this.tree = null;
+    try {
+      await this.removeSource(source);
+    } catch (e) {
+      // 目标已建成、源还在 → 两份。**不得**把这里降级成 failed：
+      // 目标确实写了（用户能在新位置打开），说「移动失败」会掩盖磁盘现状。
+      return partialFileOp(created, e);
+    }
+    this.tree = null;
+    return { kind: 'ok', value: created };
+  }
+
+  /**
+   * 删除源文件（内部）：`removeEntry` **可选**能力必须显式判定。
+   *
+   * 旧 `removeFile` 写的是 `await dir.removeEntry?.(...)` —— 能力缺失时整句变成
+   * `await undefined`，**静默成功**：UI 以为删掉了，磁盘上文件还在（`directoryHost.ts:326,334`）。
+   * 这里把能力缺失变成 `E-UNAVAILABLE`。
+   */
+  private async removeSource(file: WorkspaceFile): Promise<void> {
+    const dir = await dirAt(this.requireRoot(), parentOf(file.path));
+    if (typeof dir.removeEntry !== 'function') {
+      throw Object.assign(new Error('目录句柄不支持删除'), { name: 'NotSupportedError' });
+    }
+    await dir.removeEntry(file.name);
+  }
+
+  /** 删除文件（安全变体）：能力缺失 → `E-UNAVAILABLE`；不存在 → `E-NOT-FOUND`（都可见） */
+  async removeFileSafe(file: WorkspaceFile): Promise<FileOpOutcome<null>> {
+    try {
+      await this.removeSource(file);
+    } catch (e) {
+      const error = toFileOpError(e);
+      const stage = error.code === 'E-PERMISSION' ? 'permission' : 'delete';
+      return { kind: 'failed', stage, error };
+    }
+    this.tree = null;
+    return { kind: 'ok', value: null };
+  }
+
+  /** 递归删除目录（安全变体）：同 `removeFileSafe`，能力缺失不再静默成功 */
+  async removeDirSafe(dir: WorkspaceDir): Promise<FileOpOutcome<null>> {
+    try {
+      const parent = await dirAt(this.requireRoot(), parentOf(dir.path));
+      if (typeof parent.removeEntry !== 'function') {
+        throw Object.assign(new Error('目录句柄不支持删除'), { name: 'NotSupportedError' });
+      }
+      await parent.removeEntry(dir.name, { recursive: true });
+    } catch (e) {
+      const error = toFileOpError(e);
+      const stage = error.code === 'E-PERMISSION' ? 'permission' : 'delete';
+      return { kind: 'failed', stage, error };
+    }
+    this.tree = null;
+    return { kind: 'ok', value: null };
+  }
+
+  /**
+   * 创建副本（§3.5）：**读源 → 同目录新建**，源一字不改。
+   *
+   * 与移动/改名的关键区别：没有「删源」这一步，所以不存在部分成功 ——
+   * 要么新文件建成，要么什么都没变。副本沿用同一批 `assets/...` 引用（不复制二进制）。
+   */
+  async duplicateFileSafe(file: WorkspaceFile): Promise<FileOpOutcome<WorkspaceFile>> {
+    let text: string;
+    try {
+      text = await this.readFile(file);
+    } catch (e) {
+      return failFileOp('read', e);
+    }
+    const parentPath = parentOf(file.path);
+    try {
+      const dir = await dirAt(this.requireRoot(), parentPath);
+      if (typeof dir.getFileHandle !== 'function') {
+        return {
+          kind: 'failed',
+          stage: 'write',
+          error: toFileOpError(Object.assign(new Error('目录句柄不可写'), { name: 'NotSupportedError' })),
+        };
+      }
+      const name = await duplicateName(file.name, async (candidate) => {
+        try {
+          await dir.getFileHandle?.(candidate);
+          return true;
+        } catch {
+          return false;
+        }
+      });
+      const handle = await dir.getFileHandle(name, { create: true });
+      const copy: WorkspaceFile = {
+        kind: 'file',
+        name,
+        path: joinPath(parentPath, name),
+        handle,
+        ts: Date.now(),
+        size: text.length,
+      };
+      await this.writeFile(copy, text);
+      this.tree = null;
+      return { kind: 'ok', value: copy };
+    } catch (e) {
+      return failFileOp('write', e);
+    }
+  }
+
+  /** 带序号的目标名（冲突三选之「保留两份」）：不改既有 `uniqueName` 的私有形态 */
+  async resolveCopyName(dirPath: string, name: string): Promise<string> {
+    const dir = await dirAt(this.requireRoot(), dirPath);
+    return uniqueCopyName(name, async (candidate) => {
+      if (typeof dir.getFileHandle !== 'function') return false;
+      try {
+        await dir.getFileHandle(candidate);
+        return true;
+      } catch {
+        return false;
+      }
+    });
   }
 
   // ---------------------------------------------------------------- T4 资产落盘
