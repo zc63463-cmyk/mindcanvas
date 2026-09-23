@@ -45,6 +45,7 @@ import { estimateCommentAreaHeight, GrowthCommentPanel } from '../chrome/GrowthC
 import { OverlayEditor } from '../edit/OverlayEditor.js';
 import { useTheme } from '../theme/ThemeContext.js';
 import type { TokenSet } from '../theme/types.js';
+import type { AssetResolution } from '../chrome/assetHost.js';
 import { createSvgBackend, type RenderBackend } from './backend.js';
 import { CanvasSurface } from './canvasBackend.js';
 import { type CharMeasureOf, createDisplayMetricsFn } from './domMeasure.js';
@@ -265,6 +266,11 @@ export interface MapViewProps {
   /** 资产 URL 宿主解析（P0-1，透传 NodeG）：优先于 assetBaseUrl 拼接；undefined 回落拼接 */
   resolveAssetUrl?: (ref: { kind: string; id: string }) => string | undefined;
   /**
+   * 五态资产解析（P0-FIX-R1 R1-2）：透传 NodeG；提供时优先于 `resolveAssetUrl`。
+   * 判别式结果让渲染端能区分「加载中」（不出图也不画断图）与「真缺失」（保留 ✕ 信号）。
+   */
+  resolveAssetState?: (ref: { kind: string; id: string }) => AssetResolution | undefined;
+  /**
    * 节点拖拽重排落点（M5-T5）：拖拽松手时给出 move-node op（由上层经 controller.apply 执行，
    * 保证 undo/redo 正确）；非法落点（成环/自拖/根目标）不会触发本回调。
    */
@@ -475,6 +481,7 @@ export function MapView({
   onFrameKey,
   assetBaseUrl,
   resolveAssetUrl,
+  resolveAssetState,
   onNodeMove,
   onAssetFiles,
   onAssetDrop,
@@ -638,6 +645,14 @@ export function MapView({
   resolveAssetUrlRef.current = resolveAssetUrl;
   const resolveAssetUrlStable = useCallback(
     (assetRef: { kind: string; id: string }) => resolveAssetUrlRef.current?.(assetRef),
+    [],
+  );
+
+  /** ③ resolveAssetState：同一套 ref 转发（五态版的引用也必须恒定，否则 memo 失效） */
+  const resolveAssetStateRef = useRef(resolveAssetState);
+  resolveAssetStateRef.current = resolveAssetState;
+  const resolveAssetStateStable = useCallback(
+    (assetRef: { kind: string; id: string }) => resolveAssetStateRef.current?.(assetRef),
     [],
   );
 
@@ -2215,6 +2230,7 @@ export function MapView({
                       }).body.h}
                       assetBaseUrl={assetBaseUrl}
                       resolveAssetUrl={resolveAssetUrlStable}
+                      resolveAssetState={resolveAssetStateStable}
                       // 拖拽中：原节点置灰（透明度降），浮空克隆跟随光标；落点目标高亮（合法/拒绝）
                       anim={
                         isDragged
@@ -2361,6 +2377,7 @@ export function MapView({
                       collapsed={collapsedIds?.has(draggedLn.node.id) ?? false}
                       assetBaseUrl={assetBaseUrl}
                       resolveAssetUrl={resolveAssetUrlStable}
+                      resolveAssetState={resolveAssetStateStable}
                       anim={{
                         x: draggedLn.box.x + nodeDrag.dx / k,
                         y: draggedLn.box.y + nodeDrag.dy / k,

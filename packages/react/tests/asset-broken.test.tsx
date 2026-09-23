@@ -81,3 +81,61 @@ describe('资产失效态（P2：加载失败 → warn 占位 + 面板失效标�
     expect(insert).toHaveBeenCalledTimes(1);
   });
 });
+
+/**
+ * ── P0-FIX-R1 R1-2(j)：五态下**缺失信号不得被吞** ────────────────────────
+ *
+ * 修复渲染回落 404 时最容易犯的错是「既然不发请求了，那也别画 ✕ 了」——
+ * 那会把「这张图不在」变成「什么也没发生」，用户失去唯一线索（缺失诊断口径同样弱化）。
+ * 这里把「真缺失仍画 ✕」与「加载中不画 ✕」成对钉住。
+ */
+describe('资产缺失信号（R1-2：unresolved 保留 ✕，pending 不冒充缺失）', () => {
+  function fiveStateLayout() {
+    const root = makeTextNode('根', [
+      makeEntityNode({ kind: 'img', id: 'assets/gone.png' }),
+      makeEntityNode({ kind: 'img', id: 'assets/loading.png' }),
+    ]);
+    return layoutMindmap(astToEditable(root)!, createNodeMeasure(char, new Map()), new Set());
+  }
+
+  it('unresolved → 画 ✕ 且不渲染 <image>（不发必然 404 的请求）；pending → 两者都不出现', () => {
+    const { container } = render(
+      <ThemeProvider>
+        <MapView
+          layout={fiveStateLayout()}
+          entities={new Map()}
+          char={char}
+          assetBaseUrl="/"
+          resolveAssetState={(ref) =>
+            ref.id === 'assets/gone.png'
+              ? { kind: 'unresolved', reason: 'missing' }
+              : { kind: 'pending', reason: 'listing' }
+          }
+        />
+      </ThemeProvider>,
+    );
+    // 缺失那条：✕ 占位在（信号保留）
+    const broken = container.querySelectorAll('[data-asset-broken]');
+    expect(broken.length).toBe(1);
+    expect(container.textContent).toContain('资产缺失');
+    // 两条都**没有** <image>：一个不发必然失败的请求，一个还不想出图
+    expect(container.querySelectorAll('image').length).toBe(0);
+  });
+
+  it('unresolved 的 ✕ 不依赖 onError（没有加载就没有失败事件，占位须由状态直出）', () => {
+    const { container } = render(
+      <ThemeProvider>
+        <MapView
+          layout={fiveStateLayout()}
+          entities={new Map()}
+          char={char}
+          assetBaseUrl="/"
+          resolveAssetState={() => ({ kind: 'unresolved', reason: 'no-scope' })}
+        />
+      </ThemeProvider>,
+    );
+    // 全未挂载 → 两条都画 ✕（两条都是「不在」，不是一个「不在」一个「在加载」）
+    expect(container.querySelectorAll('[data-asset-broken]').length).toBe(2);
+    expect(container.querySelectorAll('image').length).toBe(0);
+  });
+});

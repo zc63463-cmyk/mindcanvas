@@ -254,3 +254,137 @@ describe('P0-B：ScopedObjectUrls（LRU + 按作用域释放）', () => {
     expect(revoked).toEqual([]);
   });
 });
+
+/**
+ * ── P0-FIX-R1 R1-2：五态资产解析的渲染面 ──────────────────────────────────
+ *
+ * 字符串契约（`resolveAssetUrl`）把「解析出来了」与「没解析出来」压成同一个
+ * `undefined`，渲染端只能回落 `baseUrl + id` —— 对 `assets/` 引用那是**必然 404** 的
+ * 站点根路径：用户看到一次无意义的加载失败 + ✕，而且 `@draw:data:` 这类自包含引用
+ * 也会被它误伤（N4 同根）。五态把三件事分开了，这里逐条钉住。
+ */
+describe('NodeG：五态解析（R1-2）', () => {
+  /** 单节点资产布局：`kind` 决定实体类型，`id` 决定引用形态 */
+  function singleAssetLayout(kind: 'img' | 'draw', id: string) {
+    const root = makeTextNode('根', [makeEntityNode({ kind, id })]);
+    const editable = astToEditable(root)!;
+    const char = createCharMeasure({ family: 'sans-serif', size: 11 }, null);
+    return { layout: layoutMindmap(editable, createNodeMeasure(char, new Map()), new Set()), char };
+  }
+
+  function hrefsOf(container: HTMLElement): Array<string | null> {
+    return Array.from(container.querySelectorAll('image')).map((i) => i.getAttribute('href'));
+  }
+
+  it('resolved → 用宿主给的 URL 出图（不透传 baseUrl 拼接）', () => {
+    const { layout, char } = singleAssetLayout('img', 'assets/a 2.png');
+    const { container } = render(
+      <ThemeProvider>
+        <MapView
+          layout={layout}
+          entities={new Map()}
+          char={char}
+          assetBaseUrl="/"
+          resolveAssetState={() => ({ kind: 'resolved', url: 'blob:primed-a2' })}
+        />
+      </ThemeProvider>,
+    );
+    expect(hrefsOf(container)).toContain('blob:primed-a2');
+  });
+
+  it('pending → **不出图**：既没有 <image>，也没有 ✕ 断图占位', () => {
+    const { layout, char } = singleAssetLayout('img', 'assets/a 2.png');
+    const { container } = render(
+      <ThemeProvider>
+        <MapView
+          layout={layout}
+          entities={new Map()}
+          char={char}
+          assetBaseUrl="/"
+          resolveAssetState={() => ({ kind: 'pending', reason: 'scope-loading' })}
+        />
+      </ThemeProvider>,
+    );
+    // 不出图
+    expect(hrefsOf(container)).toEqual([]);
+    // 也不画断图（这正是「加载中」与「真缺失」必须分开的理由）
+    expect(container.querySelector('[data-asset-broken]')).toBeNull();
+    // 更不能回落一个必然 404 的站点根地址
+    expect(hrefsOf(container)).not.toContain('/assets/a 2.png');
+  });
+
+  it('unresolved(missing) → **保留 ✕ 资产缺失信号**，且不发起必然 404 的加载', () => {
+    const { layout, char } = singleAssetLayout('img', 'assets/gone.png');
+    const { container } = render(
+      <ThemeProvider>
+        <MapView
+          layout={layout}
+          entities={new Map()}
+          char={char}
+          assetBaseUrl="/"
+          resolveAssetState={() => ({ kind: 'unresolved', reason: 'missing' })}
+        />
+      </ThemeProvider>,
+    );
+    // 用户信号不得因「隐藏 404」而消失
+    expect(container.querySelector('[data-asset-broken]')).not.toBeNull();
+    // 没有 <image> → 也就没有那次必然失败的请求
+    expect(hrefsOf(container)).toEqual([]);
+    expect(container.querySelector('[data-asset-broken]')?.textContent).toContain('资产缺失');
+  });
+
+  it('unresolved(no-scope) → 同样保留 ✕（未挂载不是「没有这张图」，但信号一致）', () => {
+    const { layout, char } = singleAssetLayout('img', 'assets/a.png');
+    const { container } = render(
+      <ThemeProvider>
+        <MapView
+          layout={layout}
+          entities={new Map()}
+          char={char}
+          assetBaseUrl="/"
+          resolveAssetState={() => ({ kind: 'unresolved', reason: 'no-scope' })}
+        />
+      </ThemeProvider>,
+    );
+    expect(container.querySelector('[data-asset-broken]')).not.toBeNull();
+    expect(hrefsOf(container)).toEqual([]);
+  });
+
+  it('N4 同根：`@draw:data:` 自包含引用在未接五态时也能出图（data: 特判不靠宿主）', () => {
+    const dataUrl = 'data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%2F%3E';
+    const { layout, char } = singleAssetLayout('draw', dataUrl);
+    const { container } = render(
+      <ThemeProvider>
+        <MapView
+          layout={layout}
+          entities={new Map()}
+          char={char}
+          assetBaseUrl="/"
+          // 宿主实现五态：data: 应直接 resolved（不经任何缓存/磁盘查找）
+          resolveAssetState={(ref) =>
+            ref.id.startsWith('data:') ? { kind: 'resolved', url: ref.id } : undefined
+          }
+        />
+      </ThemeProvider>,
+    );
+    expect(hrefsOf(container)).toContain(dataUrl);
+    expect(container.querySelector('[data-asset-broken]')).toBeNull();
+  });
+
+  it('未提供 resolveAssetState → 回落旧字符串契约（升级前行为逐字不变）', () => {
+    const { layout, char } = singleAssetLayout('img', 'assets/a.png');
+    const { container } = render(
+      <ThemeProvider>
+        <MapView
+          layout={layout}
+          entities={new Map()}
+          char={char}
+          assetBaseUrl="/"
+          resolveAssetState={() => undefined}
+          resolveAssetUrl={(ref) => `blob:legacy-${ref.id}`}
+        />
+      </ThemeProvider>,
+    );
+    expect(hrefsOf(container)).toContain('blob:legacy-assets/a.png');
+  });
+});

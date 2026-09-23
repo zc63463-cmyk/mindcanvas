@@ -10,6 +10,7 @@ import type { NodeCardStyle } from './geometry.js';
 import { fontOf } from './geometry.js';
 import type { AnimatedBox } from './transition.js';
 import { resolveNodeIcon } from './nodeIcon.js';
+import type { AssetResolution } from '../chrome/assetHost.js';
 import { sanitizeInlineSvg, tintSvgToCurrentColor } from './svgTint.js';
 import { NODE_ICON_SIZE } from '@mindcanvas/kernel';
 
@@ -54,6 +55,22 @@ export interface NodeGProps {
    */
   resolveAssetUrl?: (ref: { kind: string; id: string }) => string | undefined;
   /**
+   * 五态解析（P0-FIX-R1 R1-2）：宿主 `resolveAssetState` 的**判别式结果**。
+   *
+   * 为什么单开一个 prop 而不复用 `resolveAssetUrl` 的字符串契约：字符串把
+   * 「解析出来了」与「没解析出来」压成同一个 `undefined`，渲染端于是只能回落
+   * `baseUrl + id` —— 对 `assets/` 引用那是一个**必然 404** 的站点根路径，
+   * 用户看到一次无意义的加载失败 + ✕。五态把三件事分开：
+   *  - `resolved`   → 正常出图；
+   *  - `pending`    → **不出图也不画断图**（作用域加载中/清单刷新中，重渲染自然补上）；
+   *  - `unresolved` → 保留 `✕ 资产缺失` 这个**用户信号**，但不再发起必然失败的加载
+   *                   （缺失诊断口径不因此弱化，见 `assetDiagnostics`）。
+   *
+   * 提供时**优先于** `resolveAssetUrl`（后者仅为未升级调用方保留）。返回 `undefined`
+   * （宿主没实现五态）→ 回落旧字符串契约，行为与升级前逐字一致。
+   */
+  resolveAssetState?: (ref: { kind: string; id: string }) => AssetResolution | undefined;
+  /**
    * 动画覆盖（M5-T2）：提供则整体平移/缩放/透明度取代布局坐标（淡入淡出/位置插值）；
    * 缺省 = 布局盒原位渲染。内容排版仍按 node.box 尺寸——插值只动 x/y 与整组变换。
    */
@@ -84,6 +101,7 @@ function NodeGImpl({
   bodyHeight,
   assetBaseUrl,
   resolveAssetUrl,
+  resolveAssetState,
   anim,
   dragTarget,
 }: NodeGProps) {
@@ -112,13 +130,30 @@ function NodeGImpl({
   // FA1-T3：资产来源两条 —— 实体节点（@img/@draw）或文本节点的 note.media 内联插图。
   // 后者让「嵌入节点」不再等于「新建一个子节点」，插图属于当前节点本体。
   const mediaRef = metrics.media ?? null;
-  const mediaSrc = mediaRef !== null ? resolveNodeIcon(mediaRef, { resolveAssetUrl, assetBaseUrl }) : null;
-  const assetHref =
+  // R1-2：实体 ref 走**五态**（宿主实现时）；`pending` 与 `unresolved` 都不出图，
+  // 但只有 `unresolved` 画 ✕ —— 见 NodeGProps.resolveAssetState 的说明。
+  const entityState = assetKind && ref ? resolveAssetState?.(ref) : undefined;
+  const entityPending = entityState?.kind === 'pending';
+  const entityUnresolved = entityState?.kind === 'unresolved';
+  // 只有 pending 走「暂不出图」（不画断图）；unresolved 走 ✕ 占位（保留用户信号）
+  const entityHref =
     assetKind && ref
-      ? (resolveAssetUrl?.(ref) ?? (assetBaseUrl ? assetBaseUrl + ref.id : null))
-      : (mediaSrc?.href ?? null);
+      ? entityState !== undefined
+        ? entityState.kind === 'resolved'
+          ? entityState.url
+          : null
+        : (resolveAssetUrl?.(ref) ?? (assetBaseUrl ? assetBaseUrl + ref.id : null))
+      : null;
+  const mediaSrc = mediaRef !== null ? resolveNodeIcon(mediaRef, { resolveAssetUrl, assetBaseUrl }) : null;
+  const assetHref = assetKind && ref ? entityHref : (mediaSrc?.href ?? null);
   // 资产区高度仅当确实要渲染图片时才占位（无 baseUrl 时降级为纯文本节点，不留空白）
-  const assetH = assetHref !== null ? (metrics.assetH ?? 0) : 0;
+  // R1-2 `pending`：不占位（不画断图也不留空白框 —— 解析到位后本次渲染自然布局）；
+  // `unresolved` 要占位：✕ 占位框正是「这张图缺了」的用户信号，不能因为不出图就把它消失掉。
+  const assetH = entityPending
+    ? 0
+    : assetHref !== null || entityUnresolved
+      ? (metrics.assetH ?? 0)
+      : 0;
   // 文本区起点：有资产时下移至资产区之下，二者垂直分离不再重叠（布局侧已同步预留高度）
   const textAreaTop = assetH > 0 ? assetH + ASSET_GAP : 0;
   const textTop = textAreaTop + (bodyH - textAreaTop - lines.length * LINE_H) / 2;
@@ -138,7 +173,11 @@ function NodeGImpl({
   // 资产加载失败 → warn 占位（虚线框 + ✕ 提示，非无感隐藏）；href 变化重置失败态
   const [assetFailed, setAssetFailed] = useState(false);
   useEffect(() => setAssetFailed(false), [assetHref]);
-  const showAsset = assetH > 0 && !assetFailed;
+  // 占位框出现条件：宿主直判 `unresolved`（真缺失，**不发起加载**），
+  // 或加载真的失败了（`onError`）。两者对用户是同一种事实（这张图不在），
+  // 但前者少打一次必然 404 的请求（旧字符串契约的回落路径正是那个 404 的来源）。
+  const showBroken = entityUnresolved || (assetFailed && assetHref !== null);
+  const showAsset = assetH > 0 && !assetFailed && !entityUnresolved;
   // 注释区底部圆角半径：不超过连体段高度的一半（防止矮注释区圆角过冲成畸形）
   const noteR = Math.min(style.radius, Math.max(0, (b.h - bodyH) / 2));
   return (
@@ -164,7 +203,7 @@ function NodeGImpl({
         style={shadow}
       />
       {/* 资产失效占位（P2）：加载失败 → warn 虚线框 + ✕ 提示（诊断标识，不再静默隐藏） */}
-      {assetH > 0 && assetFailed && (
+      {assetH > 0 && showBroken && (
         <g data-asset-broken>
           <rect
             x={4}

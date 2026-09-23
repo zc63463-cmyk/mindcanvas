@@ -561,6 +561,29 @@ function StageContent({
     requestLeave,
   });
 
+  /**
+   * `handleSave` 的**实时引用**（P0-FIX-R1 R1-3）。
+   *
+   * 为什么必需：键位 effect 的 deps 只有 `[controller]`（它订阅的是全局 keydown）。
+   * `handleSave` 是 `useDocumentActions` 里的 `useCallback`，**每次 doc 变化都会换身份**
+   * （它的 `guard` 读 `doc.source`）。若键位处理器直接闭包捕获 `handleSave`，它就会永久
+   * 定格在**首次**渲染那版（= 打开示例文档时的那份 `doc.source`）。
+   *
+   * 后果（真机实测）：Ctrl+S 触发的守卫拿 `syncedSourceRef`（**实时**，已是新文档）
+   * 去比一个**陈旧**的 `doc.source` → 永远不等 → 每一次保存都被 S2G 拦掉，
+   * `writes=[]`、保存态恒「未保存」（F1F2 连跑 5 次全拦）。
+   *
+   * ref 每渲染刷新 → 键位处理器读到的永远是当次 `handleSave`，
+   * 与 `useLeavePortRegistration` 的 `buildRef` 同款模式（那处本就正确）。
+   */
+  const handleSaveRef = useRef(handleSave);
+  handleSaveRef.current = handleSave;
+  // 同族：`handleOpen` / `handleNew` 也随 doc 换身份，键位 effect 同样不该闭包捕获它们
+  const handleOpenRef = useRef(handleOpen);
+  handleOpenRef.current = handleOpen;
+  const handleNewRef = useRef(handleNew);
+  handleNewRef.current = handleNew;
+
   // GH-T3：自动保存 —— 逻辑已抽至 hooks/useAutoSave（debounce 300ms；仅已落盘文档；
   // 手动 Ctrl+S 取消 pending；失败静默由手动保存兜底；口径：写回 savedSource，不碰 doc.source）
   useAutoSave({
@@ -1129,6 +1152,10 @@ function StageContent({
         .entriesOf(scopeKey)
         .find((e) => e.assetKey === item.id || e.relPath === item.id);
       if (recorded !== undefined) return recorded.store;
+      // R1-1：清单项已带**读侧来源**（`listAssets` 标注）→ 直接用，不再按 id 前缀猜。
+      // 这是必需的：浏览器素材库的项 id 也是 `assets/<name>`，前缀判据会把蓝图说成磁盘图。
+      if (item.origin !== undefined) return item.origin;
+      // 兜底（旧宿主 / 未标来源的项）：维持既有前缀判据
       if (workspaceReady && item.id.startsWith('assets/')) return 'workspace-assets';
       return 'browser-idb';
     },
@@ -1313,21 +1340,23 @@ function StageContent({
   /**
    * 清单加载 + **重新发现**（§4.5.4 规则 3）：该作用域挂载后 `listAssets` 看到了文件，
    * 清除对应 `unconfirmed` 标记 —— 这正是「专项二」负控要钉住的那条链。
+   *
+   * R1-2：抽成回调以便**写后**复用（归一化落盘后清单要立刻反映新文件）。
+   * 刷新仍由 effect 与写后路径显式驱动，**不在渲染路径**发起 I/O。
    */
+  const reloadAssetList = useCallback(async (): Promise<void> => {
+    const list = await assetHost.listAssets();
+    setAssetList(list);
+    writeLedger.confirmDiscovered(
+      assetHost.scopeMark().scopeKey,
+      list.map((a) => a.id),
+    );
+  }, [assetHost, writeLedger]);
+
+  // 挂载 / 换工作区时重载（失败静默：保持上一份清单，后续还会再刷）
   useEffect(() => {
-    let alive = true;
-    void assetHost.listAssets().then((list) => {
-      if (!alive) return;
-      setAssetList(list);
-      writeLedger.confirmDiscovered(
-        assetHost.scopeMark().scopeKey,
-        list.map((a) => a.id),
-      );
-    });
-    return () => {
-      alive = false;
-    };
-  }, [assetHost, writeLedger, workspaceReady]);
+    void reloadAssetList().catch(() => undefined);
+  }, [reloadAssetList, workspaceReady]);
 
   // B3：失效诊断入解析层——parse 诊断 + 资产缺失诊断（清单更新后自动重算）
   const allDiags = useMemo(
@@ -1342,16 +1371,6 @@ function StageContent({
     () => edgeHealth.problems.filter((p) => p.malformed === true).map((p) => p.index),
     [edgeHealth],
   );
-
-  useEffect(() => {
-    let alive = true;
-    void assetHost.listAssets().then((list) => {
-      if (alive) setAssetList(list);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [assetHost]);
 
   const assetOpen = panel === 'assets';
   // F1：实体关系图谱面板（Ctrl+Shift+R）
@@ -1790,15 +1809,15 @@ function StageContent({
           return;
         case 'save':
           e.preventDefault();
-          void handleSave();
+          void handleSaveRef.current();
           return;
         case 'open':
           e.preventDefault();
-          void handleOpen();
+          void handleOpenRef.current();
           return;
         case 'new':
           e.preventDefault();
-          handleNew();
+          handleNewRef.current();
           return;
         case 'indent':
           if (!sel) return;
@@ -2165,6 +2184,16 @@ function StageContent({
         assetBaseUrl="/"
         // P0-1 渲染接线：上传资产（objectURL）只有宿主能解析，NodeG 优先走宿主
         resolveAssetUrl={(ref) => assetHost.resolveAsset(ref)}
+        // R1-2：五态解析（判别式）。字符串版把「加载中」与「真缺失」压成同一个 undefined，
+        // 渲染端只能回落 `baseUrl + id`（对 assets/ 引用必然 404）→ 重开断图。
+        // 五态下 resolved 出图、pending 不出图也不画断图、unresolved 保留 ✕ 用户信号。
+        //
+        // 入参是渲染层的 `EntityRef`（`kind: string`），五态面要 `'img' | 'draw'` 窄化：
+        // 宿主只按 `id` 路由，非资产 kind 到不了这里（NodeG 已先按 img/draw 过滤），
+        // 故按 `img` 落形即可 —— 这里不做语义判断，只做类型适配。
+        resolveAssetState={(ref) =>
+          assetHost.resolveAssetState?.({ kind: ref.kind === 'draw' ? 'draw' : 'img', id: ref.id })
+        }
         apiRef={apiRef}
         onStats={setStats}
         relationMode={relationMode}
@@ -2964,10 +2993,18 @@ function StageContent({
         // P0-B（I-10）：插入前归一化 —— 把所选资产变成「重开后仍能解析」的引用。
         // 已挂载 → 字节落 <workspace>/assets/（同名走三选，默认保留两份）；
         // 未挂载 → 只允许可净化的小 SVG / 内置图标内联，其余拒绝（零副作用）。
-        normalizeInsert={async (item, action: AssetInsertAction) => {
+        //
+        // R1-1：`alreadyInWorkspace` 由 SidePanels 按**所选条目的存储来源**给出
+        // （`origin === 'workspace-assets'`），不再按 id 前缀推断 —— 浏览器素材库的项
+        // id 同样是 `assets/<name>`，前缀判据会把蓝图误判成「已在磁盘」而丢掉它的字节。
+        normalizeInsert={async (
+          item,
+          action: AssetInsertAction,
+          alreadyInWorkspace: boolean,
+        ) => {
           const result = await normalizeForInsert(
             item,
-            { workspace: workspaceReady ? workspace : null },
+            { workspace: workspaceReady ? workspace : null, alreadyInWorkspace },
             assetHost,
           );
           if (result.kind === 'refused') {
@@ -2989,6 +3026,12 @@ function StageContent({
               },
               isWriteConfirmed(captured, assetHost.scopeMark()),
             );
+            // R1-2：写后刷新清单 —— 新文件必须立刻出现在图库里。
+            // 缓存预热本身在 `assetInsert.writeNormalized` 内完成（经宿主增量方法），
+            // 这里只补「清单」这半边；两者都不在渲染路径上，故不违反「禁渲染期 I/O」。
+            void reloadAssetList().catch(() => {
+              // 刷新失败不影响已经成功的插入（磁盘事实成立）
+            });
           }
           if (result.renamed) {
             setAssetNotice(assetDuplicateCopyNotice(result.refId));

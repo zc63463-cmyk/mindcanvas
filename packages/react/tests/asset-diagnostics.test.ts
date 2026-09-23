@@ -47,3 +47,42 @@ describe('资产失效诊断（B3：W-ASSET-MISSING 入解析层）', () => {
     expect(hasAssetIn(LIST, { kind: 'img', id: 'x.png' })).toBe(false);
   });
 });
+
+/**
+ * ── P0-FIX-R1 R1-2(N4 同根)：自包含引用不得被误报为缺失 ──────────────
+ *
+ * 内置图标以 child 语义插入时会被内联成 `@draw:data:...`（CE-05）。这是**正常**形态，
+ * 字节就在引用里，图库清单里当然没有它 —— 旧诊断无条件按 `kind+id` 查清单，
+ * 于是每次插入内置图标都会挂一条 `W-ASSET-MISSING`，与渲染端（能画出图）自相矛盾。
+ * 真机 N4.5「重开后无资产缺失标记」因此长红。
+ *
+ * 成对钉住：自包含不报；`assets/` 真缺失照报（**口径不弱化**）。
+ */
+describe('R1-2：自包含引用（data:/builtin:）不产生缺失诊断', () => {
+  const dataRef: EntityRef = {
+    kind: 'draw',
+    id: 'data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%2F%3E',
+  };
+
+  it('内联 data: 图标不在清单里 —— 但**不**报缺失（渲染画得出，诊断不得更悲观）', () => {
+    expect(hasAssetIn(LIST, dataRef)).toBe(false); // 前提：它确实不在清单里
+    expect(assetDiagnostics([dataRef], LIST)).toEqual([]);
+  });
+
+  it('builtin:<id> 同样不报（自包含的另一种形态，I-5）', () => {
+    const builtinRef: EntityRef = { kind: 'draw', id: 'builtin:star' };
+    expect(assetDiagnostics([builtinRef], LIST)).toEqual([]);
+  });
+
+  it('口径不弱化：`assets/` 的**真缺失**照旧产出 W-ASSET-MISSING', () => {
+    const gone: EntityRef = { kind: 'img', id: 'assets/never.png' };
+    const diags = assetDiagnostics([dataRef, gone], LIST);
+    expect(diags.length).toBe(1);
+    expect(diags[0]!.message).toContain('@img:assets/never.png');
+  });
+
+  it('混合清单：data: 内联项在清单中（带着同样 id）时也不重复报（两路都静默）', () => {
+    const listWithInline = [...LIST, { kind: 'draw' as const, id: dataRef.id, name: 'x', type: 'svg' }];
+    expect(assetDiagnostics([dataRef], listWithInline)).toEqual([]);
+  });
+});

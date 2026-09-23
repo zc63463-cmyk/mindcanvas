@@ -23,6 +23,7 @@
 
 import type { AssetHost, AssetItem, WorkspaceWriter } from '@mindcanvas/react';
 import {
+  WorkspaceAssetHost,
   builtinInlineRef,
   fileNameOfAsset,
   inlineRefOf,
@@ -358,6 +359,311 @@ describe('归一化纯函数面（I-10 的输入输出契约）', () => {
     expect(result.kind).toBe('refused');
     if (result.kind !== 'refused') throw new Error('unreachable');
     expect(result.reason).toBe('write-failed');
+  });
+});
+
+/**
+ * ── P0-FIX-R1 R1-1：**来源路由**的集成面 ──────────────────────────────────
+ *
+ * 上面的 N1 组用「注入宿主 + fetch 替身」证明归一化会复制字节；但那组里浏览器项**没有**
+ * 来源标注，走的仍是「按 id 前缀」的旧路由 —— 真实缺陷正是发生在有来源的时候：
+ * 浏览器素材库的项 id 也是 `assets/<name>`，挂载工作区后它与磁盘项**同 id**，
+ * 于是「取字节」这一步命中了磁盘同名文件的缓存，蓝图被红图静默顶替（N1.5 实测）。
+ *
+ * 本组把来源显式标上，并用**返回真实字节**的宿主替身（而不是一个常数）证明：
+ * 选浏览器库项 → 落盘字节 = 蓝图；选磁盘项 → 复用、不重写。
+ */
+
+/** 蓝图 fixture（浏览器素材库里的那张；与磁盘红图同名不同字节） */
+const BLUE_PNG = 'BLUE-PNG-BYTES';
+const RED_PNG = 'RED-PNG-BYTES';
+
+/**
+ * 带来源标注的浏览器素材库替身（模拟挂载工作区后的 `WorkspaceAssetHost` 合成宿主）。
+ *
+ * 关键行为：`resolveAsset({id:'assets/a.png', origin:'browser-idb'})` /
+ * `resolveAssetState` 返回**蓝图** URL；而对 `origin:'workspace-assets'` 的同 id 项
+ * 返回**红图** URL。旧实现按 id 前缀路由，两问必得同一答 → 蓝图丢失。
+ */
+function originAwareHost(diskBytes = RED_PNG, browserBytes = BLUE_PNG) {
+  const url = (item: { id: string; origin?: string }) =>
+    item.origin === 'workspace-assets' ? `blob:disk-${item.id}` : `blob:browser-${item.id}`;
+  const bytesOfUrl = (u: string) => (u.startsWith('blob:disk-') ? diskBytes : browserBytes);
+  return {
+    baseUrl: '/',
+    async listAssets() {
+      return [browserBlueprint('a.png')];
+    },
+    resolveAsset: url,
+    async uploadAsset() {
+      return browserBlueprint('a.png');
+    },
+    hasAsset: () => true,
+    resolveAssetState: (item: { kind: 'img' | 'draw'; id: string; origin?: string }) => ({
+      kind: 'resolved' as const,
+      url: url(item),
+    }),
+    /** 测试专用：把 URL 换成真实字节（经 fetch 替身走同一条读取链） */
+    __bytesOfUrl: bytesOfUrl,
+  };
+}
+
+/** 让 `fetch(blob:...)` 返回对应字节（jsdom 没有 blob: 的 fetch 实现） */
+function stubFetchByUrl(mapper: (u: string) => string): void {
+  (globalThis as { fetch: typeof fetch }).fetch = (async (input: RequestInfo | URL) => {
+    const u = String(input);
+    return new Response(mapper(u), { status: 200, headers: { 'content-type': 'image/png' } });
+  }) as typeof fetch;
+}
+
+describe('R1-1：字节按**来源**路由（浏览器库项 vs 磁盘项同名）', () => {
+  it('(b) 选**浏览器库项**插入 → 落盘 assets/a 2.png 字节 = 蓝图 fixture（逐字节）', async () => {
+    const { w, files } = disk({ 'a.png': RED_PNG });
+    const host = originAwareHost();
+    stubFetchByUrl(host.__bytesOfUrl);
+
+    // 清单里两项：同 id、不同来源（这是复合键的实际形态）
+    const browserItem: AssetItem = { ...browserBlueprint('a.png'), origin: 'browser-idb' };
+    const diskItem: AssetItem = { ...browserBlueprint('a.png'), origin: 'workspace-assets' };
+
+    const result = await normalizeForInsert(browserItem, { workspace: w }, host as never);
+
+    if (result.kind !== 'normalized') throw new Error('unreachable');
+    // 落盘字节必须是**蓝**图（旧实现按 id 前缀取到磁盘缓存 → 红图）
+    expect(files.get('a 2.png')).toBe(BLUE_PNG);
+    // (c) 原文件字节不变 + 文档引用是新名
+    expect(files.get('a.png')).toBe(RED_PNG);
+    expect(result.refId).toBe('assets/a 2.png');
+
+    // 对照：磁盘项走复用路径（(d) 既有行为不回归）
+    const before = new Map(files);
+    const reuse = await normalizeForInsert(
+      diskItem,
+      { workspace: w, alreadyInWorkspace: true },
+      host as never,
+    );
+    if (reuse.kind !== 'normalized') throw new Error('unreachable');
+    expect(reuse.refId).toBe('assets/a.png');
+    expect([...files.entries()]).toEqual([...before.entries()]);
+  });
+
+  /**
+   * **(b) 的接线级版本** —— 用**真实 `WorkspaceAssetHost`**，不替换解析方法。
+   *
+   * 为什么单开一条：上面那条用宿主替身，「来源路由」发生在替身里而不是产品代码里，
+   * 因此把 `WorkspaceAssetHost.resolveAssetState` 的来源分支中性化后它**依然绿**
+   * （实测）。这一条把 fallback 换成返回**蓝图字节**的 IDB 替身、把磁盘放成**红图**，
+   * 并且让磁盘红图先被 `listAssets` 预热进 scope 缓存（正是踩坑现场）——
+   * 于是「取字节」到底命中谁，完全由产品代码的来源路由决定。
+   */
+  it('(b) 接线级：真实 WorkspaceAssetHost 下，选浏览器库项 → 落盘字节 = 蓝图（不是磁盘红图）', async () => {
+    const { w, files } = disk({ 'a.png': RED_PNG });
+    // 浏览器素材库（fallback）：同 id、来源 browser-idb、字节 = 蓝图
+    const browserItems: AssetItem[] = [
+      { kind: 'img', id: 'assets/a.png', name: 'a.png', type: 'png', origin: 'browser-idb' },
+    ];
+    const fallback = {
+      baseUrl: '/',
+      async listAssets() {
+        return [...browserItems];
+      },
+      resolveAsset: () => 'blob:browser-a.png',
+      async uploadAsset() {
+        return browserItems[0] as AssetItem;
+      },
+      hasAsset: () => true,
+      resolveAssetState: () => ({ kind: 'resolved' as const, url: 'blob:browser-a.png' }),
+    };
+    const host = new WorkspaceAssetHost(fallback, () => w, '');
+    // fetch 替身按**主机名**分派（`URL.createObjectURL` 在本仓其它测试里被全局替身过，
+    // 返回的 blob URL 不含文件名字节，故不能按路径子串判别）。
+    stubFetchByUrl((u) => (u.includes('browser-a.png') ? BLUE_PNG : RED_PNG));
+
+    // 挂载后加载清单 → 磁盘红图被预热进 scope 缓存（缺陷的触发条件）
+    const list = await host.listAssets();
+    const browserItem = list.find((a) => a.origin === 'browser-idb');
+    const diskItem = list.find((a) => a.origin === 'workspace-assets');
+    expect(browserItem).toBeDefined();
+    expect(diskItem).toBeDefined();
+
+    const result = await normalizeForInsert(
+      browserItem as AssetItem,
+      { workspace: w },
+      host as never,
+    );
+    if (result.kind !== 'normalized') throw new Error('unreachable');
+
+    expect(result.refId).toBe('assets/a 2.png');
+    // 红线：落盘的是**蓝图**字节；按 id 前缀路由会拿到磁盘红图（NC-R1-1 的转红点）
+    expect(files.get('a 2.png')).toBe(BLUE_PNG);
+    expect(files.get('a.png')).toBe(RED_PNG);
+  });
+
+  it('同一字符串 id 的两个来源 → 归一化结果不同（判别性：来源真的参与路由）', async () => {
+    const host = originAwareHost();
+    stubFetchByUrl(host.__bytesOfUrl);
+    const { w: w1, files: f1 } = disk({ 'a.png': RED_PNG });
+    const { w: w2, files: f2 } = disk({ 'a.png': RED_PNG });
+
+    const asBrowser = await normalizeForInsert(
+      { ...browserBlueprint('a.png'), origin: 'browser-idb' },
+      { workspace: w1 },
+      host as never,
+    );
+    const asDisk = await normalizeForInsert(
+      { ...browserBlueprint('a.png'), origin: 'workspace-assets' },
+      { workspace: w2, alreadyInWorkspace: true },
+      host as never,
+    );
+
+    if (asBrowser.kind !== 'normalized' || asDisk.kind !== 'normalized') {
+      throw new Error('unreachable');
+    }
+    expect(asBrowser.refId).toBe('assets/a 2.png');
+    expect(asDisk.refId).toBe('assets/a.png');
+    expect(f1.get('a 2.png')).toBe(BLUE_PNG);
+    expect(f2.has('a 2.png')).toBe(false);
+  });
+
+  it('(e) 未挂载 → 浏览器库位图仍被拒绝；小 SVG 仍可内联（不回归）', async () => {
+    const host = originAwareHost();
+    stubFetchByUrl(host.__bytesOfUrl);
+    const bitmap = await normalizeForInsert(
+      { ...browserBlueprint('big.png'), origin: 'browser-idb' },
+      { workspace: null },
+      host as never,
+    );
+    expect(bitmap).toEqual({ kind: 'refused', reason: 'no-workspace' });
+
+    const svg: AssetItem = {
+      kind: 'draw',
+      id: 'assets/icon.svg',
+      name: 'icon.svg',
+      type: 'svg',
+      svg: SMALL_SVG,
+      origin: 'browser-idb',
+    };
+    const inlined = await normalizeForInsert(svg, { workspace: null }, host as never);
+    expect(inlined.kind).toBe('normalized');
+    if (inlined.kind !== 'normalized') throw new Error('unreachable');
+    expect(inlined.refId.startsWith('data:image/svg+xml')).toBe(true);
+  });
+
+  it('(f) origin 不进文档引用：refId 只有 assets/<rel> / data: / builtin 三形态', async () => {
+    const host = originAwareHost();
+    stubFetchByUrl(host.__bytesOfUrl);
+    const { w } = disk({});
+    const result = await normalizeForInsert(
+      { ...browserBlueprint('fresh.png'), origin: 'browser-idb' },
+      { workspace: w },
+      host as never,
+    );
+    if (result.kind !== 'normalized') throw new Error('unreachable');
+    // 引用字节里**没有**来源字样（origin 是运行时概念）
+    expect(result.refId).toBe('assets/fresh.png');
+    expect(result.refId).not.toContain('browser-idb');
+    expect(result.refId).not.toContain('workspace-assets');
+  });
+});
+
+/**
+ * ── P0-FIX-R1 R1-2：写后**不依赖 listAssets** 的同会话解析 ────────────────
+ *
+ * 机制（P0-C-review §4）：归一化落盘走 `WorkspaceWriter`（`assetInsert.writeNormalized`），
+ * 绕过了宿主 `writeToDisk` 的 URL 登记；app 层归一化成功后也没有刷新清单/预热缓存。
+ * 于是同一会话内新引用解析 miss → 渲染端回落 `baseUrl + id` → 断图；
+ * 而**不经插入、直接打开同磁盘状态**却正常（挂载期 listAssets 预热过缓存）。
+ * 这条差异就是 N1-REOPEN-BROKEN 的全部内容，这里把它钉在「写」这一侧。
+ */
+describe('R1-2(g)：归一化写后同会话可解析（不经 listAssets）', () => {
+  it('写成功即触发宿主预热：写后立刻 resolveAssetState 命中（同一会话、无清单刷新）', async () => {
+    const { w } = disk({});
+    // 计数 listAssets 调用：断言「同会话解析」不靠清单刷新兜底
+    let listCalls = 0;
+    const fallback = {
+      baseUrl: '/',
+      async listAssets() {
+        listCalls += 1;
+        return [];
+      },
+      resolveAsset: () => '/x',
+      async uploadAsset() {
+        return browserBlueprint('x.png') as AssetItem;
+      },
+      hasAsset: () => true,
+      resolveAssetState: () => ({ kind: 'unresolved' as const, reason: 'unavailable' as const }),
+    };
+    const host = new WorkspaceAssetHost(fallback, () => w, '');
+    stubFetchByUrl((u) => (u.includes('browser-') ? BLUE_PNG : RED_PNG));
+
+    const result = await normalizeForInsert(
+      { ...browserBlueprint('fresh.png'), origin: 'browser-idb' },
+      { workspace: w },
+      host as never,
+    );
+    if (result.kind !== 'normalized') throw new Error('unreachable');
+
+    // 关键：**没有**调用过 listAssets，新引用也已经解析得到
+    expect(listCalls).toBe(0);
+    const state = host.resolveAssetState({
+      kind: 'img',
+      id: result.refId,
+      origin: 'workspace-assets',
+    });
+    expect(state.kind).toBe('resolved');
+    if (state.kind !== 'resolved') throw new Error('unreachable');
+    expect(state.url.startsWith('blob:')).toBe(true);
+  });
+
+  it('旧宿主（无 primeWorkspaceAsset）→ 行为同今：插入仍成功（可选面不破兼容）', async () => {
+    const { w, files } = disk({});
+    // 没有 primeWorkspaceAsset 的宿主
+    const legacyHost = {
+      baseUrl: '/',
+      async listAssets() {
+        return [];
+      },
+      resolveAsset: () => 'blob:browser-fresh.png',
+      async uploadAsset() {
+        return browserBlueprint('fresh.png') as AssetItem;
+      },
+      hasAsset: () => true,
+    };
+    stubFetchByUrl(() => BLUE_PNG);
+    const result = await normalizeForInsert(
+      { ...browserBlueprint('fresh.png'), origin: 'browser-idb' },
+      { workspace: w },
+      legacyHost as never,
+    );
+    // 预热缺失**不得**把已成功的落盘改判成 refused
+    expect(result.kind).toBe('normalized');
+    expect(files.get('fresh.png')).toBe(BLUE_PNG);
+  });
+
+  it('预热抛错 → 插入仍是 normalized（磁盘事实成立，best-effort）', async () => {
+    const { w, files } = disk({});
+    const throwingHost = {
+      baseUrl: '/',
+      async listAssets() {
+        return [];
+      },
+      resolveAsset: () => 'blob:browser-fresh.png',
+      async uploadAsset() {
+        return browserBlueprint('fresh.png') as AssetItem;
+      },
+      hasAsset: () => true,
+      async primeWorkspaceAsset() {
+        throw new Error('boom');
+      },
+    };
+    stubFetchByUrl(() => BLUE_PNG);
+    const result = await normalizeForInsert(
+      { ...browserBlueprint('fresh.png'), origin: 'browser-idb' },
+      { workspace: w },
+      throwingHost as never,
+    );
+    expect(result.kind).toBe('normalized');
+    expect(files.get('fresh.png')).toBe(BLUE_PNG);
   });
 });
 

@@ -187,32 +187,51 @@ async function normalizeToWorkspace(
     // 同名但**无法证明字节相同** → 分配不冲突的新名（默认「保留两份」，§4.5.2 / I-10）
     if (conflict === 'keep-both') {
       const name = await uniqueName(w, fileName);
-      return writeNormalized(w, name, data, true);
+      return writeNormalized(w, name, data, true, host);
     }
     // `replace`：写原名，覆盖既有文件
   }
 
-  return writeNormalized(w, fileName, data, false);
+  return writeNormalized(w, fileName, data, false, host);
 }
 
-/** 落盘并组装归一化结果（唯一的写入口，避免两处 `writeAsset` 调用各写一遍返回形状） */
+/**
+ * 落盘并组装归一化结果（唯一的写入口，避免两处 `writeAsset` 调用各写一遍返回形状）。
+ *
+ * **写后预热（P0-FIX-R1 R1-2）**：本函数的 `w.writeAsset` 走的是 `WorkspaceWriter`，
+ * 绕过了宿主的 `writeToDisk`（那里才有 URL 登记）。因此写成功后必须显式请宿主预热
+ * 一次缓存 —— 否则同一会话内新引用解析不到（要等下次挂载期 `listAssets` 才恢复）。
+ *
+ * 预热的**结果不影响归一化结论**：磁盘写入已经是事实，预热失败只是「这次少一次
+ * 立即显示」，不得改判成 `refused`（best-effort，与 P0-B 同口径）。
+ */
 async function writeNormalized(
   w: WorkspaceWriter,
   name: string,
   data: ArrayBuffer | string,
   renamed: boolean,
+  host?: AssetHostV2,
 ): Promise<NormalizeResult> {
   try {
     await w.writeAsset(name, data, mimeOfAsset(name));
   } catch (e) {
     return { kind: 'refused', reason: 'write-failed', detail: detailOf(e) };
   }
+  const relPath = `assets/${name}`;
+  // 可选面：旧宿主没有该方法时行为同今（不破兼容）
+  if (typeof host?.primeWorkspaceAsset === 'function') {
+    try {
+      await host.primeWorkspaceAsset(relPath);
+    } catch {
+      // 预热是增强：宿主抛错不算插入失败（磁盘已写好）
+    }
+  }
   return {
     kind: 'normalized',
-    refId: `assets/${name}`,
+    refId: relPath,
     store: 'workspace-assets',
     inline: false,
-    relPath: `assets/${name}`,
+    relPath,
     renamed,
   };
 }
