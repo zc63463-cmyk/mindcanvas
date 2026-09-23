@@ -708,7 +708,8 @@ type AssetResolution =
 #### 4.5.4 写入已完成但作用域已切换（记账规则）
 
 ```ts
-interface AssetIndexEntry {
+/** 写入记账条目（**不是**索引层条目；索引层的同名概念见 §4.7 的 AssetIndexEntry） */
+interface AssetWriteEntry {
   assetKey: AssetKey;
   scopeId: ScopeId;
   kind: 'img' | 'draw';
@@ -722,6 +723,11 @@ interface AssetIndexEntry {
   unconfirmed?: true;
 }
 ```
+
+> **类型消歧（勘误 E-1）**：本形状原名 `AssetIndexEntry`，与 §4.7 的索引层条目**同名不同形**。
+> 现改名为 `AssetWriteEntry`——它描述的是**一次写入的记账**（`store`/`portability`/`bytes`/`lastSeenAt`/`unconfirmed`
+> 全是写入侧字段），不被索引层持久化；索引层条目沿用 `AssetIndexEntry` 之名（§4.7 已补登其形状）。
+> 依据：§4.7 明文索引层存 `mindcanvas.assetindex.v2`，而索引层的实际读写与测试都在那份形状一侧。
 
 规则：
 
@@ -766,6 +772,72 @@ interface DocIndexEntry {
   legacyKeys: string[];
 }
 ```
+
+**资产索引条目（勘误 E-1 补登）** —— 与 `docIndexCore.ts:64-71` 逐字段一致；
+主键 `assetKey`，落 `mindcanvas.assetindex.v2`（`:771`）：
+
+```ts
+/** 资产索引条目。主键：'browser:local::assets/a.png' | '<scopeId>::<relPath>' */
+interface AssetIndexEntry {
+  assetKey: string;
+  scopeId: ScopeId;
+  relPath: string | null;
+  name: string;
+  starred: boolean;
+  legacyKeys: string[];
+}
+```
+
+`scopeId` 与 `relPath` 在**自包含**引用（`builtin:` / `data:`，I-5）下分别是
+`'browser:local'` 与 `null`；磁盘项则是 `ws:<uuid>` 与 `assets/<rel>`。
+
+### 4.7.1 `AssetKey` 的构造规则（勘误 E-3 补定义）
+
+§1.5 只写了「`AssetKey = (scopeId, relPath)` 或 `(browserScope, id)`」这一句形态说明，
+却没有任何一处定义**如何从一个资产项构造它**，而 M7 迁移（`docIndexMigrate.ts:262-340`）
+与 `docIndexCore.ts:440-460` 的投影已经依赖了一个具体规则。现按代码实证固定：
+
+> **`AssetKey` = 资产收藏键去掉 `kind:` 前缀之后的整体**（即 `parseAssetFavKey` 的 `assetId`）。
+
+三种形态（值域来自 `AssetRef.id`，§1.5）：
+
+| 形态 | 例 | 归属（`AssetStore`） | 可携带性 |
+|---|---|---|---|
+| `assets/<rel>` | `assets/diagram.png` | `workspace-assets` / `browser-idb`（同一字符串两处可存，故 `AssetKey` 必须再带 `scopeId` 才唯一） | `folder-relative` / `browser-local` |
+| `builtin:<id>` | `builtin:star` | `builtin` | `self-contained` |
+| `data:` URL | `data:image/svg+xml;utf8,…` | 内联（无独立 store） | `self-contained` |
+
+索引层**作用域键**（`docKey` 的同族，`docIndexCore.ts:63` 注释）：
+`'<scopeId>::<relPath>'`（如 `ws:7f3a::assets/a.png`）或自包含项的 `'browser:local::<assetKey>'`。
+两者的关系是**两个不同层次**，不得混用：
+
+- `AssetKey` 是**资产自身**的身份（跨作用域可重名，如两个工作区各有一份 `assets/a.png`）；
+- 作用域键 = `scopeId` + `AssetKey` 的**合成**，才是索引层唯一主键
+  （`docIndexCore.ts:440-460` 的 `collectStarredKeys` 同时投影 `assetKey` 与 `relPath` 两者，
+  正因为「索引侧身份」与「旧键读取方看到的字符串」必须能互相认出——见该函数注释）。
+
+**实证依据（行号与原文）**：
+
+- `apps/canvas/src/docIndexMigrate.ts:479-489` `parseAssetFavKey`：
+  ```
+  const sep = key.indexOf(':');        // 第一个 ':' 之前是 kind
+  if (kind !== 'img' && kind !== 'draw') return null;
+  const assetId = key.slice(sep + 1);  // 其余整体 = AssetKey
+  const selfContained = assetId.startsWith('builtin:') || assetId.startsWith('data:');
+  ```
+  注意 `assetId` 用 `slice(sep + 1)`（**只切第一个冒号**），因此 `data:image/svg+xml;…` 的中段冒号
+  不会被误切；`builtin:<id>` 也整体保留。
+- 同一规则由 M7 的落库点复用：`docIndexMigrate.ts:325` 写 `assetKey: assetId`；
+  `docIndex.ts:329-342` 的 `setAssetStarred(assetKey)` 与 `docIndexCore.ts:458` 的
+  `out.add(a.assetKey)` 都直接以该字符串为键。
+- `relPath` 侧：`docIndex.ts:336` 用 `relPathOfKey(assetKey)` 推导，与上述三形态一致
+  （自包含形态推不出 `::` 分段 → `null`）。
+
+> **与预裁决表述的不符处（如实并列）**：预裁决写「`AssetKey = fav 键去掉 kind: 前缀的整体`」，
+> 与实证一致；但它同时把「索引层作用域键 `<scopeId>::<relPath>`」描述为「与它的关系」，
+> 实证显示该形态**只对磁盘项成立**，自包含项实际存 `'browser:local'`（`docIndexMigrate.ts:325-326`
+> 与 `:295` 的 `BROWSER_SCOPE_ID` 兜底），且 `relPath` 为 `null` 而非 `assets/<rel>`。
+> 本勘误按实证写（见上表与 `AssetIndexEntry` 的 `scopeId`/`relPath` 注）。
 
 - 「最近」只有一个入口，按 `openedAt` 降序；`openedAt === null` 的条目排在末尾并**不显示**为「刚刚/N 天前」，而显示「未记录打开时间」。
 - 存储：沿用 `localStorage`，新键 `mindcanvas.docindex.v2` / `mindcanvas.assetindex.v2`。引用扫描命中表按需计算、不持久化。
@@ -844,7 +916,7 @@ interface DocIndexEntry {
 | localStorage | `mindcanvas.folders.v1` | 自定义空目录 | `docLibrary.ts:18,168-185` |
 | localStorage | `mindcanvas.canvas.recent.v1` | 自由画布最近 | `canvasDocHost.ts:27` |
 | localStorage | `mindcanvas.starred.v1` | 文件收藏（键 = `fullPath`） | `fileManagerShared.ts:115` |
-| localStorage | `mindcanvas.assets.fav` | 资产收藏（键 = `kind:id`） | `AssetPanel.tsx:71` |
+| localStorage | `mindcanvas.assets.fav` | 资产收藏（键 = `kind:id`，**`kind ∈ {'img','draw'}`**，见下） | `AssetPanel.tsx:71` |
 | localStorage | `mindcanvas.docs.v1`（旧） | 旧文档库，已有迁移 | `document.ts:78,172-209` |
 | 磁盘 | `<workspace>/assets/` | 真实资产文件 | `directoryHost.ts:46,375-386` |
 
@@ -860,7 +932,15 @@ interface DocIndexEntry {
 | M4 | IDB 资产键 `assets/<name>` | 记录 id 以 `assets/` 开头 | `browser:local::assets/<name>` | **惰性**：`listAssets` 读出时在索引层补 `scopeId`，**不改 IDB 记录** | IDB 打不开 → 跳过 | 是 |
 | M5 | `mindcanvas.library.v1` 条目 | 键存在 | `DocIndexEntry` | **分批惰性**：每条独立判定；**只有具备 §6.2.1 证据的才绑定 `scopeId`/`relPath`**，否则进历史池 | 逐条 try/catch；失败条目留在旧库并标「未迁移」 | 是（按 `docKey` upsert） |
 | M6 | `mindcanvas.starred.v1`（键 = `fullPath`） | 键存在 | `DocIndexEntry.starred` | **只有**该键能按 `docKey` 精确命中索引条目时才迁移；否则进历史池（`legacyKeys`） | 不命中不算失败 | 是 |
-| M7 | `mindcanvas.assets.fav`（键 = `kind:id`） | 键存在 | `AssetIndexEntry` 收藏标记 | `browser:local` 项可直接迁移（作用域唯一）；磁盘项需 `(scopeId, relPath)` **且该作用域当前已证明同一目录** | 资产缺失 → 保留为 `legacyKeys` | 是 |
+| M7 | `mindcanvas.assets.fav`（键 = `kind:id`，**`kind ∈ {'img','draw'}`**） | 键存在 | `AssetIndexEntry` 收藏标记 | `browser:local` 项可直接迁移（作用域唯一）；磁盘项需 `(scopeId, relPath)` **且该作用域当前已证明同一目录** | 资产缺失 → 保留为 `legacyKeys` | 是 |
+
+> **`kind` 取值域（勘误 E-2）**：`mindcanvas.assets.fav` 的键形如 `` `${a.kind}:${a.id}` ``，
+> 其中 `kind` **只取 `'img' | 'draw'`** 两个值——与 §4.5.1 的 `AssetRef.kind`、
+> `assetTypes.ts:7` 的 `AssetItem.kind` 同一域。依据：写入点是 `AssetPanel.tsx` 的
+> `` `${a.kind}:${a.id}` ``（`AssetItem.kind` 的类型即该二值），且
+> `parseAssetFavKey`（`docIndexMigrate.ts:479-489`）对域外值一律 `return null`
+> → 记 `failed`、不迁移、不猜归属。**第一个冒号之后全部内容才是 `id`（= `AssetKey`，见 §4.7.1）**，
+> 因此 `data:` URL 的中段冒号不被误切。
 | M8 | `mindcanvas.canvas.recent.v1` | 键存在 | `DocIndexEntry`（`scopeId='browser:local'`） | 惰性读取并入索引；**不改写该键** | 单条损坏跳过 | 是 |
 | M9 | `mindcanvas-handles` 中键为旧 `docId` 的裸文件句柄 | 新键未命中、旧键命中 | `file-handle.v1:<docKey>` 富记录 + 保留旧裸键 | **双读 + 双写**：读新键优先，未命中读旧键；命中后**同时**写新键（富记录）与旧键（裸句柄），使回退版本仍可用 | 写新键失败 → 本次仍用旧键 | 是 |
 | M10 | 目录 `assets/` 与文档引用不一致 | 解析 `unresolved('missing')` | 不变 | 不自动修复；提供「重新定位」（D2 §5） | — | — |
@@ -919,3 +999,30 @@ interface DocIndexEntry {
 | 注册表条目上限 | 定为 8（可配置常量），超出淘汰最旧 dormant | 实现时定常量名 |
 | 补 depcruise 规则禁止 `packages/react` → `apps/**` | 建议做，列为 P0-0 可选加固项 | DS-11 待确认 |
 | 自由画布的资产能力 | **未设计**；UD-1 只决定「不进工作区与文件面板」，不构成对「仅会话插图」的批准 | 独立设计包（见 `contract-delta.md` CD-16） |
+
+---
+
+## 8. 勘误记录（小批量，P0-B 开工前）
+
+来源：`docs/dispatch/2026-09-23-P0-D-review.md` §3.1（契约缺口的原始判定，condition 4）、
+`docs/dispatch/2026-09-23-ds10-old-key-deletion-ruling.md` §4（「建议在 P0-B 开工前以小批量规格勘误处置」）。
+
+**纪律**：本批只动本文件；不改写其他规格文档、不改产品代码。
+每条勘误都在上文**就地最小修订**并在此登记，便于逐条复核。
+
+| # | 缺口 | 处置 | 上文落点 | 依据（代码实证 path:line） |
+|---|---|---|---|---|
+| E-1 | 两个**同名不同形**的 `AssetIndexEntry`：§4.5.4 的写入记账形状 vs 索引层形状（`docIndexCore.ts:64-71`，未在契约中登记） | 写入记账形状**改名 `AssetWriteEntry`**；索引层形状保留 `AssetIndexEntry` 之名并在 §4.7 **补登** | §4.5.4（改名 + 说明）、§4.7（补登形状） | 索引层实际读写与测试都在索引层形状一侧：`docIndexCore.ts:64-71`、`:281-294`、`docIndex.ts:329-342`、`docIndexMigrate.ts:325`；§4.7 `:771` 明写索引层存 `mindcanvas.assetindex.v2` |
+| E-2 | `mindcanvas.assets.fav` 的 `kind` 取值域未定义（§6.1 与 M7 只写 `kind:id`） | 定义 `kind ∈ {'img','draw'}`；并写明「第一个冒号之后全部内容才是 id」 | §6.1 盘点表、§6.2 M7 行 + 表下注 | `docIndexMigrate.ts:479-489`（`parseAssetFavKey`：域外 `return null`）、写入点 `AssetPanel.tsx` 的 `` `${a.kind}:${a.id}` ``、`assetTypes.ts:7`（`AssetItem.kind` 类型即该二值） |
+| E-3 | `assetKey` 的构造规则**无任何一处定义**，但 M7 与投影已依赖具体规则 | 新增 §4.7.1：`AssetKey` = fav 键去掉 `kind:` 前缀的整体；补三种形态表 + 与索引层作用域键的关系 | 新增 §4.7.1 | `docIndexMigrate.ts:479-489`（`slice(sep + 1)` 只切第一个冒号）、`:325`（`assetKey: assetId`）、`docIndex.ts:329-342`、`docIndexCore.ts:458`、`docIndexCore.ts:63`（作用域键注释） |
+
+**勘误对既有实现的影响**：无。E-1 只改名契约里的一个类型：产品代码（`packages/**`、`apps/**`）
+里从来没有这个名字 —— 全仓 `grep AssetIndexEntry` 在**代码**中只命中 `apps/canvas/src/docIndex*.ts`
+三处，全部是**索引层形状**（`docIndexCore.ts:64` 定义、`docIndex.ts`/`docIndexMigrate.ts` 消费）。
+其余命中都在 `docs/`（本文件、其他规格与历史派单/回执），**历史派单与回执按纪律不改写**，
+它们引用的旧名将在读到本勘误时按 §4.5.4 的改名说明理解。
+E-2/E-3 是**补定义**，与 `docIndexMigrate.ts` 的既有实现逐条一致（不符处已在 §4.7.1 末尾如实并列）。
+
+**未决**：E-1 的消歧只解决了「谁该叫这个名字」，**没有**合并两个形状。
+若将来需要 `AssetWriteEntry` 真正落盘（P1-B 的图库发现），必须先定义它与
+`AssetIndexEntry` 的合并/投影规则 —— 本轮不引入该合并（原则 2：无消费者不做）。
