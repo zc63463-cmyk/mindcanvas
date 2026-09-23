@@ -911,6 +911,14 @@ function StageContent({
       }
       setSaveFlushTick((n) => n + 1);
     },
+    onPartialSource: (sourcePath) => {
+      // F3-部分成功（DS-10 §3）：源文件仍在盘上，而同一次 `settle` 里的 `finish`→`onRebound`
+      // 会把旧键认领给新身份（`relocateDoc` 每次触发一次投影）。若先认领再登记，
+      // 中间那一次投影就会把源行当作「被取代」回收掉（代表丢失）——故这里必须
+      // **先于** onRebound 执行。编排层保证顺序：`onPartialSource` 在 `finish` 之前调用。
+      // 用 `indexRef` 而不是下面的 `index` 常量：后者在本文件更下方才声明（TDZ）。
+      indexRef.current?.notePartialSource(sourcePath);
+    },
   });
 
   const fileOpController = useFileOpController({
@@ -928,6 +936,11 @@ function StageContent({
         clearTimeout(autoSaveTimer.current);
         autoSaveTimer.current = null;
       }
+    },
+    onPartialResolved: (sourcePath) => {
+      // F3-部分成功的那一对文件已处理完（DS-10 §3）：源行不再需要特殊保留。
+      // 「重试删除原文件」仍失败时**不**走这里（源还在盘上，代表必须留着）。
+      indexRef.current?.clearPartialSource(sourcePath);
     },
     reload: async () => {
       // 树刷新由文件面板自身的 reload 负责；面包屑/索引身份已由 onRebound 完成

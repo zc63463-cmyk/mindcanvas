@@ -105,12 +105,30 @@ export interface FileOpControllerOptions {
   saveNow(): Promise<boolean>;
   /** 「放弃修改」分支：抑制待发自动保存 */
   suppressPendingAuto?(): void;
+  /**
+   * F3-部分成功的**消解**入口（DS-10 §3）。四条出路处理完那一对文件后调用：
+   * - 「保留两份」：这一对就此确定，源文件是用户要留下的 → 源行不再是「未消解」，
+   *   它转正为普通旧行（若此后源被认领为「被取代」，由 (b') 正常判定）；
+   * - 「撤销新副本」成功：源文件回到唯一地位 → 同上消解；
+   * - 「重试删除原文件」**成功**：源已不在盘上 → 源行是真正的被取代行 → 消解；
+   * - 「重试删除原文件」**仍失败**：**不**消解 —— 源文件还在，代表还得留着。
+   */
+  onPartialResolved?(sourcePath: string): void;
   /** 成功后刷新树 */
   reload(): Promise<void>;
 }
 
 export function useFileOpController(options: FileOpControllerOptions): FileOpController {
-  const { host, orchestration, isDirty, currentPath, saveNow, suppressPendingAuto, reload } = options;
+  const {
+    host,
+    orchestration,
+    isDirty,
+    currentPath,
+    saveNow,
+    suppressPendingAuto,
+    onPartialResolved,
+    reload,
+  } = options;
   const [ui, setUi] = useState<FileOpUiState>({ dirtyChoice: null, partial: null, notice: null });
 
   const setNotice = useCallback((notice: string | null): void => {
@@ -155,11 +173,14 @@ export function useFileOpController(options: FileOpControllerOptions): FileOpCon
         return;
       }
       if (choice === 'later') {
-        // 关闭提示；「待处理清单」是 P1-A 范围，本轮**不自动重试**
+        // 关闭提示；「待处理清单」是 P1-A 范围，本轮**不自动重试**。
+        // **不消解**：这一对文件还没被处理，源文件仍在盘上，代表必须继续留着。
         close(null);
         return;
       }
       if (choice === 'keep-both') {
+        // 这一对就此定案：用户明确要留下源文件 → 消解（源行不再需要特殊保留）
+        onPartialResolved?.(state.sourcePath);
         close('已保留两份；旧文件仍在原位置，可在树里手动删除。');
         return;
       }
@@ -174,6 +195,8 @@ export function useFileOpController(options: FileOpControllerOptions): FileOpCon
         }
         const removed = await host.removeFileSafe(created);
         if (removed.kind === 'ok') {
+          // 副本撤掉了，文档回到原位置（源文件是唯一一份）→ 消解
+          onPartialResolved?.(state.sourcePath);
           close('已撤销新副本；这份文档回到原来的位置。');
           await reload();
         } else {
@@ -185,6 +208,8 @@ export function useFileOpController(options: FileOpControllerOptions): FileOpCon
       // retry-delete：**只重试删源，不重建目标**（重建会覆盖新副本内容）
       const source = findIn(await host.scan(true), state.sourcePath);
       if (source === null) {
+        // 源已不在盘上（用户手动删了 / 外部删了）→ 代表不必再留
+        onPartialResolved?.(state.sourcePath);
         close(FILE_OP_FAIL_NOTICE['E-NOT-FOUND'] ?? '文件已不在磁盘上。');
         await reload();
         return;
@@ -193,19 +218,24 @@ export function useFileOpController(options: FileOpControllerOptions): FileOpCon
       // 不一致 → 不删，转「保留两份」（用户可能在应用外改过它）。
       const now = await host.statFile(source);
       if (!statUnchanged(state.sourceSnapshot, now)) {
+        // 源文件被外部改动，用户很可能想留着它 → 与「保留两份」同义，消解
+        onPartialResolved?.(state.sourcePath);
         close('原文件已被外部修改（或无法复查），未删除；已转为「保留两份」。');
         await reload();
         return;
       }
       const removed = await host.removeFileSafe(source);
       if (removed.kind === 'ok') {
+        // 源真的删掉了 → 消解：此后该源行是真正的被取代行，(b') 可正常回收
+        onPartialResolved?.(state.sourcePath);
         close('已删除原文件，现在只剩新位置那一份。');
       } else {
+        // **仍失败 → 不消解**：源文件还在盘上，它的代表行必须继续保留。
         close('删除原文件仍未成功；两份都在，请稍后重试或手动处理。');
       }
       await reload();
     },
-    [host, suppressPendingAuto, reload],
+    [host, suppressPendingAuto, onPartialResolved, reload],
   );
 
   // ---------------------------------------------------------------- 执行（dirty 决策之后）

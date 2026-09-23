@@ -157,6 +157,17 @@ export interface FileOpOrchestrationOptions {
   onRebound(file: WorkspaceFile): void;
   /** 释放租约后仍 dirty → 立即补写一次（写新目的地；I-18 时序表的最后一行） */
   onAfterRelease?(): void;
+  /**
+   * F3-部分成功：**源文件仍在磁盘上**时的登记入口（DS-10 裁定 §3）。
+   *
+   * 编排层是唯一知道「目标已写、源删除失败」的地方（`FileOpOutcome` 的 `partial`
+   * 四态判别）；索引层据此把该源键标为「未消解」，降级投影逐行跳过它 ——
+   * 因为此刻它是那个仍在盘上的源文件在降级视图里的**唯一代表**。
+   *
+   * 只在 `partial` 时调用：`ok` 时源必已删（rename/move 成功语义），
+   * 那时源行是真正的「被取代」行，该由 (b') 正常回收。
+   */
+  onPartialSource?(sourcePath: string): void;
   /** 通知出口（可选；面板也会拿到结构化结果自己渲染） */
   onNotice?(msg: string): void;
 }
@@ -164,7 +175,7 @@ export interface FileOpOrchestrationOptions {
 export function useFileOpOrchestration(
   options: FileOpOrchestrationOptions,
 ): FileOpOrchestration {
-  const { session, host, readDoc, onRebound, onAfterRelease, onNotice } = options;
+  const { session, host, readDoc, onRebound, onAfterRelease, onPartialSource, onNotice } = options;
 
   /** 拒绝：构造结果 + 通知（文案为空表示静默取消） */
   const refuse = useCallback(
@@ -268,12 +279,12 @@ export function useFileOpOrchestration(
       try {
         const outcome = await host.renameFileSafe(sourceFile, name, overwrite);
         if (!ownsLease(session, lease)) return refuse<WorkspaceFile>('session-replaced');
-        return settle(lease.leaseId, outcome, fail, finish, sourceFile.path);
+        return settle(lease.leaseId, outcome, fail, finish, sourceFile.path, onPartialSource);
       } finally {
         release(lease.leaseId);
       }
     },
-    [host, refuse, durable, begin, fail, finish, release, session],
+    [host, refuse, durable, begin, fail, finish, release, session, onPartialSource],
   );
 
   // ---------------------------------------------------------------- ③ 移动
@@ -296,12 +307,12 @@ export function useFileOpOrchestration(
       try {
         const outcome = await host.moveFileSafe(file, targetDir, overwrite);
         if (!ownsLease(session, lease)) return refuse<WorkspaceFile>('session-replaced');
-        return settle(lease.leaseId, outcome, fail, finish, file.path);
+        return settle(lease.leaseId, outcome, fail, finish, file.path, onPartialSource);
       } finally {
         release(lease.leaseId);
       }
     },
-    [host, refuse, durable, begin, fail, finish, release, session],
+    [host, refuse, durable, begin, fail, finish, release, session, onPartialSource],
   );
 
   // ---------------------------------------------------------------- ⑤ 删除当前文档（F2 的 host 段）
@@ -396,6 +407,7 @@ function settle<T>(
   fail: <U>(stage: string, code: string, retryable: boolean) => CurrentDocOpResult<U>,
   finish: (leaseId: number, file: T, relPath: string) => void,
   sourcePath: string,
+  onPartialSource?: (sourcePath: string) => void,
 ): CurrentDocOpResult<T> {
   if (outcome.kind === 'ok') {
     const relPath = pathOf(outcome.value);
@@ -404,6 +416,9 @@ function settle<T>(
   }
   if (outcome.kind === 'partial') {
     const relPath = pathOf(outcome.created);
+    // F3：源文件**仍在盘上** → 登记为未消解，降级投影据此保留它的代表行
+    // （DS-10 裁定 §3；在任何失败/成功分流之前，因为它描述的是磁盘事实）。
+    onPartialSource?.(sourcePath);
     // 部分成功**也要重绑**：新文件是用户的目标位置，且已写出（§5.3「当前目的地=新文件」）
     finish(leaseId, outcome.created, relPath);
     return {
