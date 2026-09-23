@@ -21,6 +21,7 @@
  */
 import {
   BROWSER_SCOPE_KEY,
+  assetEntryKey,
   cacheKeyOf,
   kindOfFileName,
   mimeOfFileName,
@@ -28,6 +29,7 @@ import {
 } from './assetHost.js';
 import type {
   AssetHostV2,
+  AssetResolution,
   AssetScopeMark,
   AssetWriteResult,
 } from './assetHost.js';
@@ -52,6 +54,28 @@ interface AssetRecord {
    * 使「设为节点图标」能把图标内联进 .mm.md（脱离 IndexedDB 也自包含显示）。
    */
   svg?: string;
+}
+
+/**
+ * IDB 记录字段白名单（P0-FIX-R1 R1-1）。
+ *
+ * **存在的唯一理由**：`AssetItem.origin` 是**运行时读侧概念**，不得落到任何持久面。
+ * 旧实现在 `putRecord` 处写「记录形状」，但构造用的是 `{ ...item, mime, data }` ——
+ * 展开表达式不受 TS 多余属性检查约束，给 `AssetItem` 加字段就会**静默写进 IndexedDB**
+ * （实测：加 `origin` 后记录里立刻多出该字段）。这里改成显式列字段，把这件事钉死。
+ */
+function toRecordFields(item: AssetItem): AssetRecord {
+  const fields: AssetRecord = {
+    id: item.id,
+    kind: item.kind,
+    name: item.name,
+    type: item.type,
+    mime: '',
+    data: new ArrayBuffer(0),
+  };
+  // 小 SVG 的源码是**内容**（要持久化）；origin 是**读侧标注**（不持久化）——两者分开对待
+  if (typeof item.svg === 'string') fields.svg = item.svg;
+  return fields;
 }
 
 /** 未知协议形状窄化（读侧容错；与 centers.ts isRec 同款谓词模式，零断言） */
@@ -153,7 +177,15 @@ export class IdbAssetHost implements AssetHostV2 {
     const idbItems: AssetItem[] = [];
     try {
       for (const rec of await this.allRecords()) {
-        const item: AssetItem = { kind: rec.kind, id: rec.id, name: rec.name, type: rec.type };
+        // R1-1：**读侧**标注存储来源 —— IDB 记录一律 `browser-idb`。
+        // 迁移面为零：现有记录没有 origin 字段，来源由这里在读取时补上。
+        const item: AssetItem = {
+          kind: rec.kind,
+          id: rec.id,
+          name: rec.name,
+          type: rec.type,
+          origin: 'browser-idb',
+        };
         if (typeof rec.svg === 'string') item.svg = rec.svg;
         idbItems.push(item);
         // 预热 objectURL：让同步 resolveAsset 在清单加载后立即可用（接口零变更）
@@ -166,8 +198,10 @@ export class IdbAssetHost implements AssetHostV2 {
       // IDB 不可用（隐私模式等）：降级为纯静态清单，上传仍可用（会话级）
     }
     // 并集：静态打底，IDB 覆盖同 id（上传替换打包资产的场景）
-    const byId = new Map(this.staticItems.map((a) => [a.id, a]));
-    for (const a of idbItems) byId.set(a.id, a);
+    // R1-1：去重键按 origin 归一（静态项缺 origin 时由 `assetEntryKey` 按 id 推断），
+    // 避免「静态项无 origin / IDB 项有 origin」被误判成两个不同条目而重复列出同一张图。
+    const byId = new Map(this.staticItems.map((a) => [assetEntryKey(a), a]));
+    for (const a of idbItems) byId.set(assetEntryKey(a), a);
     this.items = [...byId.values()];
     return [...this.items];
   }
@@ -176,6 +210,30 @@ export class IdbAssetHost implements AssetHostV2 {
     const url = this.urls.get(cacheKeyOf(this.scopeMark(), item.id));
     if (url !== null) return url;
     return this.baseUrl + item.id;
+  }
+
+  /**
+   * 显式解析状态（P0-FIX-R1 R1-1）：**本宿主只认浏览器素材库的字节**。
+   *
+   * `origin === 'workspace-assets'` 的项**不在此解析** —— 它在磁盘上，字节得问工作区宿主。
+   * 返回 `unresolved/unavailable` 而不是空串：调用方据此**委托**下一跳，而不是拿到一个
+   * 必然 404 的 `baseUrl + id`（那正是 N1.5「蓝图字节被红图顶替」的入口之一）。
+   *
+   * 未标 origin 的项（旧调用方、纯静态 demo 资产）行为与升级前一致：命中预热缓存就返回
+   * objectURL，否则回落 `baseUrl + id`（静态打包资产的合法回落，R-15 禁的是**工作区**引用
+   * 回落站点根，不是这一条）。
+   */
+  resolveAssetState(item: Pick<AssetItem, 'kind' | 'id' | 'origin'>): AssetResolution {
+    if (item.origin === 'workspace-assets') {
+      return { kind: 'unresolved', reason: 'unavailable' };
+    }
+    const url = this.urls.get(cacheKeyOf(this.scopeMark(), item.id));
+    if (url !== null) return { kind: 'resolved', url };
+    if (item.origin === 'browser-idb') {
+      // 声明了来源却无字节：它**不在磁盘上**，回落 baseUrl 只会拿到站点根下的 404
+      return { kind: 'unresolved', reason: 'unavailable' };
+    }
+    return { kind: 'resolved', url: this.baseUrl + item.id };
   }
 
   /**
@@ -192,6 +250,8 @@ export class IdbAssetHost implements AssetHostV2 {
       id: `assets/${file.name}`,
       name: file.name,
       type: (file.name.toLowerCase().split('.').pop() ?? 'bin').slice(0, 8),
+      // R1-1：上传落 IDB → 读侧来源即 `browser-idb`（**内存项**标注；不随记录持久化）
+      origin: 'browser-idb',
     };
     const data = await file.arrayBuffer();
     const mime = mimeOfFileName(file.name, file.type);
@@ -202,7 +262,8 @@ export class IdbAssetHost implements AssetHostV2 {
 
     let persisted = true;
     try {
-      await this.putRecord({ ...item, mime, data });
+      // 显式列字段（非 `{...item}`）：`origin` 是运行时读侧概念，**不得**写进 IndexedDB
+      await this.putRecord({ ...toRecordFields(item), mime, data });
     } catch {
       // 持久化失败：**如实降级**（不再冒充成功）——objectURL 已建，本次会话内可用
       persisted = false;
@@ -210,8 +271,10 @@ export class IdbAssetHost implements AssetHostV2 {
     const key = cacheKeyOf(mark, item.id);
     this.urls.set(key, URL.createObjectURL(new Blob([data], { type: mime })));
     // 替换语义：清单同 id 去重（null 清单 = 尚未 listAssets，仅并入静态）
+    // R1-1：按**条目键**去重，使「浏览器库的 a.png」与「磁盘的 a.png」能共存（复合键）
     const base = this.items ?? [...this.staticItems];
-    this.items = [...base.filter((a) => a.id !== item.id), item];
+    const itemKey = assetEntryKey(item);
+    this.items = [...base.filter((a) => assetEntryKey(a) !== itemKey), item];
 
     if (!persisted) return { kind: 'session-only', item, reason: 'idb-failed' };
     return {

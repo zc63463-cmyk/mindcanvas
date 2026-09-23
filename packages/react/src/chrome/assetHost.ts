@@ -4,7 +4,7 @@
  * 渲染层经 host.resolveAsset 拼成可加载 URL；上传持久化由宿主实现（真实 FS/HTTP 属宿主职责）。
  * 当前实现：DemoAssetHost（打包 demo 资产 + objectURL 会话级上传——浏览器沙箱无法落盘，持久化留给真实宿主）。
  */
-import type { AssetItem } from './assetTypes.js';
+import type { AssetItem, AssetStore } from './assetTypes.js';
 import type { FileOpError } from '../edit/fileOps.js';
 import { INLINE_SVG_LIMIT } from './assetIcons.js';
 
@@ -130,8 +130,11 @@ export interface AssetHost {
 
 /**
  * 资产落点（契约 §4.5.1）。回答「它写到了哪」——**不回答**「多可靠 / 能不能带走」（I-12）。
+ *
+ * 定义在 `assetTypes.ts`（`AssetItem.origin` 要用它，而本模块要用 `AssetItem` ——
+ * 就地定义会成环）。这里再导出，既有调用方的导入路径与语义都不变。
  */
-export type AssetStore = 'workspace-assets' | 'browser-idb' | 'builtin';
+export type { AssetStore } from './assetTypes.js';
 
 /**
  * 可携带性（契约 §4.5.1、I-12）：由 `store` 决定，**不由本次写入成功决定**。
@@ -160,6 +163,42 @@ export function assetKeyOf(item: Pick<AssetItem, 'id'>): string {
 /** 资产收藏键（`mindcanvas.assets.fav` 的元素形状；勘误 E-2：kind ∈ {'img','draw'}） */
 export function assetFavKey(kind: 'img' | 'draw', assetKey: string): string {
   return `${kind}:${assetKey}`;
+}
+
+/**
+ * 存储来源（`AssetItem.origin`）的单点推断（P0-FIX-R1 R1-1）。
+ *
+ * **只在没标 origin 时用**：标了就以标的为准。为什么不一律按 id 猜——同一字符串
+ * `assets/a.png` 既可能是磁盘上的文件，也可能是浏览器素材库里的上传项，**从 id 推不出来**。
+ *
+ * 推断规则限定在**确实由 id 决定**的两种形态：
+ *  - `builtin:` 前缀 / `source === 'builtin'` → `builtin`（自包含，I-5）；
+ *  - `assets/<rel>` 形态 → `workspace-assets`（I-4 的磁盘引用形态）。
+ *
+ * 其余（裸名、宿主自定义前缀）返回 `null` —— **不猜**。解析层拿到 `null` 时退回
+ * 「先本宿主、再 fallback」的旧路径，与升级前行为一致（可选面的兼容纪律）。
+ */
+export function originOfItem(item: Pick<AssetItem, 'id' | 'source' | 'origin'>): AssetStore | null {
+  if (item.origin !== undefined) return item.origin;
+  if (item.source === 'builtin' || item.id.startsWith('builtin:')) return 'builtin';
+  if (isWorkspaceAssetRef(item.id)) return 'workspace-assets';
+  return null;
+}
+
+/**
+ * 清单**条目键**：复合键 = `origin + id`（P0-FIX-R1 R1-1）。
+ *
+ * 为什么不能用 `id` 单键：挂载工作区后，「浏览器素材库的 `assets/a.png`（蓝）」与
+ * 「磁盘的 `assets/a.png`（红）」必须**同时**在清单里、都能被点选——用 id 去重必然
+ * 让其中一个消失（旧实现是磁盘项顶替浏览器项，这正是 N1-ID-COLLISION 的第一跳）。
+ *
+ * 同一 id 但不同 origin 的两项因此得到两个不同的键；卡片 `key` 与清单去重共用它。
+ * `origin` 缺失（旧宿主/测试替身）时退化为纯 id —— 行为与升级前一致。
+ */
+export function assetEntryKey(item: Pick<AssetItem, 'id' | 'source' | 'origin'>): string {
+  const origin = originOfItem(item);
+  if (origin === null) return item.id;
+  return `${origin}\u0000${item.id}`;
 }
 
 /**
@@ -274,9 +313,26 @@ export interface AssetHostV2 extends AssetHost {
   /** 与 `uploadAsset` 同实现但结果可判别；`uploadAsset` 保留为薄包装（返回 `.item`） */
   uploadAssetDetailed?(file: File, kind?: 'img' | 'draw'): Promise<AssetWriteResult>;
   /** 显式解析状态；缺省时渲染层退回 `resolveAsset` 的字符串契约 */
-  resolveAssetState?(item: Pick<AssetItem, 'kind' | 'id'>): AssetResolution;
+  resolveAssetState?(item: Pick<AssetItem, 'kind' | 'id' | 'origin'>): AssetResolution;
   /** 作用域标记；用于把跨工作区串图变成可诊断事实 */
   scopeMark?(): AssetScopeMark;
+  /**
+   * 写后预热（P0-FIX-R1 R1-2，契约 §4.9 的「归一化后立刻可解析」）。
+   *
+   * **要解决的问题**：归一化把字节直接写进 `<workspace>/assets/`（`assetInsert.writeNormalized`
+   * 走的是 `WorkspaceWriter`，不是本宿主的 `writeToDisk`），于是宿主**不知道**刚多了一个文件，
+   * scope 缓存的 URL 也没登记。同一会话内新引用因此解析不到（渲染端 miss → 断图），
+   * 而重开后反而正常（挂载期 `listAssets` 会把磁盘字节预热进缓存）—— 差异全在这里。
+   *
+   * 实现约定（`WorkspaceAssetHost`）：
+   *  - 读盘 `w.readAssetFile(relPath)` → `urls.set(cacheKeyOf(scopeMark(), relPath), objectURL)`；
+   *  - **幂等**：`ScopedObjectUrls.set` 自带旧值 revoke，重复调用不会泄漏；
+   *  - 无工作区 / 读失败 → 返回 `false`，**不得**把已成功的插入改判 `refused`
+   *    （磁盘事实成立，降级为 best-effort，与 P0-B 同口径）。
+   *
+   * **只在写后调用**：渲染路径**不得**碰它（否则每次渲染都触发 I/O）。
+   */
+  primeWorkspaceAsset?(relPath: string): Promise<boolean>;
 }
 
 /**
@@ -312,6 +368,8 @@ export class DemoAssetHost implements AssetHost {
       id: `assets/${file.name}`,
       name: file.name,
       type: (file.name.toLowerCase().split('.').pop() ?? 'bin').slice(0, 8),
+      // R1-1：上传落本宿主的内存/IDB 面 → 读侧来源即 `browser-idb`
+      origin: 'browser-idb',
     };
     // FA1-T5：小 SVG 留一份源码（与 IdbAssetHost 同口径，换宿主不丢内联能力）
     if (item.kind === 'draw' && file.size <= INLINE_SVG_LIMIT) {

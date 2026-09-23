@@ -9,6 +9,8 @@
  */
 import { beforeEach, describe, expect, it } from 'vitest';
 import { WorkspaceAssetHost, type WorkspaceWriter } from '../src/chrome/workspaceAssetHost.js';
+import { assetEntryKey, originOfItem } from '../src/chrome/assetHost.js';
+import type { AssetHostV2 } from '../src/chrome/assetHost.js';
 import type { AssetHost } from '../src/chrome/assetHost.js';
 import type { AssetItem } from '../src/chrome/AssetPanel.js';
 import { INLINE_SVG_LIMIT } from '../src/chrome/assetIcons.js';
@@ -222,9 +224,9 @@ function scopedWorkspace(initial: Record<string, string> = {}, mounted = true) {
 function scopedHost(
   w: WorkspaceWriter | null,
   scope: { scopeId: string | null; scopeEpoch: number },
-  fallback = fakeFallback(),
+  theFallback: AssetHostV2 = fakeFallback(),
 ) {
-  return new WorkspaceAssetHost(fallback, () => w, '', () => scope);
+  return new WorkspaceAssetHost(theFallback, () => w, '', () => scope);
 }
 
 describe('P0-B ②：uploadAssetDetailed 三态可判别（R-08）', () => {
@@ -483,5 +485,212 @@ describe('P0-B ⑥：统一 revoke + LRU（R-16）', () => {
     await host.uploadAssetDetailed(pngFile('a.png'));
     await host.uploadAssetDetailed(pngFile('a.png'), undefined, { conflict: 'replace' });
     expect(revokes.length).toBeGreaterThan(0);
+  });
+});
+
+// ================================================================ P0-FIX-R1 R1-1：存储来源与复合键
+
+/**
+ * N1-ID-COLLISION 的宿主级判别。
+ *
+ * 机制（P0-C-review §4）：`IdbAssetHost` 的上传项 id 也是 `assets/<name>`，挂载工作区后
+ * 磁盘项按**裸 id** 顶替浏览器项，且磁盘字节被预热进 scope 缓存 → 归一化按 id 前缀取字节
+ * 就拿到红图，蓝图字节被静默丢弃。
+ *
+ * 这里钉住三件事：
+ *  1. 同名不同来源 → 清单里是**两个**可区分条目（复合键）；
+ *  2. 来源标注是**读侧**的事（磁盘扫描 → workspace-assets，IDB 记录 → browser-idb）；
+ *  3. `resolveAssetState` **按来源路由**：浏览器库项委托 fallback 取字节，不吃磁盘缓存。
+ */
+
+/** 带来源标注的 fallback 替身：模拟「浏览器素材库里已有一张同名的蓝图」 */
+function browserFallbackWithOrigin(name: string, byteTag: string): AssetHostV2 {
+  const items: AssetItem[] = [
+    { kind: 'img', id: `assets/${name}`, name, type: 'png', origin: 'browser-idb' },
+  ];
+  return {
+    baseUrl: '/',
+    async listAssets() {
+      return [...items];
+    },
+    resolveAsset() {
+      return `blob:browser-${byteTag}`;
+    },
+    async uploadAsset() {
+      return items[0] as AssetItem;
+    },
+    hasAsset: () => true,
+    // 五态版：声明了 browser-idb 的项从这里出字节（模拟 IdbAssetHost 的预热缓存命中）
+    resolveAssetState: () => ({ kind: 'resolved' as const, url: `blob:browser-${byteTag}` }),
+  };
+}
+
+describe('R1-1(a)：同名不同来源 → 清单含两个可区分条目（复合键）', () => {
+  it('磁盘有 assets/a.png（红）+ 浏览器库有 assets/a.png（蓝）→ 两条都在，id 相同但来源不同', async () => {
+    const { w } = scopedWorkspace({ 'a.png': 'RED' });
+    const fallback = browserFallbackWithOrigin('a.png', 'BLUE');
+    const host = scopedHost(w, { scopeId: 'ws:A', scopeEpoch: 1 }, fallback);
+
+    const list = await host.listAssets();
+    const sameId = list.filter((a) => a.id === 'assets/a.png');
+
+    // 判别点：旧实现按裸 id 合并 → 这里只剩 1 条（磁盘项顶替浏览器项）
+    expect(sameId).toHaveLength(2);
+    const origins = sameId.map((a) => a.origin).sort();
+    expect(origins).toEqual(['browser-idb', 'workspace-assets']);
+    // 复合键必须互不相同（否则 React 卡片 key 相撞、只能点选到一张）
+    const keys = new Set(sameId.map((a) => assetEntryKey(a)));
+    expect(keys.size).toBe(2);
+  });
+
+  it('磁盘扫描项被标注 origin=workspace-assets（**读侧**标注，无需迁移）', async () => {
+    const { w } = scopedWorkspace({ 'a.png': 'RED' });
+    const host = scopedHost(w, { scopeId: 'ws:A', scopeEpoch: 1 });
+    const list = await host.listAssets();
+    const disk = list.filter((a) => a.id === 'assets/a.png');
+    expect(disk).toHaveLength(1);
+    expect(disk[0]?.origin).toBe('workspace-assets');
+  });
+
+  it('未挂载工作区 → 退回 fallback 清单（浏览器库项仍在，来源保留）', async () => {
+    const { w } = scopedWorkspace({ 'a.png': 'RED' }, false);
+    const fallback = browserFallbackWithOrigin('a.png', 'BLUE');
+    const host = scopedHost(w, { scopeId: null, scopeEpoch: 0 }, fallback);
+    const list = await host.listAssets();
+    expect(list).toHaveLength(1);
+    expect(list[0]?.origin).toBe('browser-idb');
+  });
+});
+
+describe('R1-1(b)(c)(d)：解析按**来源**路由，不按 id 前缀', () => {
+  it('浏览器库项（id 形如 assets/a.png）→ 委托 fallback 取字节，**不吃**磁盘 scope 缓存', async () => {
+    const { w } = scopedWorkspace({ 'a.png': 'RED' });
+    const fallback = browserFallbackWithOrigin('a.png', 'BLUE');
+    const host = scopedHost(w, { scopeId: 'ws:A', scopeEpoch: 1 }, fallback);
+    // 挂载后 listAssets 会把**磁盘红图**预热进 scope 缓存（这正是踩坑点）
+    await host.listAssets();
+
+    const blue = host.resolveAssetState({
+      kind: 'img',
+      id: 'assets/a.png',
+      origin: 'browser-idb',
+    });
+    const red = host.resolveAssetState({
+      kind: 'img',
+      id: 'assets/a.png',
+      origin: 'workspace-assets',
+    });
+
+    // 蓝图字节必须来自 fallback（浏览器素材库），不是磁盘缓存
+    expect(blue).toEqual({ kind: 'resolved', url: 'blob:browser-BLUE' });
+    // 磁盘项走本宿主缓存 → 是预热进来的那张（红）——两条路径**不再互相冒充**
+    expect(red.kind).toBe('resolved');
+    if (red.kind !== 'resolved') throw new Error('unreachable');
+    expect(red.url).not.toBe('blob:browser-BLUE');
+  });
+
+  it('未标 origin 的项维持旧前缀判据（兼容面不变：未挂载 + assets/ → no-scope）', () => {
+    const { w } = scopedWorkspace({}, false);
+    const host = scopedHost(w, { scopeId: null, scopeEpoch: 0 });
+    expect(host.resolveAssetState({ kind: 'img', id: 'assets/a.png' })).toEqual({
+      kind: 'unresolved',
+      reason: 'no-scope',
+    });
+  });
+
+  it('originOfItem / assetEntryKey：builtin 前缀与 assets/ 形态各归其位，其余**不猜**', () => {
+    expect(originOfItem({ id: 'builtin:star' })).toBe('builtin');
+    expect(originOfItem({ id: 'assets/a.png' })).toBe('workspace-assets');
+    expect(originOfItem({ id: 'demo-assets/x.svg' })).toBeNull();
+    // 显式标注优先于推断（同一字符串 id 可以是两个来源）
+    expect(originOfItem({ id: 'assets/a.png', origin: 'browser-idb' })).toBe('browser-idb');
+    // 未标来源 → 退化为纯 id（旧宿主/测试替身行为不变）
+    expect(assetEntryKey({ id: 'demo-assets/x.svg' })).toBe('demo-assets/x.svg');
+    expect(assetEntryKey({ id: 'assets/a.png', origin: 'browser-idb' })).not.toBe(
+      assetEntryKey({ id: 'assets/a.png', origin: 'workspace-assets' }),
+    );
+  });
+});
+
+// ================================================================ P0-FIX-R1 R1-2：写后预热
+
+/**
+ * N1-REOPEN-BROKEN 的宿主级判别。
+ *
+ * 机制（P0-C-review §4）：归一化落盘走 `WorkspaceWriter`（`assetInsert.writeNormalized`），
+ * **绕过**宿主的 `writeToDisk` —— 后者才登记 objectURL。于是同一会话内 `resolveAssetState`
+ * 对刚写好的新引用 miss，渲染端断图；而**重开**时挂载期 `listAssets` 会把磁盘字节预热进
+ * 缓存，反而正常（这就是「同一磁盘状态、经不经插入会话表现不同」的全部原因）。
+ *
+ * `primeWorkspaceAsset` 把那半跳补上。这里钉三件事：写后缓存里有它、解析得到 blob、
+ * 失败/无工作区时**如实返回 false 且不抛**（不得把成功的插入改判失败）。
+ */
+describe('R1-2(g)：primeWorkspaceAsset 写后预热（同会话可解析）', () => {
+  it('写进磁盘的文件名 → 预热后 resolveAssetState 立刻 resolved（不依赖 listAssets）', async () => {
+    const { w } = scopedWorkspace({});
+    const host = scopedHost(w, { scopeId: 'ws:A', scopeEpoch: 1 });
+    // 模拟归一化落盘：直接写 writer（不经宿主 upload）
+    await w.writeAsset('a 2.png', new Uint8Array([1, 2, 3]).buffer, 'image/png');
+    // 写后立刻解析：**未**预热时缓存里没有它（这正是断图的成因）
+    expect(host.resolveAssetState({ kind: 'img', id: 'assets/a 2.png', origin: 'workspace-assets' })).toEqual(
+      { kind: 'unresolved', reason: 'missing' },
+    );
+
+    const primed = await host.primeWorkspaceAsset('assets/a 2.png');
+    expect(primed).toBe(true);
+    const state = host.resolveAssetState({ kind: 'img', id: 'assets/a 2.png', origin: 'workspace-assets' });
+    expect(state.kind).toBe('resolved');
+    if (state.kind !== 'resolved') throw new Error('unreachable');
+    expect(state.url.startsWith('blob:')).toBe(true);
+    // 全程没有调用过 listAssets —— 证明不依赖清单刷新
+  });
+
+  it('幂等：重复预热不泄漏（同键先 revoke 旧值）', async () => {
+    const revokes: string[] = [];
+    URL.revokeObjectURL = ((u: string) => {
+      revokes.push(u);
+    }) as typeof URL.revokeObjectURL;
+    const { w } = scopedWorkspace({});
+    const host = scopedHost(w, { scopeId: 'ws:A', scopeEpoch: 1 });
+    await w.writeAsset('a.png', new Uint8Array([1]).buffer, 'image/png');
+
+    expect(await host.primeWorkspaceAsset('assets/a.png')).toBe(true);
+    const after1 = host.cachedUrlCount();
+    expect(await host.primeWorkspaceAsset('assets/a.png')).toBe(true);
+    // 缓存条目数不增长（键相同 → 覆盖），且旧 URL 被 revoke
+    expect(host.cachedUrlCount()).toBe(after1);
+    expect(revokes.length).toBeGreaterThan(0);
+  });
+
+  it('无工作区 → false（**不抛**：磁盘事实成立，不得据此改判插入失败）', async () => {
+    const { w } = scopedWorkspace({}, false);
+    const host = scopedHost(w, { scopeId: null, scopeEpoch: 0 });
+    await expect(host.primeWorkspaceAsset('assets/a.png')).resolves.toBe(false);
+  });
+
+  it('磁盘上没有该文件 → false（不抛）', async () => {
+    const { w } = scopedWorkspace({});
+    const host = scopedHost(w, { scopeId: 'ws:A', scopeEpoch: 1 });
+    await expect(host.primeWorkspaceAsset('assets/ghost.png')).resolves.toBe(false);
+  });
+
+  it('读盘抛错 → false（不抛：预热是增强，不是插入的前置）', async () => {
+    const w: WorkspaceWriter = {
+      mounted: true,
+      async writeAsset(name) {
+        return `assets/${name}`;
+      },
+      async hasAsset() {
+        return false;
+      },
+      async listAssetFiles() {
+        return [];
+      },
+      async readAssetFile() {
+        throw new DOMException('unreadable', 'NotReadableError');
+      },
+    };
+    const host = scopedHost(w, { scopeId: 'ws:A', scopeEpoch: 1 });
+    await expect(host.primeWorkspaceAsset('assets/a.png')).resolves.toBe(false);
   });
 });

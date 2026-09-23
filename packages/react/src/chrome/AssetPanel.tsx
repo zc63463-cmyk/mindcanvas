@@ -15,12 +15,24 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CHROME } from '../theme/tokens.js';
 import { BUILTIN_ICONS, type BuiltinIcon } from './assetIcons.js';
-import type { AssetStore } from './assetHost.js';
+import { assetEntryKey, type AssetStore } from './assetHost.js';
 import { AssetCard, AssetRow } from './assetViews.js';
 import type { AssetInsertAction, AssetItem } from './assetTypes.js';
 
 export type { AssetInsertAction, AssetItem } from './assetTypes.js';
 export { searchBuiltinIcons, svgDataUrlWithColor } from './assetViews.js';
+
+/**
+ * 面板内的**条目键**：`kind` + 存储来源 + id（P0-FIX-R1 R1-1）。
+ *
+ * React 卡片 `key`、清单去重、收藏键三处共用它。为什么必须含来源：浏览器素材库的
+ * `assets/a.png`（蓝）与工作区磁盘上的 `assets/a.png`（红）是**两张不同的图**，
+ * 同处一个清单里必须能分别渲染与点选 —— 只用 id 做 key 会让 React 复用同一张卡、
+ * 并把其中一张从去重后的清单里抹掉（N1-ID-COLLISION 的可见形态）。
+ */
+function assetPanelKey(a: AssetItem): string {
+  return `${a.kind}:${assetEntryKey(a)}`;
+}
 
 /** 语义顺序（UI 渲染次序的唯一事实源；Record 键序不可依赖） */
 export const ASSET_ACTION_ORDER = [
@@ -153,12 +165,12 @@ export function AssetPanel({
     else setInnerAction(next);
   };
 
-  /** 内置图标 + 宿主资产并集（宿主资产按 id 去重在前） */
+  /** 内置图标 + 宿主资产并集（重复条目按 `kind:origin:id` 去重，内置在前） */
   const allItems = useMemo(() => {
     const merged = [...assets, ...BUILTIN_ASSET_ITEMS];
     const seen = new Set<string>();
     return merged.filter((a) => {
-      const k = `${a.kind}:${a.id}`;
+      const k = assetPanelKey(a);
       if (seen.has(k)) return false;
       seen.add(k);
       return true;
@@ -169,7 +181,7 @@ export function AssetPanel({
     const q = query.trim().toLowerCase();
     const byTab =
       tab === 'fav'
-        ? allItems.filter((a) => favs.has(`${a.kind}:${a.id}`))
+        ? allItems.filter((a) => favs.has(assetPanelKey(a)))
         : tab === 'builtin'
           ? allItems.filter((a) => a.source === 'builtin')
           : tab === 'upload'
@@ -185,7 +197,7 @@ export function AssetPanel({
   const ordered = useMemo(() => {
     if (tab !== 'all' && tab !== 'fav') return filtered;
     return [...filtered].sort((a, b) => {
-      const fa = favs.has(`${a.kind}:${a.id}`) ? 0 : 1;
+      const fa = favs.has(assetPanelKey(a)) ? 0 : 1;
       const fb = favs.has(`${b.kind}:${b.id}`) ? 0 : 1;
       return fa - fb;
     });
@@ -369,13 +381,13 @@ export function AssetPanel({
         >
           {ordered.map((a) => (
             <AssetCard
-              key={`${a.kind}:${a.id}`}
+              key={assetPanelKey(a)}
               item={a}
               resolve={resolve}
               missing={isMissing?.(a) ?? false}
-              fav={favs.has(`${a.kind}:${a.id}`)}
+              fav={favs.has(assetPanelKey(a))}
               store={storeOf?.(a) ?? null}
-              onToggleFav={() => toggleFav(`${a.kind}:${a.id}`)}
+              onToggleFav={() => toggleFav(assetPanelKey(a))}
               onInsert={() => insert(a)}
             />
           ))}
@@ -385,7 +397,7 @@ export function AssetPanel({
           <div style={{ height: ordered.length * ROW_H, position: 'relative' }}>
             {ordered.slice(range.start, range.end).map((a, i) => (
               <AssetRow
-                key={`${a.kind}:${a.id}`}
+                key={assetPanelKey(a)}
                 item={a}
                 resolve={resolve}
                 top={(range.start + i) * ROW_H}

@@ -45,6 +45,7 @@ export {
 export {
   ASSET_CONFLICT_LABEL,
   ASSET_CONFLICT_ORDER,
+  assetEntryKey,
   assetFavKey,
   assetKeyOf,
   BROWSER_SCOPE_KEY,
@@ -56,6 +57,7 @@ export {
   isExternalRef,
   isSelfContainedRef,
   isWorkspaceAssetRef,
+  originOfItem,
   portabilityOfStore,
   uniqueAssetName,
 } from './chrome/assetHost.js';

@@ -203,3 +203,83 @@ describe('P0-B：IdbAssetHost 作用域键与释放（R-07 / R-16）', () => {
     expect(host.cachedUrlCount()).toBe(0);
   });
 });
+
+// ================================================================ P0-FIX-R1 R1-1：来源标注与不落库
+
+/**
+ * `origin` 是**读侧**概念，且**不得**落进任何持久面。
+ *
+ * 旧实现在 `putRecord` 处写 `{ ...item, mime, data }` —— 展开表达式不受 TS 多余属性
+ * 检查约束，给 `AssetItem` 加字段就会静默写进 IndexedDB。这里把「加了字段但记录里没有」
+ * 钉死：既证明来源在**读侧**补上（无需迁移），也证明写入侧没漏出去。
+ */
+describe('R1-1：IDB 读侧标注 origin，写侧**不得**落库（零迁移）', () => {
+  it('uploadAssetDetailed 产出的 item 带 origin=browser-idb', async () => {
+    const host = new IdbAssetHost(STATIC, '/');
+    const result = await host.uploadAssetDetailed(new File(['x'], 'a.png', { type: 'image/png' }));
+    expect(result.kind).toBe('written');
+    if (result.kind !== 'written') throw new Error('unreachable');
+    expect(result.item.origin).toBe('browser-idb');
+  });
+
+  it('新实例 listAssets 重建的 IDB 项**读侧**带 origin=browser-idb（现有记录无该字段也能标）', async () => {
+    const first = new IdbAssetHost(STATIC, '/');
+    await first.uploadAsset(new File(['x'], 'a.png', { type: 'image/png' }));
+    const second = new IdbAssetHost(STATIC, '/');
+    const list = await second.listAssets();
+    const uploaded = list.find((a) => a.id === 'assets/a.png');
+    expect(uploaded).toBeDefined();
+    expect(uploaded?.origin).toBe('browser-idb');
+  });
+
+  it('IDB 记录里**没有** origin 字段（origin 不入任何持久面）', async () => {
+    const host = new IdbAssetHost(STATIC, '/');
+    await host.uploadAsset(new File(['x'], 'a.png', { type: 'image/png' }));
+    const db = await new Promise<IDBDatabase>((resolve, reject) => {
+      const req = indexedDB.open('mindcanvas-assets', 1);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    const rows = await new Promise<unknown[]>((resolve, reject) => {
+      const req = db.transaction('assets', 'readonly').objectStore('assets').getAll();
+      req.onsuccess = () => resolve(req.result as unknown[]);
+      req.onerror = () => reject(req.error);
+    });
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      expect(Object.keys(row as object)).not.toContain('origin');
+    }
+  });
+
+  it('静态清单项不因并集被误标（未标来源的静态项原样保留）', async () => {
+    const host = new IdbAssetHost(STATIC, '/');
+    const list = await host.listAssets();
+    const demo = list.find((a) => a.id === 'demo-assets/demo-diagram.svg');
+    expect(demo).toBeDefined();
+    expect(demo?.origin).toBeUndefined();
+  });
+});
+
+describe('R1-1：IdbAssetHost.resolveAssetState 不回落必然 404 的站点根', () => {
+  it('已声明 browser-idb 但无缓存 → unresolved(unavailable)，**不是** baseUrl+id', async () => {
+    const host = new IdbAssetHost([], '/');
+    const state = host.resolveAssetState({ kind: 'img', id: 'assets/gone.png', origin: 'browser-idb' });
+    expect(state).toEqual({ kind: 'unresolved', reason: 'unavailable' });
+  });
+
+  it('origin=workspace-assets 的项**不在此解析**（委托信号，避免拿到站点根 404）', () => {
+    const host = new IdbAssetHost([], '/');
+    expect(host.resolveAssetState({ kind: 'img', id: 'assets/a.png', origin: 'workspace-assets' })).toEqual({
+      kind: 'unresolved',
+      reason: 'unavailable',
+    });
+  });
+
+  it('未标 origin 且无缓存 → 维持旧行为（静态打包资产回落 baseUrl+id）', () => {
+    const host = new IdbAssetHost(STATIC, '/');
+    expect(host.resolveAssetState({ kind: 'img', id: 'demo-assets/x.svg' })).toEqual({
+      kind: 'resolved',
+      url: '/demo-assets/x.svg',
+    });
+  });
+});

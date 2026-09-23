@@ -27,16 +27,19 @@
  */
 import {
   BROWSER_SCOPE_KEY,
+  assetEntryKey,
   cacheKeyOf,
   isExternalRef,
   isWorkspaceAssetRef,
   kindOfFileName,
   mimeOfFileName,
+  originOfItem,
   uniqueAssetName,
   type AssetConflictChoice,
   type AssetHostV2,
   type AssetResolution,
   type AssetScopeMark,
+  type AssetStore,
   type AssetWriteResult,
 } from './assetHost.js';
 import type { AssetHost } from './assetHost.js';
@@ -149,11 +152,20 @@ export class WorkspaceAssetHost implements AssetHostV2 {
         id: f.path,
         name: f.name,
         type: (f.name.toLowerCase().split('.').pop() ?? 'bin').slice(0, 8),
+        // R1-1：磁盘扫描项一律 `workspace-assets`（**读侧**标注，迁移面为零）
+        origin: 'workspace-assets',
       });
     }
-    const byId = new Map(items.map((a) => [a.id, a]));
-    for (const d of disk) byId.set(d.id, d);
-    return [...byId.values()];
+    // R1-1：合并键 = **复合键（origin + id）**，不是裸 id。
+    //
+    // 旧实现按 id 合并，磁盘项因此**顶替**同名的浏览器素材库项 ——「浏览器库里的蓝图」
+    // 在挂载工作区后就从清单里消失了（N1-ID-COLLISION 的第一跳）。复合键让两者
+    // **都是可选中的独立卡片**，卡片 key 也不再相撞。
+    // fallback 清单里已显式标注来源的项（新 IdbAssetHost）与本层标注的磁盘项天然分属两个键；
+    // 旧宿主（无 origin）的项由 `assetEntryKey` 按 id 形态推断，避免与磁盘项重复列出。
+    const byKey = new Map(items.map((a) => [assetEntryKey(a), a]));
+    for (const d of disk) byKey.set(assetEntryKey(d), d);
+    return [...byKey.values()];
   }
 
   resolveAsset(item: Pick<AssetItem, 'id'>): string {
@@ -169,13 +181,23 @@ export class WorkspaceAssetHost implements AssetHostV2 {
    * `external` 是外链，不纳入图库管理，也**不产生** `W-ASSET-MISSING`。
    * 静态打包资产（既非自包含也非 `assets/`）仍按 `baseUrl` 解析 —— 那是应用自带资源，
    * 不属于「站点根回落」那个反例。
+   *
+   * ── P0-FIX-R1 R1-1：**按来源路由，不按 id 前缀猜** ──
+   * `origin === 'browser-idb'` 的项即使 id 是 `assets/` 形态，字节也在浏览器素材库里
+   * （`IdbAssetHost`），必须**委托给 fallback** —— 本宿主的 scope 缓存里放着的是磁盘上
+   * 同名文件的字节，命中它就会把蓝图静默换成红图（N1.5 实测的根因）。
+   * 未标 origin 的项维持旧判据（`isWorkspaceAssetRef` 前缀），兼容面不变。
    */
-  resolveAssetState(item: Pick<AssetItem, 'kind' | 'id'>): AssetResolution {
+  resolveAssetState(item: Pick<AssetItem, 'kind' | 'id' | 'origin'>): AssetResolution {
     const id = item.id;
     if (id.startsWith('data:')) return { kind: 'resolved', url: id };
     if (isExternalRef(id)) return { kind: 'unresolved', reason: 'external' };
-    if (id.startsWith('builtin:')) return { kind: 'resolved', url: `${this.baseUrl}${id}` };
-    if (!isWorkspaceAssetRef(id)) {
+    const origin = originOfItem(item);
+    if (origin === 'browser-idb') return this.originatedBy('browser-idb', item);
+    if (origin === 'builtin' || id.startsWith('builtin:')) {
+      return { kind: 'resolved', url: `${this.baseUrl}${id}` };
+    }
+    if (origin !== 'workspace-assets' && !isWorkspaceAssetRef(id)) {
       return { kind: 'resolved', url: this.resolveAsset(item) };
     }
     const cached = this.urls.get(cacheKeyOf(this.scopeMark(), id));
@@ -185,6 +207,52 @@ export class WorkspaceAssetHost implements AssetHostV2 {
     // 挂载中且缓存未命中：清单已从磁盘重建过 → 磁盘上确实没有这个文件。
     // 这里**不**回落 `baseUrl + id` —— 那会指向站点根下一个不存在的路径（R-15）。
     return { kind: 'unresolved', reason: 'missing' };
+  }
+
+  /**
+   * 委托给 fallback 宿主解析**它自己存储里的**字节（R1-1）。
+   *
+   * 关键：**先试五态版**（`IdbAssetHost.resolveAssetState` 会对声明了 `browser-idb`
+   * 却无缓存的项返回 `unavailable`，而不是回落一个必然 404 的 `baseUrl + id`）；
+   * 旧 fallback 没有该方法时退回字符串版，与升级前同形。
+   */
+  private originatedBy(
+    origin: AssetStore,
+    item: Pick<AssetItem, 'kind' | 'id' | 'origin'>,
+  ): AssetResolution {
+    void origin;
+    if (typeof this.fallback.resolveAssetState === 'function') {
+      return this.fallback.resolveAssetState(item);
+    }
+    return { kind: 'resolved', url: this.fallback.resolveAsset(item) };
+  }
+
+  /**
+   * 写后预热（P0-FIX-R1 R1-2 / `AssetHostV2.primeWorkspaceAsset`）。
+   *
+   * 归一化落盘绕开了本宿主的 `writeToDisk`，缓存里没有这个文件 → 同会话内新引用解析不到。
+   * 这里补上那一跳：读盘 → 建 objectURL → 按**当前** scope 的缓存键登记。
+   *
+   * 幂等：`ScopedObjectUrls.set` 同键先 revoke 旧值。
+   * 失败（无工作区 / 读不到 / 建 URL 抛错）→ `false`，**不抛**——
+   * 调用方据此最多少一次预热，绝不因此把已经写成功的插入改判失败。
+   */
+  async primeWorkspaceAsset(relPath: string): Promise<boolean> {
+    const w = this.ws();
+    if (!w) return false;
+    let file: File | null = null;
+    try {
+      file = await w.readAssetFile(relPath);
+    } catch {
+      return false;
+    }
+    if (file === null) return false;
+    try {
+      this.urls.set(cacheKeyOf(this.scopeMark(), relPath), URL.createObjectURL(file));
+    } catch {
+      return false;
+    }
+    return true;
   }
 
   /**
@@ -260,7 +328,6 @@ export class WorkspaceAssetHost implements AssetHostV2 {
       bytes: file.size,
     };
   }
-
   /**
    * 回退宿主（IndexedDB）：把它的 `AssetItem` 结果翻译成三态。
    *
@@ -339,6 +406,8 @@ function itemOf(kind: 'img' | 'draw', id: string, name: string): AssetItem {
     id,
     name,
     type: (name.toLowerCase().split('.').pop() ?? 'bin').slice(0, 8),
+    // R1-1：本宿主产出/落盘的项，字节在工作区磁盘上
+    origin: 'workspace-assets',
   };
 }
 
