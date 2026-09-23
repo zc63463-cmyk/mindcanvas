@@ -883,7 +883,24 @@ function StageContent({
       // ② 文档句柄与身份（id 即相对路径：与 openWorkspaceFile 同口径）
       setDoc((d) => ({ ...d, id: file.path, name: file.name, handle: file.handle }));
       // ③ 面包屑与索引身份的路径来源
+      const previousPath = workspacePath;
       setWorkspacePath(file.path);
+      // ④ 索引层：**身份随行**（F5）。`docKey` 含相对路径，改名后键就变了 ——
+      // 若只让下游 `registerDoc` 按新键登记，收藏会留在旧条目上（改名即丢）。
+      // `relocateDoc` 把旧条目的 starred/lineageId 搬过来，并把旧键写进 `legacyKeys`
+      // 供降级投影认领（这是本应用自己完成的重绑，不是凭同名猜测；§6.2.1 规则不变）。
+      const scopeId = workspace.scopeId;
+      if (previousPath !== null && scopeId !== null) {
+        index.relocateDoc({
+          fromDocKey: wsDocKey(scopeId, previousPath),
+          docKey: wsDocKey(scopeId, file.path),
+          relPath: file.path,
+          name: file.name,
+          scopeId,
+          persisted: workspace.scopeState.persisted,
+          sourceRef: { kind: 'disk-handle' },
+        });
+      }
     },
     onAfterRelease: () => {
       // 租约期间内容又变过 → 立即补写一次（写**新**目的地，I-18 时序表末行）。

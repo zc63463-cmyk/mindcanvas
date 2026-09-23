@@ -1475,3 +1475,167 @@ describe('DocIndex · 收藏身份与宽容读写', () => {
     expect(idx(diskCtx()).listDocs()).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------- P0-A F5：改名/移动的身份随行
+
+/**
+ * F5 的判别核心：`docKey` 含相对路径，改名后键就变了。
+ * 若改名后只按新键 `registerDoc`，收藏会留在旧条目上 —— 用户看到「改名即丢收藏」。
+ * `relocateDoc` 是这条的解法：把旧条目的身份（starred / lineageId）搬到新键，
+ * 并把旧键写进 `legacyKeys` 供降级投影认领。
+ */
+describe('P0-A F5 · 改名/移动后的身份随行（relocateDoc）', () => {
+  const SCOPE = 'ws:aaaa';
+
+  it('★改名后收藏仍在（跟在同一个逻辑文档上，不是新增一条）', () => {
+    const d = idx(diskCtx(SCOPE));
+    seedRegistered(d, '架构.mm.md', SCOPE);
+    const oldKey = wsDocKey(SCOPE, '架构.mm.md');
+    const newKey = wsDocKey(SCOPE, '架构设计.mm.md');
+    d.setStarred(oldKey, true);
+    expect(d.starredKeys().has(oldKey)).toBe(true);
+
+    d.relocateDoc({
+      fromDocKey: oldKey,
+      docKey: newKey,
+      relPath: '架构设计.mm.md',
+      name: '架构设计.mm.md',
+      scopeId: SCOPE,
+      persisted: true,
+      sourceRef: { kind: 'disk-handle' },
+    });
+
+    // 收藏跟到新键，且**旧键也仍被认出**（三个别名都进集合，见 starredKeys 注释）
+    expect(d.starredKeys().has(newKey)).toBe(true);
+    expect(d.getDoc(newKey)?.starred).toBe(true);
+    // ★不是新增条目：改名前后各只有 1 条「收藏」语义的文档条目
+    expect(d.docs).toHaveLength(1);
+  });
+
+  it('★lineageId 随行（血统不断：收藏/最近按它迁移）', () => {
+    const d = idx(diskCtx(SCOPE));
+    seedRegistered(d, 'a.mm.md', SCOPE);
+    const oldKey = wsDocKey(SCOPE, 'a.mm.md');
+    const newKey = wsDocKey(SCOPE, 'b.mm.md');
+    const before = d.getDoc(oldKey)?.lineageId;
+    expect(before).toBeTruthy();
+
+    d.relocateDoc({
+      fromDocKey: oldKey,
+      docKey: newKey,
+      relPath: 'b.mm.md',
+      name: 'b.mm.md',
+      scopeId: SCOPE,
+      persisted: true,
+      sourceRef: { kind: 'disk-handle' },
+    });
+    expect(d.getDoc(newKey)?.lineageId).toBe(before);
+  });
+
+  it('★旧键进 legacyKeys（投影据此认领，不是凭同名猜测）', () => {
+    const d = idx(diskCtx(SCOPE));
+    seedRegistered(d, '研发/架构.mm.md', SCOPE);
+    const oldKey = wsDocKey(SCOPE, '研发/架构.mm.md');
+    const newKey = wsDocKey(SCOPE, '研发/架构设计.mm.md');
+    d.relocateDoc({
+      fromDocKey: oldKey,
+      docKey: newKey,
+      relPath: '研发/架构设计.mm.md',
+      name: '架构设计.mm.md',
+      scopeId: SCOPE,
+      persisted: true,
+      sourceRef: { kind: 'disk-handle' },
+    });
+    const entry = d.getDoc(newKey);
+    expect(entry?.legacyKeys).toContain(oldKey);
+    expect(entry?.legacyKeys).toContain('研发/架构.mm.md');
+  });
+
+  it('移动（换目录）同样随行：收藏与血统都不丢', () => {
+    const d = idx(diskCtx(SCOPE));
+    seedRegistered(d, '架构.mm.md', SCOPE);
+    const oldKey = wsDocKey(SCOPE, '架构.mm.md');
+    const newKey = wsDocKey(SCOPE, '归档/架构.mm.md');
+    d.setStarred(oldKey, true);
+    const lineage = d.getDoc(oldKey)?.lineageId;
+    d.relocateDoc({
+      fromDocKey: oldKey,
+      docKey: newKey,
+      relPath: '归档/架构.mm.md',
+      name: '架构.mm.md',
+      scopeId: SCOPE,
+      persisted: true,
+      sourceRef: { kind: 'disk-handle' },
+    });
+    expect(d.getDoc(newKey)?.starred).toBe(true);
+    expect(d.getDoc(newKey)?.lineageId).toBe(lineage);
+    expect(d.docs).toHaveLength(1);
+  });
+
+  it('★旧条目不存在（从未登记）→ 退化为首次登记，不制造假血统', () => {
+    const d = idx(diskCtx(SCOPE));
+    const newKey = wsDocKey(SCOPE, '新文档.mm.md');
+    d.relocateDoc({
+      fromDocKey: wsDocKey(SCOPE, '不存在.mm.md'),
+      docKey: newKey,
+      relPath: '新文档.mm.md',
+      name: '新文档.mm.md',
+      scopeId: SCOPE,
+      persisted: true,
+      sourceRef: { kind: 'disk-handle' },
+    });
+    expect(d.getDoc(newKey)).toBeTruthy();
+    expect(d.docs).toHaveLength(1);
+    expect(d.getDoc(newKey)?.starred).toBe(false); // 没有可继承的收藏
+  });
+
+  it('★连续两次改名：收藏不丢、不产生第二条条目', () => {
+    const d = idx(diskCtx(SCOPE));
+    seedRegistered(d, 'a.mm.md', SCOPE);
+    let key = wsDocKey(SCOPE, 'a.mm.md');
+    d.setStarred(key, true);
+    const lineage = d.getDoc(key)?.lineageId;
+    for (const next of ['b.mm.md', 'c.mm.md']) {
+      const nextKey = wsDocKey(SCOPE, next);
+      d.relocateDoc({
+        fromDocKey: key,
+        docKey: nextKey,
+        relPath: next,
+        name: next,
+        scopeId: SCOPE,
+        persisted: true,
+        sourceRef: { kind: 'disk-handle' },
+      });
+      key = nextKey;
+    }
+    expect(d.getDoc(key)?.starred).toBe(true);
+    expect(d.getDoc(key)?.lineageId).toBe(lineage);
+    expect(d.docs).toHaveLength(1);
+  });
+
+  it('★F5：两个同名不同目录的文档是两条独立条目，各自收藏互不串（改名只影响自己）', () => {
+    const d = idx(diskCtx(SCOPE));
+    seedRegistered(d, '研发/笔记.mm.md', SCOPE);
+    seedRegistered(d, '个人/笔记.mm.md', SCOPE);
+    const yanfa = wsDocKey(SCOPE, '研发/笔记.mm.md');
+    const geren = wsDocKey(SCOPE, '个人/笔记.mm.md');
+    d.setStarred(yanfa, true);
+    expect(d.docs).toHaveLength(2);
+
+    // 改名研发那一份 → 只有它变化，「个人/笔记.mm.md」那条**一字不动**
+    const moved = wsDocKey(SCOPE, '研发/笔记2.mm.md');
+    d.relocateDoc({
+      fromDocKey: yanfa,
+      docKey: moved,
+      relPath: '研发/笔记2.mm.md',
+      name: '笔记2.mm.md',
+      scopeId: SCOPE,
+      persisted: true,
+      sourceRef: { kind: 'disk-handle' },
+    });
+    expect(d.docs).toHaveLength(2);
+    expect(d.getDoc(moved)?.starred).toBe(true);
+    expect(d.getDoc(geren)?.starred).toBe(false); // 另一份不受影响
+    expect(d.getDoc(geren)).toBeTruthy();
+  });
+});

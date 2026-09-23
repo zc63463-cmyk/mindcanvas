@@ -236,6 +236,62 @@ export class DocIndex {
     }, input.docKey);
   }
 
+  /**
+   * 文档**改名/移动**：把一条已存在的索引条目搬到新路径，**身份（含收藏）随行**。
+   *
+   * 为什么必须有这个方法（F5）：`docKey` 是 `ws:<scopeId>::<relPath>`，路径一变
+   * `docKey` 就变了。若改名后仍走 `registerDoc`，那条 `mutate(docKey)` 会把新路径
+   * 当成**从没见过的文档**建条目 —— 收藏（记在旧 `docKey` 上）就此失联，
+   * 「最近」也断成两条历史。`lineageId` 不参与键计算，所以必须在这里**显式搬运**：
+   *   - `starred` / `lineageId` / 时间戳从旧条目继承；
+   *   - 旧 `docKey` 与旧 `relPath` 追加进 `legacyKeys` —— 投影据此把旧键认领给新身份
+   *     （§6.2.1 的证据规则不变：这是**本应用自己完成的重绑**，不是凭同名猜测）；
+   *   - 旧条目在同一次写事务里移除，不留孤儿。
+   *
+   * 与 `registerDoc` 的分工：`registerDoc` = 「第一次见到这份文档」；
+   * 本方法 = 「这份文档换了名字/位置」。用错会丢收藏或留下重复条目。
+   */
+  relocateDoc(input: {
+    /** 旧身份（改名/移动**前**的 `docKey`） */
+    fromDocKey: string;
+    /** 新身份（新路径拼出的 `docKey`） */
+    docKey: string;
+    relPath: string | null;
+    name: string;
+    scopeId: ScopeId;
+    persisted: boolean;
+    sourceRef: DocIndexEntry['sourceRef'];
+  }): void {
+    const previous = this.getDoc(input.fromDocKey);
+    if (previous === undefined) {
+      // 旧条目不存在（例如从未登记过）→ 退化为首次登记，不制造假血统
+      this.registerDoc(input);
+      return;
+    }
+    // 新身份已存在 → 保留既有条目的收藏位（不覆盖用户的选择）
+    const existingTarget = this.getDoc(input.docKey);
+    const carried: DocIndexEntry = {
+      ...previous,
+      docKey: input.docKey,
+      scopeId: input.scopeId,
+      relPath: input.relPath,
+      name: input.name,
+      sourceRef: input.sourceRef,
+      // 旧身份进 `legacyKeys`：投影据此把旧键的收藏迁移过来（不是凭同名猜测）
+      legacyKeys: appendUnique(
+        appendUnique(previous.legacyKeys, input.fromDocKey),
+        previous.relPath ?? input.fromDocKey,
+      ),
+      starred: existingTarget?.starred === true ? true : previous.starred,
+    };
+    this.docs = [
+      ...this.docs.filter((e) => e.docKey !== input.fromDocKey && e.docKey !== input.docKey),
+      input.persisted ? stripEphemeral(carried) : { ...carried, ephemeral: true as const },
+    ];
+    this.wrote = true;
+    this.persist();
+  }
+
   /** 收藏/取消收藏（按**稳定身份** `docKey`；`relPath` 变了收藏不丢） */
   setStarred(docKey: string, starred: boolean, at = this.nowMs()): void {
     this.mutate((prev) => {
