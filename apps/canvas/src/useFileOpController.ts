@@ -15,7 +15,7 @@
  */
 import { useCallback, useRef, useState } from 'react';
 import type { FileOpOutcome, WorkspaceDir, WorkspaceFile, WorkspaceNode } from '@mindcanvas/react';
-import { statUnchanged, uniqueCopyName } from '@mindcanvas/react';
+import { statUnchanged } from '@mindcanvas/react';
 import type { PartialChoice, RenameDirtyChoice } from './FileOpPanels.js';
 import {
   type CurrentDocOpResult,
@@ -501,9 +501,18 @@ export async function conflictKeepBothName(
   dirPath: string,
   name: string,
 ): Promise<string> {
-  const taken = await host.resolveCopyName(dirPath, name);
-  // `resolveCopyName` 返回可用名：与输入不同即说明原名已被占用
-  return taken !== name ? taken : uniqueCopyName(name, () => true);
+  // `resolveCopyName` **本身就是「保留两份」的求解器**：它内部已跑过唯一名循环，
+  // 返回的是最终可用名 —— 空闲时**原样返回入参**，冲突时返回 `… 2 …`（见
+  // `directoryHostOps.resolveCopyNameOp` 与契约测试 `directory-host.test.ts:505-506`）。
+  // 因此这里直接采用它，不得再叠加一次取名。
+  //
+  // 旧实现的判据是**反的**（`taken !== name ? taken : uniqueCopyName(name, () => true)`）：
+  //  - 真冲突时 `taken` 已是 `name 2.ext`，原样返回正确；
+  //  - **无冲突**时 `taken === name`，旧代码却把它当「原名被占用」，转而调
+  //    `uniqueCopyName(name, () => true)` —— 谓词恒真 ⇒ 每个候选都被判「已占用」⇒
+  //    循环跑到上限，返回 `name 999.ext`。调用方再据「keepBoth ≠ name」误判为冲突，
+  //    于是「把文档改到空闲名字」也会弹三选，且确认后被改成 `… 999.mm.md`。
+  return host.resolveCopyName(dirPath, name);
 }
 
 /** 面板状态里「apply」的类型（供组件 props 使用） */

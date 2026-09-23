@@ -25,7 +25,7 @@
 import { useCallback } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import type { DocumentHost, EditorController, FsFileHandle, MindDoc } from '@mindcanvas/react';
-import { getFileHandle, setFileHandle, verifyPermission } from '@mindcanvas/react';
+import { buildEditable, getFileHandle, setFileHandle, verifyPermission } from '@mindcanvas/react';
 import {
   SAVE_BUSY_NOTICE,
   SAVE_FAILED_NOTICE,
@@ -132,6 +132,30 @@ export function useDocumentActions({
       // effect 不会重跑 —— 靠 source 判据就会把「换了文档」漏成「没换」，旧摘要草稿
       // 于是活到新文档上。本调用点在**替换动作发生时**（无论内容是否相同）推进。
       onDocumentReplaced?.();
+      // ── S2G 零窗口（P0-FIX-R1 R1-3）────────────────────────────────────────
+      //
+      // 旧实现把「reset 树 + 置位 `syncedSourceRef`」留在 `useDocumentSwitch` 的
+      // **被动 effect** 里，而 `setDoc(next)` 与那个 effect 之间隔着一次 React 提交：
+      // 「打开文档 → 立刻编辑 → Ctrl+S」存在 effect 尚未提交的窗口，整次保存被
+      // `saveGuard.canWriteDoc` 拒绝（真实浏览器 5 次跑 4 次命中）。
+      //
+      // 这里把「树属于新文档」做成与替换**同事务的同步事实**，窗口长度归零。
+      //
+      // **不能只把置位前移**：那时 `controller.root` 还是旧文档的树，守卫会放行一次
+      // 「旧树写进新目的地」的错误保存。所以顺序必须是
+      // **parse(next.source) → reset(新树) → 置位**，三者同步、无 await、无 effect 依赖。
+      //
+      // 解析失败（`editable === null`）时**不置位**：树没能换成新文档，守卫必须继续拦
+      // （宁可拒写，也不让旧内容写进新文件）。视图侧（实体表 / 收起 / fit）仍由
+      // `useDocumentSwitch` 的 effect 负责 —— 那部分是表现，不该在同步路径里做。
+      const parsed = buildEditable(next.source);
+      if (parsed.editable !== null) {
+        controller.reset(parsed.editable);
+        syncedSourceRef.current = next.source;
+      } else {
+        // 解析不出树 → 树与任何 source 都不同步；显式置 null 使守卫拒写（fail-closed）
+        syncedSourceRef.current = null;
+      }
       setDoc(next);
       docHost.remember(next);
       // FA1-T2：从「最近文档」/文件库切来的文档没有 handle，异步补挂后回填。
@@ -143,7 +167,7 @@ export function useDocumentActions({
         }
       });
     },
-    [session, setDoc, docHost, onDocumentReplaced],
+    [controller, session, setDoc, docHost, onDocumentReplaced, syncedSourceRef],
   );
 
   const applyDoc = useCallback(

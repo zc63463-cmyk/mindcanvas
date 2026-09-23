@@ -286,6 +286,39 @@ describe('useAutoSave · S2G 同步守卫', () => {
   });
 });
 
+describe('R1-3：守卫读实时 doc.source（不得被排除出 deps 的字段冻住）', () => {
+  /**
+   * 背景（P0-FIX-R1 实测定性）：本 hook 的 effect deps 刻意**不含 `doc.source`**
+   * （口径纪律：保存写回会误触发文档重建）。deps 排除某字段后，若守卫直接闭包读它，
+   * 读到的会是「上一次重排时」的值。
+   *
+   * 真机命中的是**同族**的另一处（`MindmapStage` 的键位 effect 只依赖 `controller`，
+   * 永久捕获首版 `handleSave` → Ctrl+S 的守卫拿旧 `doc.source` 比实时 `syncedSourceRef`
+   * → 每次保存被拦）。本 hook 这侧的正确性同样要钉住：换源后守卫必须按**当前** source 判定。
+   */
+  it('doc.source 换新且 synced 同步后 → 守卫放行、写盘发生（不得沿用旧 source）', async () => {
+    const NEW = 'NEW-SOURCE';
+    const h = setup({ synced: NEW, doc: { source: NEW } });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+
+    expect(h.docHost.save).toHaveBeenCalledTimes(1);
+    expect(h.controller.markSaved).toHaveBeenCalledTimes(1);
+    expect(h.onBlockedSave).not.toHaveBeenCalled();
+  });
+
+  it('对照：ref 与当次 source **不等**时仍须拦（等值判据不得放宽）', async () => {
+    const h = setup({ synced: 'OTHER', doc: { source: 'NEW' } });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(h.docHost.save).not.toHaveBeenCalled();
+    expect(h.onBlockedSave).toHaveBeenCalledWith(SAVE_BLOCKED_NOTICE);
+  });
+});
+
 describe('P0-A · 租约对自动保存的拦截（I-16/I-18）', () => {
   it('★租约期间 auto 提交被挡回 blocked，且**不入队**（saving 不闪）', async () => {
     const h = setup();

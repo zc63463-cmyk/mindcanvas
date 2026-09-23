@@ -66,6 +66,23 @@ export function useAutoSave({
   // 内容身份：不可变根引用（选中/折叠/重渲不改变它，只有编辑才换对象）
   const content = controller.root;
 
+  /**
+   * `doc.source` 的**当次渲染值**（P0-FIX-R1 R1-3）。
+   *
+   * 为什么必须走 ref：下方 effect 的 deps 刻意不含 `doc.source`（它属于「文档身份」，
+   * 放进 deps 会让**保存路径的写回**误触发文档重建，见文件头口径纪律）。但守卫需要
+   * 「**此刻**的文档 source」——直接从 deps 里被排除的字段读，闭包会定格在 effect
+   * **上一次重排时**的 doc：
+   *   - 首次排定后打开了另一个文档（内容不同）→ 闭包里仍是**旧文档**的 source；
+   *   - `syncedSourceRef` 已被 `applyDoc` 正确置为新 source；
+   *   - 两者不等 → 每一次自动保存都被守卫拦掉（真机 5 次全拦，`writes=[]`）。
+   *
+   * ref 每渲染刷新，effect 闭包读 ref = 读当次渲染值：既不改 deps（不误触发重建），
+   * 又让守卫拿到实时事实。等值判据本身一字未改（`canWriteDoc` 仍是精确等值）。
+   */
+  const docSourceRef = useRef(doc.source);
+  docSourceRef.current = doc.source;
+
   // 保存目的地同步（**次级机制**）：doc.handle 变化（打开/补挂/另存为回填/下载兜底）时跟随。
   // 主机制是各 commit 里的同步 `setDestination` —— 已入队请求读目的地，不依赖本 effect。
   useEffect(() => {

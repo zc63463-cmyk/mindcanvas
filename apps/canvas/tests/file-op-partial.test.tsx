@@ -26,7 +26,11 @@ import {
   type SafeWorkspaceHost,
   useFileOpOrchestration,
 } from '../src/hooks/useFileOpOrchestration';
-import { type OpWorkspaceHost, useFileOpController } from '../src/useFileOpController';
+import {
+  type OpWorkspaceHost,
+  conflictKeepBothName,
+  useFileOpController,
+} from '../src/useFileOpController';
 
 // ---------------------------------------------------------------- 可控 Fake 工作区
 
@@ -554,5 +558,50 @@ describe('⑤ · 删除当前文档的 host 段', () => {
     });
     // 删除路径不调用 onRebound（目的地变更由「文档关闭」负责，属 F2 的调用方）
     expect(h.session.getDestinationInfo().relPath).toBe('a.mm.md');
+  });
+});
+
+/**
+ * ── P0-FIX-R1：`conflictKeepBothName` 的取名判据（F1-RENAME-SPURIOUS-CONFLICT）──
+ *
+ * **症状**：把当前文档改到一个**空闲**名字也会弹「已有同名」三选；点「保留两份」后
+ * 文档被写成 `… 999.mm.md`（把序号算到上限的荒谬名字）。
+ *
+ * **机制**：`resolveCopyName` 本身就是「保留两份」的求解器 —— 空闲时原样返回入参、
+ * 冲突时返回 `… 2 …`（`directoryHostOps.resolveCopyNameOp` 内部已跑唯一名循环；
+ * 契约由 `packages/react/tests/directory-host.test.ts` 的两条断言钉死）。
+ * 旧实现在它之上又叠了一次取名，且判据是**反的**：
+ *
+ *     taken !== name ? taken : uniqueCopyName(name, () => true)
+ *
+ * 无冲突时 `taken === name` → 走右支 → 谓词恒真 ⇒ 每个候选都被判「已占用」⇒
+ * 循环跑到上限 ⇒ `name 999.ext`。调用方再据「keepBoth ≠ name」误判为冲突。
+ *
+ * 这两条断言同时钉住「空闲名不得改名」与「真冲突仍须取名」两个方向。
+ */
+describe('P0-FIX-R1：conflictKeepBothName 采用宿主的解答，不得再叠加取名', () => {
+  /** 最小宿主：只实现本函数用到的那一个方法 */
+  function hostWith(resolve: (dirPath: string, name: string) => Promise<string>) {
+    return { resolveCopyName: resolve } as unknown as OpWorkspaceHost;
+  }
+
+  it('空闲名字 → 原样返回（**不得**变成 `… 999 …`，也不得触发冲突判定）', async () => {
+    const host = hostWith(async (_d, name) => name); // 无冲突：宿主原样返回
+    await expect(conflictKeepBothName(host, '', 'f1-renamed.mm.md')).resolves.toBe(
+      'f1-renamed.mm.md',
+    );
+  });
+
+  it('真冲突 → 采用宿主已算好的 `… 2 …` 名字', async () => {
+    const host = hostWith(async (_d, name) => name.replace(/\.mm\.md$/, ' 2.mm.md'));
+    await expect(conflictKeepBothName(host, '', '架构.mm.md')).resolves.toBe('架构 2.mm.md');
+  });
+
+  it('判别性：结果**必须**与宿主返回值逐字相同（旧实现会在此返回 999）', async () => {
+    const answers = ['a.mm.md', 'b 2.mm.md', 'c.mm.md'];
+    for (const ans of answers) {
+      const host = hostWith(async () => ans);
+      await expect(conflictKeepBothName(host, '', 'x.mm.md')).resolves.toBe(ans);
+    }
   });
 });

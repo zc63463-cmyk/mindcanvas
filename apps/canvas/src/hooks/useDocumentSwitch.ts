@@ -57,9 +57,24 @@ export function useDocumentSwitch({
   setExpandedQaId,
   apiRef,
 }: DocumentSwitchOptions): void {
-  // B1 文档切换：新 source → controller.reset（清 history/折叠/选中）+ 实体表重建 + 展开收起 + 适配视图
+  // B1 文档切换：新 source → 实体表重建 + 展开收起 + 适配视图（**视图职责**）
   // 首挂**同源**跳过（controller 已按当前树创建 + MapView 初始 fit 已处理；避免重复动画）；
   // 首挂不同源（启动页出口：StageContent 挂载前 doc 已换）→ 补做切换（S2F）
+  //
+  // ── P0-FIX-R1 R1-3：树重置与 S2G 置位已**移出**本 effect ──────────────────
+  //
+  // 本 effect 是被动 effect（commit 后才跑），而「打开 → 立刻编辑 → Ctrl+S」的保存
+  // 决策发生在它之前 —— 把 `controller.reset` 与 `syncedSourceRef` 留在这里，就等于
+  // 承认存在一个「树已换、守卫还认为没换」的窗口，整次保存被拦（真机 5 次 4 拦）。
+  //
+  // 现在两件事都在 `performApplyDoc` 内**同步**完成（parse → reset → 置位，同事务），
+  // 那里是文档替换的唯一定义性入口。本 effect 只留表现层：实体表重建、收起展开态、
+  // 视图适配；以及**兜底**推进保存会话令牌（覆盖不经 applyDoc 的替换路径，如启动页出口）。
+  //
+  // 首挂不同源（S2F 路径）仍在此补做：那条路径的 `doc` 是在 StageContent 挂载前改的，
+  // controller 按**旧**树创建 → 这里必须把它换成新树。R1-3 的同步 reset 走的是
+  // applyDoc，覆盖不到「挂载前就换好」的情形，故保留这条补做分支（它同时置位 synced，
+  // 与 applyDoc 的置位同值、幂等）。
   const firstDocEffectRef = useRef(true);
   // biome-ignore lint/correctness/useExhaustiveDependencies: 纯搬迁段——deps 刻意保持 [doc.source]（原 eslint-disable 注释），行为由 useDocumentSwitch.test 判别
   useEffect(() => {
@@ -81,13 +96,22 @@ export function useDocumentSwitch({
         })),
       doc.name,
     );
-    // 首挂且同源才跳过（S2F 状态判据）；不同源补做切换
+    // 首挂且同源才**整体跳过**（S2F 状态判据：controller 已按当前树创建 + MapView
+    // 初始 fit 已处理，四个动作都不该做）。
     if (isFirst && controllerRef.current?.root === editable) {
       syncedSourceRef.current = doc.source; // S2G 写点②：跳过 = 树本就同源，置位（幂等）
       return;
     }
-    controllerRef.current?.reset(editable);
-    syncedSourceRef.current = doc.source; // S2G 写点③：reset 后树 = 该文档 → 置位
+    // 真正的切换（或首挂不同源的补做）：树若还不是新的就换掉。
+    //
+    // R1-3：`performApplyDoc` 已在替换的同事务里同步 reset 过 —— 那种情况下
+    // `root === editable` 成立，这里**不重复** reset（幂等，也避免把刚清干净的
+    // history/折叠态再清一遍）。而「挂载前就换好 doc」的 S2F 路径 root 仍是旧树，
+    // 这里必须补做 —— 这条分支就是它存在的理由。
+    if (controllerRef.current?.root !== editable) {
+      controllerRef.current?.reset(editable);
+    }
+    syncedSourceRef.current = doc.source; // S2G 写点③：树 = 该文档 → 置位（幂等）
     setEntities(buildEntities(refs, gatewayTitles));
     setExpandedQaId(null);
     apiRef.current?.fit();

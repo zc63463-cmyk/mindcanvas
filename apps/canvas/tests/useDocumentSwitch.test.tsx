@@ -37,6 +37,18 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/**
+ * 每个 source 对应一棵**自己的**树（与生产一致：`buildEditable(doc.source)` 每次解析
+ * 都产出新对象）。t2/t5(b) 的 source 变化因此同时换树 —— 这是真实语义。
+ *
+ * P0-FIX-R1 R1-3 后，`controller.reset` 的同步执行已移到 `performApplyDoc`；本 hook 的
+ * effect 只在「树还不是新的」时补做。若测试夹具让 `editable` 恒定而 `root` 指向它，
+ * 就等于伪造了「applyDoc 已 reset 过」的状态，t2 便测不到切换回归 —— 故按 source 派生树。
+ */
+function treeOf(source: string): EditableNode {
+  return { id: `root-${source}`, title: 'root', children: [] } as unknown as EditableNode;
+}
+
 function setup(
   opts: { root?: EditableNode; controllerNull?: boolean; editableNull?: boolean } = {},
 ) {
@@ -48,23 +60,40 @@ function setup(
   const setExpandedQaId = vi.fn();
   const refs: EntityRef[] = [];
   const entities = new Map<string, Entity>();
-  const editable =
-    opts.editableNull === true
-      ? null
-      : ({ id: 'root', title: 'root', children: [] } as unknown as EditableNode);
-  // S2F：mock 增 `root` 字段（状态判据所需）——缺省与 `editable` 同引用（t1/t2 口径：首挂同源跳过）
-  const root = opts.root ?? editable;
+  // 首挂树的 source 固定为 SRC-A（docA）；切换后由 `treeFor` 按新 source 换树
+  const firstEditable = treeOf('SRC-A');
+  // 同一 source 必须拿到**同一个**对象引用（生产里 editable 由 useMemo([doc.source])
+  // 派生，也满足这一点）——否则「树是否已换」的引用判据会每次渲染都判为不同。
+  const treeCache = new Map<string, EditableNode>([['SRC-A', firstEditable]]);
+  const treeFor = (source: string): EditableNode | null => {
+    if (opts.editableNull === true) return null;
+    let t = treeCache.get(source);
+    if (t === undefined) {
+      t = treeOf(source);
+      treeCache.set(source, t);
+    }
+    return t;
+  };
+  // S2F：mock 增 `root` 字段（状态判据所需）——缺省与首挂树同引用（首挂同源跳过）
+  const root = opts.root ?? firstEditable;
+  const controller = { reset, root };
   const controllerRef: RefObject<EditorController | null> = {
-    current: opts.controllerNull === true ? null : ({ reset, root } as unknown as EditorController),
+    current: opts.controllerNull === true ? null : (controller as unknown as EditorController),
   };
   // S2G：同步标记（写点观察位；初值 null）
   const syncedSourceRef: RefObject<string | null> = { current: null };
+
+  /** 模拟「树被换成该 source 的树」（生产的 applyDoc 同步 reset 就是这一步） */
+  const applyTree = (source: string): void => {
+    const t = treeFor(source);
+    if (t !== null) controller.root = t;
+  };
 
   const view = renderHook(
     ({ doc }: { doc: MindDoc }) =>
       useDocumentSwitch({
         doc,
-        editable,
+        editable: treeFor(doc.source),
         refs,
         entities,
         entityHost,
@@ -79,7 +108,8 @@ function setup(
   );
   return {
     view,
-    editable,
+    editable: firstEditable,
+    applyTree,
     syncedSourceRef,
     reset,
     fit,
