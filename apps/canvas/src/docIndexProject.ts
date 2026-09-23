@@ -228,7 +228,8 @@ export function projectStarred(index: ProjectionState): boolean {
       // 复用与 library 侧同一套认领形态助手，消除该不对称。
       const forms = claimForms(LEGACY_STARRED_KEY, k);
       const claimedByIndex = index.docs.some((e) => isClaimed(e.legacyKeys, forms));
-      if (!claimedByIndex || indexedKeys.has(k)) out.add(k);    }
+      if (!claimedByIndex || indexedKeys.has(k)) out.add(k);
+    }
     for (const k of indexedKeys) out.add(k);
     index.store.set(LEGACY_STARRED_KEY, JSON.stringify([...out]));
     return true;
