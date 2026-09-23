@@ -140,6 +140,10 @@ import { RadialStageOverlay, useRadialStage } from './hooks/useRadialStage.js';
 import { layoutBoxCenterOf } from './layoutBoxCenter.js';
 import { makeCenterActions, makeDescActions, makeNoteActions, makeSummaryActions } from './nodeMenuBags.js';
 import { useDocumentToken } from './hooks/useDocumentToken.js';
+import { useFileOpOrchestration } from './hooks/useFileOpOrchestration.js';
+import { conflictKeepBothName, useFileOpController } from './useFileOpController.js';
+import { useCurrentDocDeleteFlow } from './hooks/useCurrentDocDeleteFlow.js';
+import type { CurrentDocOps } from './FileManager.js';
 import { useSummaryHop } from './hooks/useSummaryHop.js';
 import { IS_TEST_BUILD } from './testBuild.js';
 import { ghostBoxOf } from './radialGhost.js';
@@ -509,6 +513,15 @@ function StageContent({
 
   // GH-T3：自动保存（debounce 300ms；仅已落盘文档；手动 Ctrl+S 取消 pending；失败静默由手动保存兜底）
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * P0-A：租约释放后的**补写触发器**。
+   *
+   * 租约期间内容可能又变过（编辑不冻结，I-18）—— 那条内容不在任何 auto 定时器里，
+   * 因为期间所有 submit 都被挡回 `blocked` 且不入队。释放后必须立刻补写一次（写新目的地）。
+   * 递增这个 tick 会重排 `useAutoSave` 的 effect（它的 deps 含 `content`，而内容引用
+   * 在这条路径上没有变化，故需要显式的触发器）。
+   */
+  const [saveFlushTick, setSaveFlushTick] = useState(0);
 
   // 文档操作（打开/新建/保存/另存为）—— 依赖 autoSaveTimer，故在其定义之后调用
   const { applyDoc, handleOpen, handleNew, handleSave, handleSaveAs } = useDocumentActions({
@@ -542,6 +555,7 @@ function StageContent({
     autoSaveTimer,
     syncedSourceRef,
     onBlockedSave: setCommandNotice,
+    flushTick: saveFlushTick,
   });
 
   // MODE-GUARD：把本 Stage 的离开端口登记到 App（模式切换与文档替换共用同一判定）。
@@ -837,6 +851,140 @@ function StageContent({
   const [workspaceReady, setWorkspaceReady] = useState(false);
   /** 当前文档在工作区内的相对路径（面包屑用；非工作区文档为 null） */
   const [workspacePath, setWorkspacePath] = useState<string | null>(null);
+
+  // ---------------------------------------------------------------- P0-A：当前文档文件操作
+  //
+  // 组装两件事：
+  //  - `useFileOpOrchestration`：租约 → I-14 前置 → host `*Safe` → 归属复核 → 重绑 → 释放；
+  //  - `useFileOpController`：dirty 前置三选与三块反馈面板的状态机。
+  //
+  // 目的地重绑的**三处落点**全在 `onRebound`：会话目的地、`doc.handle`、`workspacePath`。
+  // 缺任一处都会让后续保存写旧路径（R-01），或让面包屑/索引身份停在旧位置。
+  const fileOpOrchestration = useFileOpOrchestration({
+    session: saveSession,
+    host: workspace,
+    readDoc: () => ({
+      // `durable` = 已成功落盘且有句柄、且这份文档确实在工作区里（`workspacePath` 非空）
+      durable: doc.saved && doc.handle !== undefined && workspacePath !== null,
+      // `current` = 磁盘上就是屏幕内容。`saved && !dirty` 是这里的保守读法：
+      // dirty 为真表示屏幕内容还没落盘，改名会把旧快照带到新文件（I-14 要挡的就是它）
+      current: doc.saved && !controller.dirty,
+      dirty: controller.dirty,
+    }),
+    onRebound: (file) => {
+      // ① 会话目的地（唯一事实源，I-20）：后续保存写新路径
+      saveSession.rebindDestination({
+        kind: 'disk',
+        scopeId: workspace.scopeId ?? '',
+        relPath: file.path,
+        name: file.name,
+        handle: file.handle,
+      });
+      // ② 文档句柄与身份（id 即相对路径：与 openWorkspaceFile 同口径）
+      setDoc((d) => ({ ...d, id: file.path, name: file.name, handle: file.handle }));
+      // ③ 面包屑与索引身份的路径来源
+      setWorkspacePath(file.path);
+    },
+    onAfterRelease: () => {
+      // 租约期间内容又变过 → 立即补写一次（写**新**目的地，I-18 时序表末行）。
+      // 用 tick 触发 `useAutoSave` 的 effect 重排（内容引用未变，靠 deps 的 tick 生效）。
+      if (autoSaveTimer.current) {
+        clearTimeout(autoSaveTimer.current);
+        autoSaveTimer.current = null;
+      }
+      setSaveFlushTick((n) => n + 1);
+    },
+  });
+
+  const fileOpController = useFileOpController({
+    host: workspaceReady ? workspace : null,
+    orchestration: fileOpOrchestration,
+    isDirty: () => controller.dirty,
+    currentPath: () => workspacePath,
+    saveNow: async () => {
+      const completion = await handleSave();
+      // 只有真正写盘成功才算「保存并继续」可用；`downloaded` 不证明落盘
+      return completion.kind === 'saved';
+    },
+    suppressPendingAuto: () => {
+      if (autoSaveTimer.current) {
+        clearTimeout(autoSaveTimer.current);
+        autoSaveTimer.current = null;
+      }
+    },
+    reload: async () => {
+      // 树刷新由文件面板自身的 reload 负责；面包屑/索引身份已由 onRebound 完成
+    },
+  });
+
+  /**
+   * F2：删除当前文档的流程（草稿/组合输入/未保存三选）。
+   *
+   * `onClosed` 是这里唯一的「不可逆转换」：删除成功后把会话切回空白态 ——
+   * **不执行它**会留下一个指向已删文件的 dirty 会话（F2 可观察⑤ 的失败形态）。
+   * 租约由 `acquireLease` 从会话取；释放交给流程的 finally 语义（幂等）。
+   */
+  const deleteFlow = useCurrentDocDeleteFlow({
+    acquireLease: (target) => {
+      const result = saveSession.beginExclusiveOp('delete', {
+        scopeId: workspace.scopeId ?? '',
+        relPath: workspacePath ?? target.name,
+      });
+      if (result.kind === 'refused') return { ok: false, reason: result.reason };
+      const leaseId = result.leaseId;
+      return {
+        ok: true,
+        release: () => {
+          if (saveSession.leaseIdOf() === leaseId) saveSession.endExclusiveOp(leaseId);
+        },
+      };
+    },
+    flushEdits: flushActiveDraft,
+    isDirty: () => controller.dirty,
+    isSaving: () => saveSession.isSaving(),
+    saveNow: async () => (await handleSave()).kind === 'saved',
+    suppressPendingAuto: () => {
+      if (autoSaveTimer.current) {
+        clearTimeout(autoSaveTimer.current);
+        autoSaveTimer.current = null;
+      }
+    },
+    onClosed: () => {
+      // 关闭回空白态：替换文档（推进会话令牌 → 旧目的地/租约作废）+ 清掉工作区路径
+      setWorkspacePath(null);
+      void applyDoc(docHost.create('未命名.mm.md', '# 未命名\n'));
+    },
+    onNotice: setCommandNotice,
+  });
+
+  /** 面板消费的当前文档操作面（把 controller 与 deleteFlow 合成一个回调包） */
+  const currentDocOps = useMemo<CurrentDocOps>(
+    () => ({
+      currentPath: workspacePath,
+      ui: fileOpController.ui,
+      rename: async (file, nextName, overwrite) => {
+        await fileOpController.requestRename(file, nextName, overwrite);
+      },
+      move: async (file, targetDir) => {
+        await fileOpController.requestMove(file, targetDir);
+      },
+      duplicate: async (file) => {
+        await fileOpController.requestDuplicate(file);
+      },
+      delete: async (file) => {
+        await deleteFlow.request({
+          name: file.name,
+          isCurrent: workspacePath === file.path,
+          isDir: false,
+          perform: () => fileOpController.requestDelete(file),
+        });
+      },
+      resolveConflictName: (dirPath, name) => conflictKeepBothName(workspace, dirPath, name),
+      dismissNotice: fileOpController.dismissNotice,
+    }),
+    [workspacePath, fileOpController, deleteFlow, workspace],
+  );
+
 
   // 刷新页面后自动恢复上次的工作区（仅限已授权 granted 的句柄）
   useEffect(() => {
@@ -2586,6 +2734,7 @@ function StageContent({
           onDetachWorkspace={detachWorkspace}
           currentPath={workspacePath}
           dirty={controller.dirty}
+          currentDocOps={currentDocOps}
           onClose={() => setFileManagerOpen(false)}
         />
       )}

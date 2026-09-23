@@ -17,6 +17,7 @@ export function ContextMenu({
   onNewDir,
   onRename,
   onDelete,
+  onDuplicate,
 }: {
   x: number;
   y: number;
@@ -26,6 +27,11 @@ export function ContextMenu({
   onNewDir: () => void;
   onRename: () => void;
   onDelete: () => void;
+  /**
+   * P0-A：「创建副本」（§3.5）。缺省 undefined → 不渲染该项
+   * （兼容模式/未接线时没有副本入口，避免造出无落点的按钮）。
+   */
+  onDuplicate?: () => void;
 }) {
   useEffect(() => {
     const close = (): void => onClose();
@@ -62,6 +68,11 @@ export function ContextMenu({
       <button type="button" data-menu-rename style={menuItem} onClick={onRename}>
         重命名
       </button>
+      {onDuplicate && (
+        <button type="button" data-menu-duplicate style={menuItem} onClick={onDuplicate}>
+          创建副本
+        </button>
+      )}
       <button
         type="button"
         data-menu-delete

@@ -13,7 +13,7 @@
 import { useEffect } from 'react';
 import type { DocEntry, DocLibrary, MindDoc, WorkspaceFile } from '@mindcanvas/react';
 import type { DocIndex } from './docIndex.js';
-import { FileManager, type WorkspaceLike } from './FileManager.js';
+import { FileManager, type CurrentDocOps, type WorkspaceLike } from './FileManager.js';
 
 export interface FileManagerModalProps {
   library: DocLibrary;
@@ -41,6 +41,8 @@ export interface FileManagerModalProps {
   currentPath?: string | null;
   /** 当前文档是否 dirty */
   dirty?: boolean;
+  /** P0-A：当前文档的文件操作面（缺省 → 面板不做租约/目的地重绑，旧调用方零改动） */
+  currentDocOps?: CurrentDocOps | null;
   /** 形态：抽屉 / 宽幅模态 */
   variant?: 'drawer' | 'wide';
   onClose: () => void;
@@ -58,6 +60,7 @@ export function FileManagerModal({
   onDetachWorkspace,
   currentPath = null,
   dirty = false,
+  currentDocOps = null,
   variant = 'wide',
   onClose,
 }: FileManagerModalProps) {
@@ -77,6 +80,7 @@ export function FileManagerModal({
       workspace={workspace}
       currentPath={currentPath}
       dirty={dirty}
+      currentDocOps={currentDocOps}
       variant={variant}
       onOpenEntry={async (entry: DocEntry) => {
         // 只剩元数据（旧条目被配额剥掉 source）→ 重新选文件。

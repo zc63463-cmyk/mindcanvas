@@ -73,8 +73,11 @@ export interface FileOpUiState {
 
 export interface FileOpController {
   ui: FileOpUiState;
-  /** 改名当前文档（先做 dirty 前置 → 执行） */
-  requestRename(file: WorkspaceFile, nextName: string): Promise<void>;
+  /**
+   * 改名当前文档（先做 dirty 前置 → 执行）。
+   * `overwrite=true` 只在冲突三选选「替换目标文件」时传入（§5.2②）。
+   */
+  requestRename(file: WorkspaceFile, nextName: string, overwrite?: boolean): Promise<void>;
   /** 移动当前文档（部分成功会打开面板） */
   requestMove(file: WorkspaceFile, targetDir: string): Promise<void>;
   /**
@@ -208,8 +211,8 @@ export function useFileOpController(options: FileOpControllerOptions): FileOpCon
   // ---------------------------------------------------------------- 执行（dirty 决策之后）
 
   const runRename = useCallback(
-    async (file: WorkspaceFile, nextName: string): Promise<void> => {
-      const result = await orchestration.renameCurrent(file, nextName);
+    async (file: WorkspaceFile, nextName: string, overwrite: boolean): Promise<void> => {
+      const result = await orchestration.renameCurrent(file, nextName, overwrite);
       absorb(result);
       if (result.kind === 'done' || result.kind === 'partial') await reload();
     },
@@ -281,9 +284,9 @@ export function useFileOpController(options: FileOpControllerOptions): FileOpCon
   );
 
   const requestRename = useCallback(
-    async (file: WorkspaceFile, nextName: string): Promise<void> => {
+    async (file: WorkspaceFile, nextName: string, overwrite = false): Promise<void> => {
       if (host === null) return;
-      withDirtyGuard(file, () => runRename(file, nextName));
+      withDirtyGuard(file, () => runRename(file, nextName, overwrite));
     },
     [host, withDirtyGuard, runRename],
   );

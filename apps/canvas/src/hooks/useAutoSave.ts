@@ -36,6 +36,13 @@ export interface AutoSaveOptions {
   /** S2G：同步标记（读点①：写盘前判定；三写点见 useDocumentSwitch / MindmapStage） */
   syncedSourceRef: RefObject<string | null>;
   /**
+   * P0-A：外部补写触发器。递增即重排一次自动保存（内容引用未变时也生效）。
+   *
+   * 用途：租约释放后的补写 —— 租约期间内容变了但所有 submit 都被挡回且不入队，
+   * 那条内容不在任何定时器里，必须由外部显式触发。缺省 0（无此需求）。
+   */
+  flushTick?: number;
+  /**
    * 保存未完成的通知渠道（同步守卫拦截 / 写入忙 / **写入失败**）；可选，缺省不通知。
    * 三者对调用方的共同语义是「本次未成功落盘」，文案由各自常量区分：
    * `SAVE_BLOCKED_NOTICE`（守卫）/ `SAVE_BUSY_NOTICE`（忙）/ `SAVE_FAILED_NOTICE`（失败）。
@@ -52,6 +59,7 @@ export function useAutoSave({
   autoSaveTimer,
   syncedSourceRef,
   onBlockedSave,
+  flushTick = 0,
 }: AutoSaveOptions): void {
   // S2G：拦截通知去重（每 doc.source 一次）——防定时器反复触发刷屏
   const blockedNoticeForRef = useRef<string | null>(null);
@@ -118,5 +126,5 @@ export function useAutoSave({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [content, controller.dirty, doc.saved, doc.id, doc.handle]);
+  }, [content, controller.dirty, doc.saved, doc.id, doc.handle, flushTick]);
 }
