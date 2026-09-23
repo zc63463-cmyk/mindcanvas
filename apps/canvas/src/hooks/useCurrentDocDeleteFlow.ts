@@ -34,6 +34,7 @@
  */
 import { useCallback, useRef, useState } from 'react';
 import type { WorkspaceFile } from '@mindcanvas/react';
+import { DELETE_FLOW_COPY } from '../assetNotices.js';
 import { subscribeCompositionEnd } from '../draftFlush.js';
 import type { FlushOutcome, FlushResult } from '../documentLifecycle.js';
 import type { FileOpController } from '../useFileOpController.js';
@@ -107,13 +108,23 @@ export interface DeleteFlowOptions {
   onNotice?(msg: string): void;
 }
 
-/** F2 文案（唯一事实源；与流程图的『』逐字一致） */
+/**
+ * F2 文案（唯一事实源在 `assetNotices.ts`）。
+ *
+ * P0-C ②：`busyLease` / `busyPhysical` 此前是**逐字复制**的两句
+ * （与 `useFileOpOrchestration.ts:66-67` 一字不差）。同一条租约、同一件事，
+ * 两份字面量迟早分叉 —— 现在从 `DELETE_FLOW_COPY` 取，而后者又把这两个键
+ * **求值自** `FILE_OP_REFUSAL_COPY`（同一处字节，重复不再可能）。
+ *
+ * ⚠ 注释与键名保持不变：`DELETE_NOTICE` 是本流程对外的既有面，
+ * 改名会牵动 `delete-current-doc.test.tsx` 的既有断言（本轮零弱化要求）。
+ */
 export const DELETE_NOTICE = {
-  composing: '输入法正在输入，请先结束输入。',
-  draftFailed: '有未提交的草稿无法写入（提交失败）：请先修正，再试删除。',
-  busyLease: '正在处理上一步操作，请稍候再试（本次未做任何改动）。',
-  busyPhysical: '上一份写入还没有结束，请稍后重试（本次未做任何改动）。',
-  cancelled: '',
+  composing: DELETE_FLOW_COPY.composing,
+  draftFailed: DELETE_FLOW_COPY.draftFailed,
+  busyLease: DELETE_FLOW_COPY.busyLease,
+  busyPhysical: DELETE_FLOW_COPY.busyPhysical,
+  cancelled: DELETE_FLOW_COPY.cancelled,
 } as const;
 
 /** `flushEdits` 返回值归一化（旧式布尔：`true`→ok、`false`→composing） */

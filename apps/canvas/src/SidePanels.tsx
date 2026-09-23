@@ -30,9 +30,16 @@ import {
 import { useCallback } from 'react';
 import type { ComponentProps, Dispatch, SetStateAction } from 'react';
 
-/** 未挂载工作区且不可内联时的统一拒绝文案（I-10 规则 3） */
-const REFUSED_NO_WORKSPACE =
-  '这张图片需要先打开一个文件夹作为工作区，才能插入到文档里。';
+/**
+ * 未挂载工作区且不可内联时的拒绝**键**（I-10 规则 3）。
+ *
+ * P0-C ②：这里此前是**已成形文案**（「这张图片需要先打开一个文件夹作为工作区，
+ * 才能插入到文档里。」），经 `onInsertRefused` 直塞提示位 —— 绕过唯一事实源的
+ * 第二条通道，两处文案只能靠人眼同步。现在只传键：文案落在
+ * `assetNotices.ASSET_INSERT_REFUSAL_COPY['inline-impossible']` 一处，
+ * **字节一字未改**（既有断言若指向该句，照样成立）。
+ */
+const REFUSED_INLINE_IMPOSSIBLE = 'inline-impossible' as const;
 
 /**
  * 归一化产物的引用 id → 文档里的引用值（P0-B）。
@@ -57,13 +64,13 @@ function refValueOf(refId: string, kind: 'img' | 'draw'): string {
  */
 function inlineRefIdOf(item: AssetItem): { refId: string | null; reason: string } {
   if (typeof item.svg !== 'string') {
-    return { refId: null, reason: REFUSED_NO_WORKSPACE };
+    return { refId: null, reason: REFUSED_INLINE_IMPOSSIBLE };
   }
   if (item.kind === 'draw' && item.svg.length <= INLINE_SVG_LIMIT) {
     return { refId: svgToDataUrl(item.svg), reason: '' };
   }
   if (item.source === 'builtin') return { refId: svgToDataUrl(item.svg), reason: '' };
-  return { refId: null, reason: REFUSED_NO_WORKSPACE };
+  return { refId: null, reason: REFUSED_INLINE_IMPOSSIBLE };
 }
 
 /** 侧面板的互斥状态（null = 全关） */
@@ -100,7 +107,13 @@ export interface SidePanelsProps {
     item: AssetItem,
     action: AssetInsertAction,
   ) => Promise<{ refId: string } | null>;
-  /** 归一化被拒（未挂载工作区 / 格式不支持 / 写失败）时的用户提示 */
+  /**
+   * 归一化被拒（未挂载工作区 / 格式不支持 / 写失败）时回传的**拒绝键**。
+   *
+   * P0-C ②：契约从「已成形文案」改为「键」—— 面板**不得**再持有用户可见字节，
+   * 文案由上层查 `assetNotices.ASSET_INSERT_REFUSAL_COPY`（唯一事实源）。
+   * 取值域见 `AssetInsertRefusalCode`。
+   */
   onInsertRefused?: (reason: string) => void;
   /**
    * 落点徽章（P0-B ⑦）：由调用方（持有工作区与宿主）判定每个卡片写到了哪。

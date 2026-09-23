@@ -133,6 +133,12 @@ import { useCanvasDegradeNotice } from './hooks/useCanvasDegradeNotice.js';
 import { useDocumentActions } from './hooks/useDocumentActions.js';
 import { useDocumentSaveSession } from './hooks/useDocumentSaveSession.js';
 import { useDocumentSwitch } from './hooks/useDocumentSwitch.js';
+import {
+  UNCONFIRMED_WRITE_NOTICE,
+  assetDuplicateCopyNotice,
+  insertRefusalNotice,
+  uploadFailureNotice,
+} from './assetNotices.js';
 import { nodeById, useEdgeActions } from './hooks/useEdgeActions.js';
 import { EdgeDraftLayer, type EdgeContextMenuState } from './EdgeDraftLayer.js';
 import { DocIndex, browserDocKey, migrateContextOf, wsDocKey } from './docIndex.js';
@@ -160,37 +166,10 @@ import { PerfPanel } from './PerfPanel.js';
 import { SidePanels } from './SidePanels.js';
 import { StartupScreen } from './StartupScreen.js';
 
-/**
- * 「写入已完成但作用域已切换」的用户文案（P0-B ①，契约 §4.5.4 规则 4 原文）。
- *
- * 之所以要这条：丢弃 UI 回填**不是**撤销磁盘写入。不告诉用户，他会以为上传失败
- * 而重复上传，或切回后看到一份「不知道哪来的」文件（`asset-library.md` §6.2 的反例）。
- */
-const UNCONFIRMED_WRITE_NOTICE =
-  '图片已写入原文件夹的 assets/，但工作区已切换；切回后可在素材库看到。';
-
 /** 路径末段（落点文案的工作区名；无分隔符时整体即名字） */
 function fileNameOfPath(path: string): string {
   const seg = path.split('/').filter((s) => s !== '');
   return seg[seg.length - 1] ?? path;
-}
-
-/**
- * 归一化被拒的文案（I-10 规则 3；`asset-library.md` §4.9）。
- *
- * 三条理由的**恢复路径不同**，不得合并成一句「插入失败」：
- *  - `no-workspace`：用户该去「打开本地文件夹」；
- *  - `unsupported-format`：该资产不适合内联（位图 / 大 SVG），同样需要工作区；
- *  - `write-failed`：写入真的失败了（含用户取消同名冲突），可重试。
- */
-function refusedNoticeOf(reason: 'no-workspace' | 'unsupported-format' | 'write-failed'): string {
-  if (reason === 'no-workspace') {
-    return '先打开一个文件夹作为工作区，才能把这张图片插入文档。';
-  }
-  if (reason === 'unsupported-format') {
-    return '这张图片不能内联进文档；先打开一个文件夹作为工作区再插入。';
-  }
-  return '图片没能写入工作区，插入已取消（文档未改动）。';
 }
 
 /** gateway 实体标题表（缺口 → unresolved 演示；同 gateway.mm.md refs） */
@@ -1288,7 +1267,20 @@ function StageContent({
       const captured = assetHost.scopeMark();
       const result = await assetHost.uploadAssetDetailed(file, undefined, options);
       if (result.kind === 'failed') {
-        setAssetNotice(result.error.code === 'E-ABORT' ? null : '上传失败，请重试。');
+        /**
+         * P0-C ② 迁移：此前是 `code === 'E-ABORT' ? null : '上传失败，请重试。'`
+         * —— 把 `E-PERMISSION` / `E-QUOTA` / `E-ABORT` 全说成同一句，
+         * 用户看不出该「重新授权」还是「清理空间」，还把用户取消说成了失败
+         * （I-10 / §4.3 要求分开）。
+         *
+         * 判据从「就地判 E-ABORT」移进 `uploadFailureNotice`（它对 `E-ABORT`
+         * 返回空串）。**但这里必须把空串折回 `null`**：本提示条的渲染判据是
+         * `assetNotice !== null`（见下方 `{assetNotice !== null && …}`），
+         * 空串**会**渲染成一个空气泡 —— 那既不是「静默」，也和原来 `null`
+         * 的行为不同。折一下即与迁移前逐字节同行为。
+         */
+        const notice = uploadFailureNotice(result.error.code);
+        setAssetNotice(notice === '' ? null : notice);
         return null;
       }
       const item = result.item;
@@ -2979,7 +2971,7 @@ function StageContent({
             assetHost,
           );
           if (result.kind === 'refused') {
-            setAssetNotice(refusedNoticeOf(result.reason));
+            setAssetNotice(insertRefusalNotice(result.reason));
             return null;
           }
           // 归一化产生了一次真实磁盘写入 → 记进同一本账（§4.9「同样要计入」）
@@ -2999,13 +2991,22 @@ function StageContent({
             );
           }
           if (result.renamed) {
-            setAssetNotice(`已在工作区 assets/ 保存了一份副本（${result.refId}）。`);
+            setAssetNotice(assetDuplicateCopyNotice(result.refId));
           } else if (action === 'media' || action === 'icon') {
             setAssetNotice(null);
           }
           return { refId: result.refId };
         }}
-        onInsertRefused={(reason) => setAssetNotice(reason)}
+        /*
+          P0-C ②：这条通道此前把 SidePanels 传来的**已成形文案**直接塞进提示位
+          （`(reason) => setAssetNotice(reason)`）—— 绕过唯一事实源的第二条路。
+          现在 SidePanels 回传的是**键**（`AssetInsertRefusalCode`），文案在这里查表。
+          `insertRefusalNotice` 接受 `string`（`onInsertRefused` 的既有签名就是
+          `(reason: string) => void`，本轮不改面板契约），并对未知键兜到
+          `'no-workspace'` —— 与迁移前 `inlineRefIdOf` 的默认拒绝同语义，
+          不会静默变成空气泡。
+        */
+        onInsertRefused={(reason) => setAssetNotice(insertRefusalNotice(reason))}
         // P0-B ⑦ 落点徽章：判据是**账本里记过的事实**，不是 id 前缀猜测（R-12）。
         // 内置项自包含；有账本记录 → 用记录的 store；否则按「当前是否有工作区」降级。
         storeOf={storeOf}

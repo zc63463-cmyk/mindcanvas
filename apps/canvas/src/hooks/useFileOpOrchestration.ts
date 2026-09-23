@@ -26,6 +26,7 @@
 import { useCallback } from 'react';
 import type { FileOpOutcome, WorkspaceDir, WorkspaceFile } from '@mindcanvas/react';
 import { checkFileName } from '@mindcanvas/react';
+import { FILE_OP_FAIL_COPY, FILE_OP_REFUSAL_COPY } from '../assetNotices.js';
 import type { FileOpIntent, SaveDestination } from './saveDestination.js';
 import type { DocumentSaveSession } from './useDocumentSaveSession.js';
 
@@ -61,35 +62,40 @@ export type FileOpRefusal =
   | 'same-name'
   | 'host-unmounted';
 
-/** 拒绝文案（唯一事实源；面板直接展示，不另写一份） */
+/**
+ * 拒绝文案 —— P0-C ② 起**字节来源**是 `assetNotices.FILE_OP_REFUSAL_COPY`，
+ * 本表只做转发（键与 `FileOpRefusal` 的对应关系仍在类型里，故 `Record<FileOpRefusal, string>`
+ * 的穷尽性检查照旧生效）。
+ */
 export const FILE_OP_REFUSAL_NOTICE: Record<FileOpRefusal, string> = {
-  'busy-lease': '正在处理上一步操作，请稍候再试（本次未做任何改动）。',
-  'busy-physical': '上一份写入还没有结束，请稍后重试（本次未做任何改动）。',
-  'session-replaced': '这份文档已经被替换，操作已取消（本次未做任何改动）。',
-  'not-durable': '这份文档还没有保存到磁盘（或内容又变过），先保存一次再改名或移动。',
-  'invalid-name': '名字不能为空，也不能包含 / \\ 等字符。',
-  'case-only':
-    '浏览器的文件接口没有原地改名能力；在大小写不敏感的磁盘上，这两个名字会被视为同一个文件。请改用其他名称，或用系统文件管理器改名。',
-  // 同名 = 用户没改名：静默取消，不打扰
-  'same-name': '',
-  'host-unmounted': '工作区未挂载，无法操作磁盘文件。',
+  ...FILE_OP_REFUSAL_COPY,
 };
 
-/** 失败文案（按错误码；与 `FILE_OP_REFUSAL_NOTICE` 同为唯一事实源，原则 1） */
+/**
+ * 失败文案（按错误码）。
+ *
+ * P0-C ②：这里此前是**第二份字面量**（与 `assetNotices.FILE_OP_FAIL_COPY` 逐字相同、
+ * 各自维护 —— 正是 §5.2 要消灭的「两套说法」）。现在从唯一事实源广播：
+ * 键与字节只有一处，改一处即两处同时改。
+ *
+ * 类型仍写宽成 `Record<string, string>`：`failNoticeOf(code: string)` 要接住
+ * 运行期传入的**未知码**（旧调用方 / 将来新增码），那正是下面兜底分支存在的理由。
+ * 窄成 `Record<FileOpErrorCode, string>` 会让 `FILE_OP_FAIL_NOTICE[code]`
+ * 在 `string` 索引下报错，反而逼调用点去 `as`（更糟）。
+ */
 export const FILE_OP_FAIL_NOTICE: Record<string, string> = {
-  'E-PERMISSION': '没有写入权限：请重新授权后重试。',
-  'E-NOT-FOUND': '文件已不在磁盘上（可能被外部改名或删除），列表已刷新。',
-  'E-QUOTA': '磁盘空间不足，无法完成这次操作。',
-  'E-UNAVAILABLE': '当前浏览器或这份目录句柄不支持这个操作。',
-  'E-IO': '读写磁盘失败，请重试。',
-  'E-EXISTS': '目标位置已有同名文件。',
-  'E-ABORT': '操作已取消。',
-  'E-UNKNOWN': '操作失败，请重试。',
+  ...FILE_OP_FAIL_COPY,
 };
 
-/** 未知码 → 通用文案（不把内部码暴露给用户） */
+/**
+ * 未知码 → 通用文案（不把内部码暴露给用户）。
+ *
+ * P0-C ②：兜底串此前是**第三份** `'操作失败，请重试。'` 字面量（与 `:87` 的
+ * `E-UNKNOWN` 一字不差）。现在取同一处字节 —— 改 `FILE_OP_FAIL_COPY['E-UNKNOWN']`
+ * 一处即同时改掉兜底行为，不会再出现「改了一处漏了另一处」。
+ */
 export function failNoticeOf(code: string): string {
-  return FILE_OP_FAIL_NOTICE[code] ?? FILE_OP_FAIL_NOTICE['E-UNKNOWN'] ?? '操作失败，请重试。';
+  return FILE_OP_FAIL_NOTICE[code] ?? FILE_OP_FAIL_COPY['E-UNKNOWN'];
 }
 
 /**
