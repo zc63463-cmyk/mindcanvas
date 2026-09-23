@@ -10,6 +10,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render } from '@testing-library/react';
+import { AssetWriteLedger, isWriteConfirmed, readAssetLedger } from '../src/chrome/assetWriteLedger.js';
 import { ASSET_ACTION_LABEL, AssetPanel, type AssetItem } from '../src/chrome/AssetPanel.js';
 import { BUILTIN_ICONS } from '../src/chrome/assetIcons.js';
 
@@ -218,5 +219,131 @@ describe('AssetPanel：上传热区与粘贴入库（FA1-T4）', () => {
     const { container } = gridPanel();
     expect(container.querySelector('[data-asset-dropzone]')).toBeNull();
     expect(container.querySelector('input[type="file"]')).toBeNull();
+  });
+});
+
+/**
+ * P0-B ①：资产写入账本（§4.5.4 / I-22）。
+ *
+ * 这是「专项二」负控要钉住的那条链的核心：
+ *  - `epoch` 变化 → **不确认**（UI 回填被丢弃）；
+ *  - 但条目**仍然记账**，标 `unconfirmed: true`，属于**捕获时**的作用域；
+ *  - 该作用域下次挂载时 `listAssets` 重新发现 → 清除标记。
+ *
+ * 反例（§6.2：「把『切换后丢弃结果』实现成『什么都不做』」）：
+ * 什么都不做 → 用户切回原工作区时看到一份自己不知道哪来的文件，或以为上传失败而重复上传。
+ */
+describe('P0-B：AssetWriteLedger（记账 / 重发现 / 诊断）', () => {
+  /** 内存存储替身（不依赖 jsdom localStorage 的跨用例残留） */
+  function memStore() {
+    const m = new Map<string, string>();
+    return {
+      getItem: (k: string) => m.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        m.set(k, v);
+      },
+      raw: m,
+    };
+  }
+
+  const entry = {
+    assetKey: 'assets/new.png',
+    scopeId: 'ws:A',
+    kind: 'img' as const,
+    name: 'new.png',
+    relPath: 'assets/new.png',
+    store: 'workspace-assets' as const,
+    bytes: 128,
+  };
+
+  it('isWriteConfirmed：同 scopeKey 且同 epoch → 确认；任一不同 → 不确认', () => {
+    expect(isWriteConfirmed({ scopeKey: 'ws:A', epoch: 1 }, { scopeKey: 'ws:A', epoch: 1 })).toBe(true);
+    expect(isWriteConfirmed({ scopeKey: 'ws:A', epoch: 1 }, { scopeKey: 'ws:A', epoch: 2 })).toBe(false);
+    expect(isWriteConfirmed({ scopeKey: 'ws:A', epoch: 1 }, { scopeKey: 'ws:B', epoch: 1 })).toBe(false);
+  });
+
+  it('作用域已切换 → 条目标 unconfirmed（属于**捕获时**的 scope，I-22）', () => {
+    const ledger = new AssetWriteLedger(memStore());
+    ledger.record(entry, false);
+    const rows = ledger.unconfirmedOf('ws:A');
+    expect(rows.length).toBe(1);
+    expect(rows[0]?.unconfirmed).toBe(true);
+    expect(rows[0]?.scopeId).toBe('ws:A'); // 不是「当前」作用域
+    // 诊断线（§4.5.4 规则 2 要求「写一条开发诊断」）
+    expect(ledger.diagnosticLines('ws:A').length).toBe(1);
+  });
+
+  it('未切换 → 不标 unconfirmed', () => {
+    const ledger = new AssetWriteLedger(memStore());
+    ledger.record(entry, true);
+    expect(ledger.unconfirmedOf('ws:A').length).toBe(0);
+    expect(ledger.entriesOf('ws:A').length).toBe(1);
+  });
+
+  it('切回后**重新发现** → 清除该条目的 unconfirmed（专项二的正例）', () => {
+    const ledger = new AssetWriteLedger(memStore());
+    ledger.record(entry, false);
+    const cleared = ledger.confirmDiscovered('ws:A', ['assets/new.png']);
+    expect(cleared).toBe(1);
+    expect(ledger.unconfirmedOf('ws:A').length).toBe(0);
+    // 条目本身仍在（清标记 ≠ 删记录）
+    expect(ledger.entriesOf('ws:A').length).toBe(1);
+  });
+
+  it('**未**被重新发现的条目保持未确认（不得整批清空 —— 没看到 ≠ 还在）', () => {
+    const ledger = new AssetWriteLedger(memStore());
+    ledger.record(entry, false);
+    ledger.record({ ...entry, assetKey: 'assets/other.png', relPath: 'assets/other.png' }, false);
+    const cleared = ledger.confirmDiscovered('ws:A', ['assets/new.png']);
+    expect(cleared).toBe(1);
+    const still = ledger.unconfirmedOf('ws:A');
+    expect(still.length).toBe(1);
+    expect(still[0]?.assetKey).toBe('assets/other.png');
+  });
+
+  it('只清**该作用域**的标记（A 的重新发现不影响 B 的未确认项）', () => {
+    const ledger = new AssetWriteLedger(memStore());
+    ledger.record(entry, false);
+    ledger.record({ ...entry, scopeId: 'ws:B' }, false);
+    ledger.confirmDiscovered('ws:A', ['assets/new.png']);
+    expect(ledger.unconfirmedOf('ws:A').length).toBe(0);
+    expect(ledger.unconfirmedOf('ws:B').length).toBe(1);
+  });
+
+  it('同一 (scopeId, assetKey) 重复记账 → 只留一条（更新而非新增）', () => {
+    const ledger = new AssetWriteLedger(memStore());
+    ledger.record(entry, true);
+    ledger.record({ ...entry, bytes: 256 }, true);
+    const rows = ledger.entriesOf('ws:A');
+    expect(rows.length).toBe(1);
+    expect(rows[0]?.bytes).toBe(256);
+  });
+
+  it('跨实例持久化：新账本（同存储）仍读得到未确认项', () => {
+    const store = memStore();
+    new AssetWriteLedger(store).record(entry, false);
+    const reopened = new AssetWriteLedger(store);
+    expect(reopened.unconfirmedOf('ws:A').length).toBe(1);
+  });
+
+  it('损坏数据 / 存储不可用 → 退化为空账本，不抛（与既有容错同规）', () => {
+    const broken = memStore();
+    broken.setItem('mindcanvas.assetwrite.v1', '{not json');
+    expect(new AssetWriteLedger(broken).all()).toEqual([]);
+    expect(new AssetWriteLedger(null).all()).toEqual([]);
+    expect(readAssetLedger(null).kind).toBe('unavailable');
+    expect(readAssetLedger(memStore()).kind).toBe('empty');
+  });
+
+  it('持久化失败（配额）不影响主流程：内存记账仍生效', () => {
+    const failing = {
+      getItem: () => null,
+      setItem: () => {
+        throw new DOMException('quota', 'QuotaExceededError');
+      },
+    };
+    const ledger = new AssetWriteLedger(failing);
+    expect(() => ledger.record(entry, false)).not.toThrow();
+    expect(ledger.unconfirmedOf('ws:A').length).toBe(1);
   });
 });

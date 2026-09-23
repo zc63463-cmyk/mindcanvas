@@ -5,6 +5,7 @@ import { astToEditable, layoutMindmap, makeEntityNode, makeTextNode } from '@min
 import { ThemeProvider } from '../src/theme/ThemeContext.js';
 import { MapView } from '../src/render/MapView.js';
 import { createCharMeasure, createNodeMeasure } from '../src/render/domMeasure.js';
+import { ScopedObjectUrls } from '../src/chrome/assetObjectUrls.js';
 
 function assetLayout() {
   const root = makeTextNode('根', [
@@ -162,5 +163,94 @@ describe('编辑态：SVG 不再绘制节点文字（避免与内联编辑器双
     expect(node.querySelectorAll('text').length).toBe(0);
     // 虚线框是诊断标识，不是文字 —— 编辑态保留它
     expect(node.querySelector('[data-asset-broken]')).not.toBeNull();
+  });
+});
+
+/**
+ * P0-B ⑥：ScopedObjectUrls 的 LRU 与统一 revoke（R-16 / §6.3）。
+ *
+ * 为什么放在渲染层测试文件里：LRU 上限的存在理由是「缩略图缓存不无限增长」
+ * （§2.4 的 2000 项内存指标），与渲染层的对象生命周期是同一件事的两面；
+ * 且这里的断言全部只关心**revoke 时机**，与 NodeG 渲染无关但同属资产生命周期。
+ */
+describe('P0-B：ScopedObjectUrls（LRU + 按作用域释放）', () => {
+  function harness(max = 3) {
+    const revoked: string[] = [];
+    const urls = new ScopedObjectUrls(
+      { revokeObjectURL: (u) => revoked.push(u) },
+      max,
+    );
+    return { urls, revoked };
+  }
+
+  it('超上限 → 淘汰最久未用的那个（并 revoke 它）', () => {
+    const { urls, revoked } = harness(3);
+    urls.set('ws:A::a', 'blob:a');
+    urls.set('ws:A::b', 'blob:b');
+    urls.set('ws:A::c', 'blob:c');
+    urls.set('ws:A::d', 'blob:d'); // 超限 → 淘汰 a
+    expect(urls.size).toBe(3);
+    expect(urls.has('ws:A::a')).toBe(false);
+    expect(revoked).toEqual(['blob:a']);
+  });
+
+  it('get 刷新 LRU 位置：刚用过的不被淘汰', () => {
+    const { urls } = harness(3);
+    urls.set('ws:A::a', 'blob:a');
+    urls.set('ws:A::b', 'blob:b');
+    urls.set('ws:A::c', 'blob:c');
+    urls.get('ws:A::a'); // a 变成最近使用
+    urls.set('ws:A::d', 'blob:d'); // 应淘汰 b（最久未用）
+    expect(urls.has('ws:A::a')).toBe(true);
+    expect(urls.has('ws:A::b')).toBe(false);
+  });
+
+  it('同键替换 → revoke 旧 URL（同名替换路径，不泄漏）', () => {
+    const { urls, revoked } = harness();
+    urls.set('ws:A::a', 'blob:old');
+    urls.set('ws:A::a', 'blob:new');
+    expect(revoked).toEqual(['blob:old']);
+    expect(urls.get('ws:A::a')).toBe('blob:new');
+  });
+
+  it('同 URL 重复 set 不 revoke 自己（避免自我作废）', () => {
+    const { urls, revoked } = harness();
+    urls.set('ws:A::a', 'blob:same');
+    urls.set('ws:A::a', 'blob:same');
+    expect(revoked).toEqual([]);
+  });
+
+  it('releaseScope 按前缀释放：**不影响**其他作用域（A1 的作用域隔离）', () => {
+    const { urls, revoked } = harness(10);
+    urls.set('ws:A::a', 'blob:A-a');
+    urls.set('ws:A::b', 'blob:A-b');
+    urls.set('ws:B::a', 'blob:B-a');
+    const n = urls.releaseScope('ws:A');
+    expect(n).toBe(2);
+    expect(revoked.sort()).toEqual(['blob:A-a', 'blob:A-b']);
+    expect(urls.has('ws:B::a')).toBe(true); // B 的完好
+  });
+
+  it('前缀匹配不会误伤（ws:A 不匹配 ws:A2）', () => {
+    const { urls } = harness(10);
+    urls.set('ws:A::a', 'blob:1');
+    urls.set('ws:A2::a', 'blob:2');
+    expect(urls.releaseScope('ws:A')).toBe(1);
+    expect(urls.has('ws:A2::a')).toBe(true);
+  });
+
+  it('releaseAll 归零并逐个 revoke（组件卸载路径）', () => {
+    const { urls, revoked } = harness(10);
+    urls.set('ws:A::a', 'blob:1');
+    urls.set('ws:B::b', 'blob:2');
+    expect(urls.releaseAll()).toBe(2);
+    expect(urls.size).toBe(0);
+    expect(revoked.length).toBe(2);
+  });
+
+  it('release 不存在的键 → 无操作、不抛（幂等）', () => {
+    const { urls, revoked } = harness();
+    expect(() => urls.release('ws:A::nope')).not.toThrow();
+    expect(revoked).toEqual([]);
   });
 });

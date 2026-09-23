@@ -53,6 +53,15 @@ export interface NormalizeEnv {
   workspace: WorkspaceWriter | null;
   /** 同名冲突选择（缺省「保留两份」） */
   conflict?: 'keep-both' | 'replace' | 'cancel';
+  /**
+   * 该资产是否**已经**落在这个工作区的磁盘上（`store === 'workspace-assets'`）。
+   *
+   * 必须由调用方给出，**不能**用 `item.id === 'assets/…'` 推断：
+   * 浏览器素材库里的项 id 同样是 `assets/<name>`（`IdbAssetHost` 的命名口径），
+   * 靠 id 前缀判定会把「素材库里的蓝图与磁盘上的红图同名」误判成「已在磁盘」，
+   * 于是既不走三选、也不复制字节 —— 蓝图的字节被静默丢掉（N1 被打回的根因）。
+   */
+  alreadyInWorkspace?: boolean;
 }
 
 /** 资产是否是可内联的自包含小 SVG（I-10 的规则 2 判据） */
@@ -152,50 +161,59 @@ async function normalizeToWorkspace(
   const target = `assets/${fileName}`;
   const conflict = env.conflict ?? 'keep-both';
 
-  // 已在磁盘上的同一路径：**不重复写**（引用它就是归一化的结果）。
-  // 是否「同内容」不在此判定 —— 文件已在目标路径即等价于「已归一化到工作区」。
-  const alreadyThere = await safeHasAsset(w, target);
-
-  if (!alreadyThere) {
-    const data = await bytesOf(item, host);
-    if (data === null) return { kind: 'refused', reason: 'unsupported-format' };
-
-    if (conflict === 'cancel') {
-      return { kind: 'refused', reason: 'write-failed', detail: '用户取消同名冲突' };
-    }
-    // 同名但无法证明字节相同 → 分配不冲突的新名（默认「保留两份」，§4.5.2 / I-10）
-    let name = fileName;
-    let renamed = false;
-    if (await safeHasAsset(w, target)) {
-      if (conflict === 'replace') {
-        name = fileName;
-      } else {
-        name = await uniqueName(w, fileName);
-        renamed = true;
-      }
-    }
-    try {
-      await w.writeAsset(name, data, mimeOfAsset(fileName));
-    } catch (e) {
-      return { kind: 'refused', reason: 'write-failed', detail: detailOf(e) };
-    }
+  // 「已经在这个工作区磁盘上」由调用方显式声明（见 `NormalizeEnv.alreadyInWorkspace`），
+  // **不**用 id 前缀推断：素材库项的 id 也是 `assets/<name>`。
+  // 已落盘 → 它本身就是归一化结果，直接复用（不重复写、也不进三选）。
+  if (env.alreadyInWorkspace === true) {
     return {
       kind: 'normalized',
-      refId: `assets/${name}`,
+      refId: target,
       store: 'workspace-assets',
       inline: false,
-      relPath: `assets/${name}`,
-      renamed,
+      relPath: target,
+      renamed: false,
     };
   }
 
+  const data = await bytesOf(item, host);
+  if (data === null) return { kind: 'refused', reason: 'unsupported-format' };
+
+  const occupied = await safeHasAsset(w, target);
+  if (occupied) {
+    if (conflict === 'cancel') {
+      // 用户取消同名冲突：零写入（`cancel` 不是失败故障，但调用方据 refused 不插入）
+      return { kind: 'refused', reason: 'write-failed', detail: '用户取消同名冲突' };
+    }
+    // 同名但**无法证明字节相同** → 分配不冲突的新名（默认「保留两份」，§4.5.2 / I-10）
+    if (conflict === 'keep-both') {
+      const name = await uniqueName(w, fileName);
+      return writeNormalized(w, name, data, true);
+    }
+    // `replace`：写原名，覆盖既有文件
+  }
+
+  return writeNormalized(w, fileName, data, false);
+}
+
+/** 落盘并组装归一化结果（唯一的写入口，避免两处 `writeAsset` 调用各写一遍返回形状） */
+async function writeNormalized(
+  w: WorkspaceWriter,
+  name: string,
+  data: ArrayBuffer | string,
+  renamed: boolean,
+): Promise<NormalizeResult> {
+  try {
+    await w.writeAsset(name, data, mimeOfAsset(name));
+  } catch (e) {
+    return { kind: 'refused', reason: 'write-failed', detail: detailOf(e) };
+  }
   return {
     kind: 'normalized',
-    refId: target,
+    refId: `assets/${name}`,
     store: 'workspace-assets',
     inline: false,
-    relPath: target,
-    renamed: false,
+    relPath: `assets/${name}`,
+    renamed,
   };
 }
 

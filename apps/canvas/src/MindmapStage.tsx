@@ -2976,7 +2976,13 @@ function StageContent({
         normalizeInsert={async (item, action: AssetInsertAction) => {
           const result = await normalizeForInsert(
             item,
-            { workspace: workspaceReady ? workspace : null },
+            {
+              workspace: workspaceReady ? workspace : null,
+              // 「已在本工作区磁盘上」由账本给出（**不**用 id 前缀推断：
+              // 素材库项的 id 同样是 assets/<name>，推断会把冲突误判成复用）
+              alreadyInWorkspace:
+                storeOf(item) === 'workspace-assets' && workspaceReady,
+            },
             assetHost,
           );
           if (result.kind === 'refused') {

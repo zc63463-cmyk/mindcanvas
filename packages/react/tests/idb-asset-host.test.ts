@@ -119,3 +119,87 @@ describe('DemoAssetHost：小 SVG 源码留存（与 IdbAssetHost 同口径）',
     expect(item.svg).toBe(SVG);
   });
 });
+
+/**
+ * P0-B ②⑦：IDB 宿主的三态（A3）。
+ *
+ * 锚点：A3「IDB 写入失败，但 object URL 可用」——
+ *  - ① 卡片带「仅本次会话」徽章（由 `store: null` 驱动）；
+ *  - ② 文案含「未写入持久存储」；
+ *  - ③ 新实例（模拟刷新）清单里没有该项。
+ *
+ * 负控锚点（A3 负控①）：沿用「只返回 AssetItem」的现状接口 →「能区分三态」必须失败。
+ * 这正是本文件新增用例的判别核心：**失败时能拿到 `session-only`，而不是一个普通 item**。
+ */
+describe('P0-B：IdbAssetHost 三态（A3）', () => {
+  it('写入成功 → written + store=browser-idb + bytes + refId', async () => {
+    const host = new IdbAssetHost(STATIC, '/');
+    const result = await host.uploadAssetDetailed(new File(['png-data'], 'shot.png', { type: 'image/png' }));
+    expect(result.kind).toBe('written');
+    if (result.kind !== 'written') throw new Error('unreachable');
+    expect(result.store).toBe('browser-idb');
+    expect(result.refId).toBe('assets/shot.png');
+    expect(result.bytes).toBe(8);
+  });
+
+  it('putRecord 失败 → session-only/idb-failed（**不是**静默的成功 item）', async () => {
+    const host = new IdbAssetHost([], '/');
+    // 注入一次失败：让 indexedDB.open 失败（隐私模式 / 配额）
+    const broken = new IDBFactory();
+    broken.open = (() => {
+      const req = { onsuccess: null, onerror: null, onupgradeneeded: null, error: new Error('blocked') } as unknown as IDBOpenDBRequest;
+      queueMicrotask(() => req.onerror?.(new Event('error') as unknown as Event));
+      return req;
+    }) as IDBFactory['open'];
+    (globalThis as { indexedDB: IDBFactory }).indexedDB = broken;
+
+    const result = await host.uploadAssetDetailed(new File(['png-data'], 'lost.png', { type: 'image/png' }));
+    expect(result.kind).toBe('session-only');
+    if (result.kind !== 'session-only') throw new Error('unreachable');
+    expect(result.reason).toBe('idb-failed');
+    // 本次会话内仍可用（objectURL 已建）
+    expect(host.resolveAsset({ kind: 'img', id: 'assets/lost.png' })).toMatch(/^blob:/);
+  });
+
+  it('session-only 的项在**新实例**（模拟刷新）里不存在（A3 ③）', async () => {
+    const host = new IdbAssetHost([], '/');
+    const broken = new IDBFactory();
+    broken.open = (() => {
+      const req = { onsuccess: null, onerror: null, onupgradeneeded: null, error: new Error('blocked') } as unknown as IDBOpenDBRequest;
+      queueMicrotask(() => req.onerror?.(new Event('error') as unknown as Event));
+      return req;
+    }) as IDBFactory['open'];
+    (globalThis as { indexedDB: IDBFactory }).indexedDB = broken;
+    await host.uploadAssetDetailed(new File(['x'], 'gone.png', { type: 'image/png' }));
+
+    // 恢复可用的 IDB：新实例读不到那次失败的写入
+    (globalThis as { indexedDB: IDBFactory }).indexedDB = new IDBFactory();
+    const fresh = new IdbAssetHost([], '/');
+    const list = await fresh.listAssets();
+    expect(list.some((a) => a.id === 'assets/gone.png')).toBe(false);
+  });
+
+  it('uploadAsset 薄包装：三态里非 failed 都返回 item（既有调用方零改动）', async () => {
+    const host = new IdbAssetHost([], '/');
+    const item = await host.uploadAsset(new File(['v'], 'a.png', { type: 'image/png' }));
+    expect(item.id).toBe('assets/a.png');
+  });
+});
+
+describe('P0-B：IdbAssetHost 作用域键与释放（R-07 / R-16）', () => {
+  it('scopeMark 缺省 = browser:local/0；注入源可覆盖 epoch', () => {
+    const plain = new IdbAssetHost([], '/');
+    expect(plain.scopeMark()).toEqual({ scopeKey: 'browser:local', epoch: 0 });
+    const marked = new IdbAssetHost([], '/', () => ({ scopeKey: 'browser:local', epoch: 5 }));
+    expect(marked.scopeMark()).toEqual({ scopeKey: 'browser:local', epoch: 5 });
+  });
+
+  it('disposeScope / disposeAll 释放 objectURL（不再泄漏到会话结束）', async () => {
+    const host = new IdbAssetHost([], '/');
+    await host.uploadAssetDetailed(new File(['a'], 'a.png', { type: 'image/png' }));
+    await host.uploadAssetDetailed(new File(['b'], 'b.png', { type: 'image/png' }));
+    expect(host.cachedUrlCount()).toBe(2);
+    expect(host.disposeScope('browser:local')).toBe(2);
+    expect(host.cachedUrlCount()).toBe(0);
+  });
+});
