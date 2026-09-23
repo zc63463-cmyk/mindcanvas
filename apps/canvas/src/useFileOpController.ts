@@ -77,8 +77,13 @@ export interface FileOpController {
   requestRename(file: WorkspaceFile, nextName: string): Promise<void>;
   /** 移动当前文档（部分成功会打开面板） */
   requestMove(file: WorkspaceFile, targetDir: string): Promise<void>;
-  /** 删除当前文档的 host 段（草稿/脏决策由调用方先行完成） */
-  requestDelete(file: WorkspaceFile): Promise<void>;
+  /**
+   * 删除当前文档的 host 段（草稿/脏决策由调用方先行完成）。
+   *
+   * 返回结构化结果（而不是 void）：F2 流程要按 `done` / `failed` 分流
+   * —— 成功才关闭文档，失败必须保留当前文档与目的地。
+   */
+  requestDelete(file: WorkspaceFile): Promise<CurrentDocOpResult<null>>;
   /** 创建副本（§3.5） */
   requestDuplicate(file: WorkspaceFile): Promise<void>;
   /** 冲突三选：目标已存在时由调用方带 `overwrite` 重入 */
@@ -294,10 +299,11 @@ export function useFileOpController(options: FileOpControllerOptions): FileOpCon
   // ---------------------------------------------------------------- 删除与副本
 
   const requestDelete = useCallback(
-    async (file: WorkspaceFile): Promise<void> => {
+    async (file: WorkspaceFile): Promise<CurrentDocOpResult<null>> => {
       const result = await orchestration.deleteCurrent(file);
       absorb(result);
       if (result.kind === 'done') await reload();
+      return result;
     },
     [orchestration, absorb, reload],
   );
