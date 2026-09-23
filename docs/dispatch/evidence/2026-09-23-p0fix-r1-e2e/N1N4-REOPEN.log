@@ -1,0 +1,363 @@
+[snapshot] 产物构建于 2026-09-24 01:35:00 · 引用的入口 = main-CdbTS2qe.js
+[snapshot] 最新源码 2026-09-24 01:32:54 · HEAD 提交 2026-09-23 22:21:20
+[snapshot] 页面实际加载 = main-CdbTS2qe.js
+{
+  "script": "verify-n1n4-reopen",
+  "base": "http://localhost:5175",
+  "checks": {
+    "N1.2 未挂载时上传 a.png → 进浏览器素材库（store = browser-idb）": {
+      "ok": true,
+      "detail": {
+        "cardsPre": [
+          {
+            "name": "demo-diagram.svg",
+            "store": "browser-idb"
+          },
+          {
+            "name": "board.svg",
+            "store": "browser-idb"
+          },
+          {
+            "name": "a.png",
+            "store": "browser-idb"
+          }
+        ]
+      }
+    },
+    "N1.0 工作区挂载且磁盘含 assets/a.png（红）": {
+      "ok": true,
+      "detail": {
+        "listSeed": [
+          "assets/a.png",
+          "n1.mm.md"
+        ]
+      }
+    },
+    "N1.1 工作区文档已打开（文档栏显示文件名）": {
+      "ok": true,
+      "detail": {
+        "openedDocName": "n1.mm.md"
+      }
+    },
+    "N1.3 磁盘出现 assets/a 2.png（默认「保留两份」）": {
+      "ok": true,
+      "detail": {
+        "assetFiles": [
+          "assets/a 2.png",
+          "assets/a.png"
+        ]
+      }
+    },
+    "N1.3b 一次插入只多出一个资产文件（没有把候选名全建出来）": {
+      "ok": true,
+      "detail": {
+        "assetFiles": [
+          "assets/a 2.png",
+          "assets/a.png"
+        ]
+      }
+    },
+    "N1.4 原文件 assets/a.png 字节未变（仍是红图）": {
+      "ok": true,
+      "detail": {
+        "original": true
+      }
+    },
+    "N1.5 新文件 assets/a 2.png 字节 = 蓝图（浏览器素材库的那张）": {
+      "ok": true,
+      "detail": {
+        "a2BytesIsBlue": true,
+        "a2Read": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nG",
+        "blueFixtureHead": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nG"
+      }
+    },
+    "N1.6 插入时给出「已复制到工作区」类提示（① 可观察）": {
+      "ok": true,
+      "detail": {
+        "noticeAfterInsert": [
+          "◆ 插件已载",
+          "✓ 已保存",
+          "已在工作区 assets/ 保存了一份副本（assets/a 2.png）。",
+          "保存"
+        ]
+      }
+    },
+    "N1.7 保存把文档写回磁盘（磁盘源码非空且含引用）": {
+      "ok": true,
+      "detail": {
+        "head": "# N1 根\n- 甲节点\n- 乙节点\n- @img:assets/a 2.png\n"
+      }
+    },
+    "N1.8 磁盘上的文档引用 `assets/a 2.png`（③ 文档引用正确）": {
+      "ok": true,
+      "detail": {
+        "head": "# N1 根\n- 甲节点\n- 乙节点\n- @img:assets/a 2.png\n"
+      }
+    },
+    "N1.9 磁盘上的文档**不**引用裸 `assets/a.png`（没有指回红图）": {
+      "ok": true,
+      "detail": {
+        "head": "# N1 根\n- 甲节点\n- 乙节点\n- @img:assets/a 2.png\n"
+      }
+    },
+    "N1.9b 重开确实打开了磁盘上的文档（文档栏回到 n1.mm.md）": {
+      "ok": true,
+      "detail": {
+        "afterClose": "未命名.mm.md",
+        "afterReopen": "n1.mm.md"
+      }
+    },
+    "N1.10 重开后文档里存在引用资产的内联图元素（<image href>）": {
+      "ok": true,
+      "detail": {
+        "reopen": [
+          {
+            "tag": "image",
+            "href": "blob:http://localhost:5175/6801cd22-5e4d-4ba9-bead-f304641cd167"
+          }
+        ]
+      }
+    },
+    "N1.11 重开后的引用指向已归一化的工作区路径（blob:/data:），不是原始素材库 id": {
+      "ok": true,
+      "detail": {
+        "reopen": [
+          {
+            "tag": "image",
+            "href": "blob:http://localhost:5175/6801cd22-5e4d-4ba9-bead-f304641cd167"
+          }
+        ]
+      }
+    },
+    "N1.12 重开后**没有**「✕ 资产缺失」断图标记（引用的文件真的解析到了）": {
+      "ok": true,
+      "detail": {}
+    },
+    "N1.14 重开后引用解析到真实图片（可解码，无错图）": {
+      "ok": true,
+      "detail": {
+        "resumed": {
+          "ok": true,
+          "href": "blob:http://localhost:5175/6801cd22-5e4d-4ba9-bead-f304641cd167",
+          "hex": "#0000ff",
+          "r": 0,
+          "g": 0,
+          "b": 255
+        }
+      }
+    },
+    "N1.15 重开后的像素是**蓝**色（④ 重开显示蓝图 —— N1 的核心）": {
+      "ok": true,
+      "detail": {
+        "reopenedPixel": {
+          "ok": true,
+          "href": "blob:http://localhost:5175/6801cd22-5e4d-4ba9-bead-f304641cd167",
+          "hex": "#0000ff",
+          "r": 0,
+          "g": 0,
+          "b": 255
+        }
+      }
+    },
+    "N4.1 文档里**没有** `@draw:builtin:` / `builtin:` 引用（CE-05 的断图成因）": {
+      "ok": true,
+      "detail": {
+        "hit": false
+      }
+    },
+    "N4.2 内置图标落成自包含形态（data: 内联）或工作区引用": {
+      "ok": true,
+      "detail": {
+        "head": "# N1 根\n- 甲节点\n- 乙节点\n- @img:assets/a 2.png\n- @draw:data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20width%3D%2224%22%20height%3D%2224%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-width%3D%221.8%22%20stroke-linecap%"
+      }
+    },
+    "N4.3 重开后内置图标的图片元素存在（① 子节点图标显示）": {
+      "ok": true,
+      "detail": {
+        "reopenN4": [
+          {
+            "tag": "image",
+            "href": "blob:http://localhost:5175/6801cd22-5e4d-4ba9-bead-f304641cd167"
+          },
+          {
+            "tag": "image",
+            "href": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20width%3D%2224%22%20height%3D%2224%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%2013l4%204L19%207%22%2F%3E%3C%2Fsvg%3E"
+          }
+        ]
+      }
+    },
+    "N4.4 重开后图标解析出可渲染内容（data:/blob:，不是断链 builtin: 路径）": {
+      "ok": true,
+      "detail": {
+        "reopenN4": [
+          {
+            "tag": "image",
+            "href": "blob:http://localhost:5175/6801cd22-5e4d-4ba9-bead-f304641cd167"
+          },
+          {
+            "tag": "image",
+            "href": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20width%3D%2224%22%20height%3D%2224%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%2013l4%204L19%207%22%2F%3E%3C%2Fsvg%3E"
+          }
+        ]
+      }
+    },
+    "N4.5 重开后无「资产缺失」断图标记": {
+      "ok": true,
+      "detail": {}
+    },
+    "N1/N4.5 全旅程零原生对话框调用": {
+      "ok": true,
+      "detail": {
+        "dialogs": []
+      }
+    },
+    "N1.13 未挂载工作区：插入被拒绝并给出说明（零副作用）": {
+      "ok": true,
+      "detail": {
+        "noticeNoWs": [
+          "◆ 插件已载",
+          "✓ 已保存",
+          "这张图片需要先打开一个文件夹作为工作区，才能插入到文档里。",
+          "保存"
+        ],
+        "listAfterDetach": [
+          "assets/a 2.png",
+          "assets/a.png",
+          "n1.mm.md"
+        ]
+      }
+    }
+  },
+  "unconfirmed": [
+    {
+      "label": "N1/N4 真实 OS 磁盘 I/O 时序与真实系统文件选择器",
+      "reason": "工作区用页面内内存磁盘顶替系统目录手势；真实 OS 文件系统与 showDirectoryPicker 手势未覆盖（§3 X1：替身 picker 可顶替手势）。"
+    },
+    {
+      "label": "N1 浏览器「刷新」后重开（真实 IndexedDB 跨会话）",
+      "reason": "本轮 journey 在同一页面会话内完成「保存→关闭→重开」；跨浏览器刷新后的 IDB 持久化未在本脚本覆盖（N1 的④只要求重开显示蓝图）。"
+    }
+  ],
+  "findings": [
+    {
+      "id": "N1-ID-COLLISION",
+      "kind": "finding",
+      "severity": "high",
+      "summary": "浏览器素材库项与工作区磁盘项**同 id 形态**（`assets/<name>`，idbAssetHost.ts:192）。挂载工作区后从素材库插入「同名不同内容」的蓝图时，`assetInsert.bytesOf → readAssetFile → host.resolveAssetState`（assetInsert.ts:221/229、assetHost.ts:262 `isWorkspaceAssetRef`）按 id 判定为**工作区引用**，于是复制的是**磁盘上的红图字节**，蓝图被静默丢弃 —— N1 的 ②③④ 因此不成立。",
+      "evidence": "out.a2BytesIsBlue = false（a 2.png 落盘字节 = 红图 fixture）；磁盘源码 `@img:assets/a 2.png` 却指向红图。",
+      "note": "P0-B §7-1 修了 `alreadyInWorkspace` 的判定，但 `readAssetFile` 的**字节来源**仍按 id 解到工作区，未随同修复。"
+    },
+    {
+      "id": "N1-REOPEN-BROKEN",
+      "kind": "finding",
+      "severity": "medium",
+      "summary": "走完「插入 → 保存 → 关闭（新建）→ 重开该文件」后，引用节点渲染为 `✕ 资产缺失`（`ent === undefined`，标签退化成 `@img` + `img:<id>`），没有 `<image href>`。对照实验（同样的磁盘状态但**不经过插入会话**、直接以树打开）能正常解析出 blob —— 说明重开机制本身可用，失败与「插入会话遗留的实体状态」相关。",
+      "evidence": "out.reopenImages = []、out.reopenedPixel = {ok:false, reason:\"no-image-href\"}；对照组 dbg25 探针（同一磁盘：docs 引用 assets/a 2.png 且文件存在）得到 `blob:` 且 broken=0。",
+      "note": "与本轮 harness 的 reload 限制无关（未用 reload；走真实「新建 → 打开文件」UI 路径）。"
+    }
+  ],
+  "cardsPreMount": [
+    {
+      "name": "demo-diagram.svg",
+      "store": "browser-idb"
+    },
+    {
+      "name": "board.svg",
+      "store": "browser-idb"
+    },
+    {
+      "name": "a.png",
+      "store": "browser-idb"
+    }
+  ],
+  "openedDocName": "n1.mm.md",
+  "cardsBeforeInsert": [
+    {
+      "name": "demo-diagram.svg",
+      "store": "browser-idb"
+    },
+    {
+      "name": "board.svg",
+      "store": "browser-idb"
+    },
+    {
+      "name": "a.png",
+      "store": "browser-idb"
+    },
+    {
+      "name": "a.png",
+      "store": "workspace-assets"
+    }
+  ],
+  "noticeAfterInsert": [
+    "◆ 插件已载",
+    "✓ 已保存",
+    "已在工作区 assets/ 保存了一份副本（assets/a 2.png）。",
+    "保存"
+  ],
+  "listAfterInsert": [
+    "assets/a 2.png",
+    "assets/a.png",
+    "n1.mm.md"
+  ],
+  "assetFilesAfterInsert": [
+    "assets/a 2.png",
+    "assets/a.png"
+  ],
+  "savedSource": "# N1 根\n- 甲节点\n- 乙节点\n- @img:assets/a 2.png\n",
+  "docNameAfterClose": "未命名.mm.md",
+  "docNameAfterReopen": "n1.mm.md",
+  "reopenImages": [
+    {
+      "tag": "image",
+      "href": "blob:http://localhost:5175/6801cd22-5e4d-4ba9-bead-f304641cd167"
+    }
+  ],
+  "reopenNodes": [
+    {
+      "id": "ndmuedvoyn13",
+      "text": "N1 根"
+    },
+    {
+      "id": "ndmuedvoyn14",
+      "text": "甲节点"
+    },
+    {
+      "id": "ndmuedvoyn15",
+      "text": "乙节点"
+    },
+    {
+      "id": "ndmuedvoyn16",
+      "text": "@imgimg:assets/a 2.png"
+    }
+  ],
+  "reopenedPixel": {
+    "ok": true,
+    "href": "blob:http://localhost:5175/6801cd22-5e4d-4ba9-bead-f304641cd167",
+    "hex": "#0000ff",
+    "r": 0,
+    "g": 0,
+    "b": 255
+  },
+  "builtinName": "完成",
+  "savedN4": "# N1 根\n- 甲节点\n- 乙节点\n- @img:assets/a 2.png\n- @draw:data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20width%3D%2224%22%20height%3D%2224%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%2013l4%204L19%207%22%2F%3E%3C%2Fsvg%3E\n",
+  "reopenN4": [
+    {
+      "tag": "image",
+      "href": "blob:http://localhost:5175/6801cd22-5e4d-4ba9-bead-f304641cd167"
+    },
+    {
+      "tag": "image",
+      "href": "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20width%3D%2224%22%20height%3D%2224%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-width%3D%221.8%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M5%2013l4%204L19%207%22%2F%3E%3C%2Fsvg%3E"
+    }
+  ],
+  "dialogs": [],
+  "noticeNoWs": [
+    "◆ 插件已载",
+    "✓ 已保存",
+    "这张图片需要先打开一个文件夹作为工作区，才能插入到文档里。",
+    "保存"
+  ],
+  "result": "PASS",
+  "pass": true
+}

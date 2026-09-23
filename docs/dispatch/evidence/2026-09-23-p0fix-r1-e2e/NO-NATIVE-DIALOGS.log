@@ -1,0 +1,125 @@
+[snapshot] 产物构建于 2026-09-24 01:35:00 · 引用的入口 = main-CdbTS2qe.js
+[snapshot] 最新源码 2026-09-24 01:32:54 · HEAD 提交 2026-09-23 22:21:20
+[snapshot] 页面实际加载 = main-CdbTS2qe.js
+{
+  "script": "verify-no-native-dialogs",
+  "base": "http://localhost:5175",
+  "checks": {
+    "ND-1 启动 + 看内置示例：零原生对话框调用": {
+      "ok": true,
+      "detail": {
+        "probe": [],
+        "pwDialogs": []
+      }
+    },
+    "ND-2 挂载工作区（showDirectoryPicker）：零原生对话框调用": {
+      "ok": true,
+      "detail": {
+        "probe": [],
+        "pwDialogs": []
+      }
+    },
+    "ND.1a 文件管理器提供删除入口（菜单可开）": {
+      "ok": true,
+      "detail": {
+        "count": 1
+      }
+    },
+    "ND-3 发起删除（非当前文档）：零原生对话框调用": {
+      "ok": true,
+      "detail": {
+        "probe": [],
+        "pwDialogs": []
+      }
+    },
+    "ND.1b 删除确认走**内联确认条**（不是 window.confirm）": {
+      "ok": true,
+      "detail": {
+        "confirmBar": 1
+      }
+    },
+    "ND-4 取消删除：零原生对话框调用": {
+      "ok": true,
+      "detail": {
+        "probe": [],
+        "pwDialogs": []
+      }
+    },
+    "ND.1c 取消删除后文件仍在磁盘": {
+      "ok": true,
+      "detail": {
+        "list": [
+          "assets/a.png",
+          "nd.mm.md"
+        ]
+      }
+    },
+    "ND-5 未保存时点「新建」（离开决策）：零原生对话框调用": {
+      "ok": true,
+      "detail": {
+        "probe": [],
+        "pwDialogs": []
+      }
+    },
+    "ND-6 取消离开决策：零原生对话框调用": {
+      "ok": true,
+      "detail": {
+        "probe": [],
+        "pwDialogs": []
+      }
+    },
+    "ND-7 改名冲突三选 + 取消：零原生对话框调用": {
+      "ok": true,
+      "detail": {
+        "probe": [],
+        "pwDialogs": []
+      }
+    },
+    "ND-8 上传同名资产（工作区已有 assets/a.png）：零原生对话框调用": {
+      "ok": true,
+      "detail": {
+        "probe": [],
+        "pwDialogs": []
+      }
+    },
+    "ND-9 节点右键菜单：零原生对话框调用": {
+      "ok": true,
+      "detail": {
+        "probe": [],
+        "pwDialogs": []
+      }
+    },
+    "ND.9 全旅程累计：confirm/alert/prompt 零调用（页面探针 + Playwright dialog 双通道）": {
+      "ok": true,
+      "detail": {
+        "finalProbe": [],
+        "pwDialogs": []
+      }
+    }
+  },
+  "unconfirmed": [
+    {
+      "label": "no-native-dialogs 在 IDE 内嵌 webview 下的「静默吞掉」行为",
+      "reason": "本脚本证明的是**独立 Chromium** 中零调用；webview 会静默吞掉原生框（本守卫的起因）无法在独立 Chromium 复现，二者不等价。"
+    }
+  ],
+  "inlineConfirmBarShown": true,
+  "leavePromptShown": false,
+  "observations": [
+    {
+      "label": "离开决策 UI 是否出现",
+      "value": false,
+      "note": "未出现（可能文档未 dirty）；不影响「零原生框」结论"
+    },
+    {
+      "label": "改名冲突面板是否出现",
+      "value": false,
+      "note": "未出现（改名可能直接成功或输入未提交）；不影响「零原生框」结论"
+    }
+  ],
+  "conflictPanelShown": false,
+  "finalProbe": [],
+  "pwDialogs": [],
+  "result": "PASS",
+  "pass": true
+}
