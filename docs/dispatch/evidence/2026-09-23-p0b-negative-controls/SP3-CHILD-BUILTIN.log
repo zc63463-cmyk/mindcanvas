@@ -1,0 +1,55 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./vite.config" without a file extension (vitest.config.ts:4:24). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas
+
+ ❯ tests/asset-insert-normalize.test.tsx (20 tests | 1 failed) 136ms
+     ✓ 磁盘已有 a.png（红）→ 归一化产出 assets/a 2.png，原文件**逐字节不变** 2ms
+     ✓ 同名冲突选「取消」→ refused，**磁盘零写入** 0ms
+     ✓ 同名冲突显式「替换」→ 写原名（引用解析到新内容） 0ms
+     ✓ ③④ 重开解析：归一化后的引用在**新一次解析**里指向写入的字节 0ms
+     ✓ 未占用同名 → 直接用原名，不产生多余副本 0ms
+     ✓ **磁盘项**（id 即目标路径）→ 复用，不重复写（幂等） 0ms
+     ✓ **浏览器项**同名（id 也是 assets/a.png 但来自素材库）→ 必须走三选，不静默复用 0ms
+     ✓ 落盘抛错 → refused(write-failed)（零副作用） 0ms
+     ✓ 位图（无源码）+ 无工作区 → refused(no-workspace)，**不写任何新形态引用** 0ms
+     ✓ 小 SVG 源码 + 无工作区 → 内联 data URL（自包含，脱离工作区仍显示） 5ms
+     ✓ builtin 项 → 归一化产出内联 data URL，**不是** builtin:<id> 2ms
+     ✓ builtin 项即使已挂载工作区也内联（三种语义同口径，不自相矛盾） 2ms
+     ✓ builtinInlineRef 只对 source=builtin 且有源码的项生效（不误捕普通资产） 1ms
+     ✓ 净化失败的 SVG → 拒绝（不开绕过净化的旁路） 0ms
+     ✓ fileNameOfAsset：assets/<rel> 取末段，其余取 name 0ms
+     ✓ inlineRefOf：非 SVG 源码 → null（调用方按不支持处置） 0ms
+     ✓ writer.hasAsset 抛错 → 视为未占用（保守：宁可多写一份也不覆盖） 0ms
+     ✓ 写盘抛错 → refused(write-failed)（零副作用，调用方不得改文档） 0ms
+     × 内置图标 + 子分支 → controller 收到的是 data: URL，不是 builtin:<id> 84ms
+     ✓ icon 语义同样内联（child 与 icon 同口径，不自相矛盾） 37ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/asset-insert-normalize.test.tsx > N4（渲染层）：面板 child 分支必须走归一化，不得写 builtin:（CE-05） > 内置图标 + 子分支 → controller 收到的是 data: URL，不是 builtin:<id>
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/asset-insert-normalize.test.tsx:418:49
+    416|     expect(added).toHaveLength(1);
+    417|     // CE-05 的核心断言：文档里绝不能出现 builtin: 引用
+    418|     expect(added[0]!.id.startsWith('builtin:')).toBe(false);
+       |                                                 ^
+    419|     expect(builtin.id.startsWith('builtin:')).toBe(true); // 前提：内置项的 i…
+    420|     expect(added[0]!.id.startsWith('data:')).toBe(true);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 19 passed (20)
+   Start at  15:45:26
+   Duration  1.06s (transform 468ms, setup 0ms, import 604ms, tests 136ms, environment 254ms)
+

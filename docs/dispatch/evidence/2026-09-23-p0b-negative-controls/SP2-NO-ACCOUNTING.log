@@ -1,0 +1,62 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./vite.config" without a file extension (vitest.config.ts:4:24). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas
+
+ ❯ tests/asset-scope-switch.test.tsx (8 tests | 2 failed) 65ms
+     ✓ 切到 B 后，同名 assets/a.png 的解析不再命中 A 的缓存 2ms
+     ✓ 切到 B 后 no-scope 语义正确（B 未挂载时不再回落 A 或站点根） 0ms
+     × epoch 变化 → isCurrent 为 false；条目标 unconfirmed 且属于捕获时的作用域 2ms
+     ✓ 切回 A 后重新发现 → 清除标记（专项二正例） 0ms
+     ✓ 同 id、不同 store 的两张卡片各自渲染自己的落点徽章 49ms
+     ✓ 同名但不同 id 的两张卡片并排显示（去重主键含归属，不是 id） 10ms
+     × 去掉 epoch 校验（只比 scopeKey）→ 「迟到结果被丢弃」的判据失效 0ms
+     ✓ 把缓存键改回 relPath（去掉 scopeKey 前缀）→ 两作用域互相覆盖 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/asset-scope-switch.test.tsx > A1 ②：迟到结果被丢弃但**仍然记账**（I-22） > epoch 变化 → isCurrent 为 false；条目标 unconfirmed 且属于捕获时的作用域
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/asset-scope-switch.test.tsx:125:23
+    123|     // 写入确实发生在当前（B）磁盘上 —— 用捕获值判定归属仍是 A
+    124|     const confirmed = isWriteConfirmed(captured, host.scopeMark());
+    125|     expect(confirmed).toBe(false);
+       |                       ^
+    126|
+    127|     ledger.record(
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/asset-scope-switch.test.tsx > A1 负控锚点：两处守卫可被中性化（证明断言有判别力） > 去掉 epoch 校验（只比 scopeKey）→ 「迟到结果被丢弃」的判据失效
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/asset-scope-switch.test.tsx:233:49
+    231|     const captured = { scopeKey: 'ws:A', epoch: 1 };
+    232|     const current = { scopeKey: 'ws:A', epoch: 2 }; // 同 scope、epoch 已变
+    233|     expect(isWriteConfirmed(captured, current)).toBe(false); // 正确实现：不…
+       |                                                 ^
+    234|     expect(weak(captured, current)).toBe(true); // 弱实现：误判为确认
+    235|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 6 passed (8)
+   Start at  15:45:24
+   Duration  967ms (transform 466ms, setup 0ms, import 592ms, tests 65ms, environment 246ms)
+

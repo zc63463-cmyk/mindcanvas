@@ -1,0 +1,13 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./vite.config" without a file extension (vitest.config.ts:4:24). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas
+
+ ✓ tests/asset-scope-switch.test.tsx (8 tests) 66ms
+
+ Test Files  1 passed (1)
+      Tests  8 passed (8)
+   Start at  15:45:25
+   Duration  968ms (transform 450ms, setup 0ms, import 577ms, tests 66ms, environment 262ms)
+

@@ -1,0 +1,65 @@
+
+ RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/packages/react
+
+ ❯ tests/workspace-asset-host.test.ts (33 tests | 1 failed) 10ms
+     ✓ 位图 → 落盘 1ms
+     ✓ 超过 15KB 的 SVG → 落盘 0ms
+     ✓ 小 SVG → 不落盘（保留内联，可自包含写进 .mm.md） 0ms
+     ✓ 位图上传 → 写进磁盘，id 是相对路径（不是 blob:/绝对地址） 0ms
+     ✓ 落盘后 resolveAsset 返回可加载 URL（会话内 objectURL） 0ms
+     ✓ 大 SVG → 落盘；小 SVG → 走回 IndexedDB 并带内联源码 0ms
+     ✓ listAssets 把磁盘资产并进清单（刷新后图库不空） 0ms
+     ✓ 同一资产刷新后重建 objectURL（缩略图不裂） 0ms
+     ✓ hasAsset：磁盘命中 → true 0ms
+     ✓ mounted=false → 一切走回退宿主，磁盘无写入 0ms
+     ✓ workspaceOf 返回 null → 同样降级（不抛） 0ms
+     ✓ 已挂载 → written + store=workspace-assets + bytes（且 refId 是相对路径） 0ms
+     ✓ 未挂载 → session-only（**不是** written：没有写入任何持久存储） 0ms
+     ✓ 落盘抛错 → failed + E-IO（不再静默返回一个 item） 0ms
+     ✓ uploadAsset 薄包装：成功返回 item（既有调用方零改动），失败抛出 0ms
+     ✓ 同名且未给 bytesEqual → 默认「保留两份」：新文件另存，原文件**逐字节不变** 0ms
+     ✓ 显式 replace → 覆盖原名（引用解析到新内容） 0ms
+     ✓ 取消 → **零写入**，清单不变，失败码是 E-ABORT 0ms
+     ✓ N2 负控锚点：同名同大小同时间戳但字节不同 → **仍然进三选**（不得静默替换） 0ms
+     ✓ 只有**显式** bytesEqual=true 才跳过三选（§4.5.2 允许的唯一「同内容」情形） 0ms
+     ✓ bytesEqual=false（本会话比对过且不同）→ 仍走保留两份 0ms
+     ✓ 已挂载且已缓存 → resolved 0ms
+     ✓ 未挂载 + assets/ 引用 → unresolved(no-scope)（**不是** missing，也不是站点根 URL） 0ms
+     ✓ 已挂载但清单里没有该文件 → unresolved(missing) 0ms
+     ✓ external：http(s)/../ → unresolved(external)，且**不**回落站点根 0ms
+     ✓ data: 自包含 → resolved 为自身（脱离宿主也显示） 0ms
+     ✓ 五态枚举都在（wrong-scope / unavailable 是 P1-B 的接线面，此处只锁类型可达） 0ms
+     ✓ scopeMark 读 getter 的**当前**值（挂载发生在宿主创建之后） 0ms
+     × isCurrent：epoch 变化即不当前（这是「迟到结果被丢弃」的判据） 3ms
+     ✓ R-07：同一 id 在两个作用域下缓存互不覆盖 0ms
+     ✓ disposeScope 只释放该作用域的 URL，不影响其他作用域 0ms
+     ✓ disposeAll 归零（组件卸载路径） 0ms
+     ✓ 同名替换 revoke 旧 URL（既有行为保留） 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/workspace-asset-host.test.ts > P0-B ①：作用域捕获与缓存键（R-07） > isCurrent：epoch 变化即不当前（这是「迟到结果被丢弃」的判据）
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/workspace-asset-host.test.ts:435:38
+    433|     expect(host.isCurrent(captured)).toBe(true);
+    434|     epoch = 2;
+    435|     expect(host.isCurrent(captured)).toBe(false);
+       |                                      ^
+    436|   });
+    437|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 32 passed (33)
+   Start at  15:45:13
+   Duration  576ms (transform 52ms, setup 0ms, import 65ms, tests 10ms, environment 416ms)
+

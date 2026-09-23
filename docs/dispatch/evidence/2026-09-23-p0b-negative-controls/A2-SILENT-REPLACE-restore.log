@@ -1,0 +1,10 @@
+
+ RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/packages/react
+
+ ✓ tests/workspace-asset-host.test.ts (33 tests) 8ms
+
+ Test Files  1 passed (1)
+      Tests  33 passed (33)
+   Start at  15:45:17
+   Duration  462ms (transform 41ms, setup 0ms, import 51ms, tests 8ms, environment 311ms)
+

@@ -1,0 +1,49 @@
+
+ RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/packages/react
+
+ ❯ tests/asset-panel.test.tsx (20 tests | 1 failed) 159ms
+     ✓ 渲染资产列表（名称 + 类型徽章） 42ms
+     ✓ 点击资产 → onInsert 回调该资产项 14ms
+     ✓ 点击关闭 → onClose 9ms
+     ✓ 空资产 → 空态引导（指向面板上传/画布拖拽，不再指浏览器做不到的本地目录） 7ms
+     ✓ 提供 onUpload → 渲染上传按钮；点击按钮触发隐藏 file input 8ms
+     ✓ file input change → onUpload 收到文件数组 10ms
+     ✓ 面板 drop 文件 → 阻止默认并透传 onUpload 6ms
+     ✓ 未传 onUpload → 上传按钮不渲染（既有只读用法零破坏） 8ms
+     ✓ storeOf 给出的落点渲染成对应徽章；不同落点显示不同徽章（A1 ③） 7ms
+     ✓ storeOf 缺省 / 返回 null → 会话级徽章「⚠ 仅本次会话」（A3 ①） 6ms
+     ✓ 内置项 → 🎨 内置徽章 32ms
+     ✓ 列表视图同样渲染落点徽章（两个视图口径一致） 6ms
+     × session-only 的文案含「没有写入持久存储」且**不含**「已保存」（A3 ② / A3 负控②） 3ms
+     ✓ browser-idb 的成功文案含「已保存」但**必须同时**给出失效条件（§4.3 纪律） 0ms
+     ✓ workspace-assets 文案说「把整个文件夹拷走仍可用」，且**不说**「换电脑也能用」 0ms
+     ✓ data: 内联文案只讲「已作为文本写入文档」，不含任何「图片文件已保存」（A7 ①） 0ms
+     ✓ isForbiddenAssetCopy：逐条命中 §2.3 禁止的表述 0ms
+     ✓ **全部导出文案**都不含禁止表述（A6 负控：界面不得出现承诺） 0ms
+     ✓ badgesFor：落点徽章 + 可携带性徽章成对，会话级可携带性为「—」（§2.3 表） 0ms
+     ✓ 未知工作区名时不编造名字（回落「工作区」） 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/asset-panel.test.tsx > P0-B：落点文案表（§1.7 允许/禁止） > session-only 的文案含「没有写入持久存储」且**不含**「已保存」（A3 ② / A3 负控②）
+AssertionError: expected '已保存。' to contain '没有写入持久存储'
+
+Expected: "没有写入持久存储"
+Received: "已保存。"
+
+ ❯ tests/asset-panel.test.tsx:185:18
+    183|   it('session-only 的文案含「没有写入持久存储」且**不含**「已保存」（A3 ② / A3 负控②）', () => {
+    184|     const text = formatAssetWriteNotice(null);
+    185|     expect(text).toContain('没有写入持久存储');
+       |                  ^
+    186|     expect(text).not.toContain('已保存');
+    187|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 19 passed (20)
+   Start at  15:45:20
+   Duration  605ms (transform 50ms, setup 0ms, import 120ms, tests 159ms, environment 260ms)
+

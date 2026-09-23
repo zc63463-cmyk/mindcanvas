@@ -1,0 +1,10 @@
+
+ RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/packages/react
+
+ ✓ tests/idb-asset-host.test.ts (15 tests) 9ms
+
+ Test Files  1 passed (1)
+      Tests  15 passed (15)
+   Start at  15:45:19
+   Duration  458ms (transform 40ms, setup 0ms, import 62ms, tests 9ms, environment 313ms)
+

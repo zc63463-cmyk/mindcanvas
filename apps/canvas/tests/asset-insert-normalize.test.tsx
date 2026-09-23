@@ -343,3 +343,98 @@ describe('归一化纯函数面（I-10 的输入输出契约）', () => {
     expect(result.reason).toBe('write-failed');
   });
 });
+
+/**
+ * N4 · 渲染层：**面板的 child 分支**不得写 `builtin:` 引用（CE-05 的真正接线面）。
+ *
+ * 为什么单开一组：上面 N4 的三条直接调 `normalizeForInsert` —— 它们证明**归一化函数**
+ * 会把内置图标内联，却证明不了 `SidePanels` 的 child 分支**调用了**它。
+ * 实测（负控 SP3）：把 `SidePanels` 的 child 分支改回 `refId = item.id`（CE-05 的旧实现）
+ * 后，仅调函数的用例全绿、exit 0 —— 守卫没被钉住。
+ *
+ * 这里驱动真实组件：点内置图标 + 选「子分支」语义 → 读 controller 收到的引用 id。
+ * 断言「收到的 id 不是 builtin:」，因此中性化 child 分支即转红。
+ */
+import { render, cleanup, fireEvent } from '@testing-library/react';
+import { afterEach } from 'vitest';
+import { BUILTIN_ASSET_ITEMS } from '@mindcanvas/react';
+import { SidePanels } from '../src/SidePanels';
+
+afterEach(cleanup);
+
+/** 记录 child 插入拿到的引用 id（真正的接线面断言口径） */
+function recordingController() {
+  const added: Array<{ kind: string; id: string }> = [];
+  const notes: Array<Record<string, unknown>> = [];
+  const controller = {
+    root: { id: 'root' },
+    selectedId: 'root',
+    collapsed: new Set<string>(),
+    dirty: false,
+    updateNote: (_id: string, patch: Record<string, unknown>) => {
+      notes.push(patch);
+    },
+    addEntityChild: (_parent: string, ref: { kind: string; id: string }) => {
+      added.push(ref);
+      return 'child-1';
+    },
+    toggleCollapse: () => undefined,
+  };
+  return { controller, added, notes };
+}
+
+const PANEL_STUBS = {
+  assetList: [],
+  assetHost: { baseUrl: '/', resolveAsset: (i: { id: string }) => '/' + i.id } as never,
+  setEntities: () => undefined,
+  relations: [],
+  activeRefKey: null,
+  edgeItems: [],
+  onUpload: () => undefined,
+  onSelectNode: () => undefined,
+  onClose: () => undefined,
+};
+
+describe('N4（渲染层）：面板 child 分支必须走归一化，不得写 builtin:（CE-05）', () => {
+  it('内置图标 + 子分支 → controller 收到的是 data: URL，不是 builtin:<id>', async () => {
+    const { controller, added } = recordingController();
+    const builtin = BUILTIN_ASSET_ITEMS[0]!;
+    const { container } = render(
+      <SidePanels panel="assets" controller={controller as never} {...PANEL_STUBS} />,
+    );
+
+    // 切到「内置图标」Tab，选中「子分支」语义，点第一张卡片
+    fireEvent.click(
+      Array.from(container.querySelectorAll('[data-asset-tab]')).find((el) =>
+        el.textContent?.includes('内置图标'),
+      )!,
+    );
+    fireEvent.click(container.querySelector('[data-asset-action="child"]')!);
+    fireEvent.click(container.querySelector('[data-asset-item]')!);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(added).toHaveLength(1);
+    // CE-05 的核心断言：文档里绝不能出现 builtin: 引用
+    expect(added[0]!.id.startsWith('builtin:')).toBe(false);
+    expect(builtin.id.startsWith('builtin:')).toBe(true); // 前提：内置项的 id 确实是 builtin: 形态
+    expect(added[0]!.id.startsWith('data:')).toBe(true);
+  });
+
+  it('icon 语义同样内联（child 与 icon 同口径，不自相矛盾）', async () => {
+    const { controller, notes } = recordingController();
+    const { container } = render(
+      <SidePanels panel="assets" controller={controller as never} {...PANEL_STUBS} />,
+    );
+    fireEvent.click(
+      Array.from(container.querySelectorAll('[data-asset-tab]')).find((el) =>
+        el.textContent?.includes('内置图标'),
+      )!,
+    );
+    fireEvent.click(container.querySelector('[data-asset-action="icon"]')!);
+    fireEvent.click(container.querySelector('[data-asset-item]')!);
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(notes).toHaveLength(1);
+    expect(String(notes[0]!.icon).startsWith('draw:data:')).toBe(true);
+  });
+});
