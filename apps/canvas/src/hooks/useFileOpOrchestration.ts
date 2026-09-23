@@ -100,15 +100,37 @@ export function failNoticeOf(code: string): string {
  */
 export type CurrentDocOpResult<T> =
   | { kind: 'done'; value: T; relPath: string }
-  | { kind: 'partial'; value: T; relPath: string; code: string; retryable: boolean; notice: string }
+  | {
+      kind: 'partial';
+      value: T;
+      /** 新位置（已成功写出） */
+      relPath: string;
+      /** 旧位置（仍在磁盘上）—— 部分成功面板要同时列出两份 */
+      sourcePath: string;
+      code: string;
+      retryable: boolean;
+      notice: string;
+    }
   | { kind: 'refused'; reason: FileOpRefusal; notice: string }
   | { kind: 'failed'; stage: string; code: string; retryable: boolean; notice: string };
 
 export interface FileOpOrchestration {
-  renameCurrent(workspacePath: string, nextName: string): Promise<CurrentDocOpResult<WorkspaceFile>>;
+  /**
+   * 改名。
+   *
+   * @param sourceFile 源文件（调用方已有它就不用再扫一遍盘；`file` 参数在
+   *   移动路径上是必需的，改名路径上只是省一次扫描）。
+   * @param overwrite 冲突三选之「替换目标文件」。缺省 false = 目标已存在则失败（E-EXISTS）。
+   */
+  renameCurrent(
+    sourceFile: WorkspaceFile,
+    nextName: string,
+    overwrite?: boolean,
+  ): Promise<CurrentDocOpResult<WorkspaceFile>>;
   moveCurrent(
     file: WorkspaceFile,
     targetDir: string,
+    overwrite?: boolean,
   ): Promise<CurrentDocOpResult<WorkspaceFile>>;
   deleteCurrent(file: WorkspaceFile): Promise<CurrentDocOpResult<null>>;
   duplicate(file: WorkspaceFile): Promise<CurrentDocOpResult<WorkspaceFile>>;
@@ -226,12 +248,13 @@ export function useFileOpOrchestration(
 
   const renameCurrent = useCallback(
     async (
-      workspacePath: string,
+      sourceFile: WorkspaceFile,
       nextName: string,
+      overwrite = false,
     ): Promise<CurrentDocOpResult<WorkspaceFile>> => {
       if (!host.mounted) return refuse<WorkspaceFile>('host-unmounted');
       const name = nextName.trim();
-      const problem = checkFileName(name, basenameOf(workspacePath));
+      const problem = checkFileName(name, basenameOf(sourceFile.path));
       // 同名 = 用户没改：零 I/O 静默取消（不是失败，不该弹任何东西）
       if (problem === 'same') return { kind: 'refused', reason: 'same-name', notice: '' };
       if (problem === 'case-only') return refuse<WorkspaceFile>('case-only');
@@ -239,17 +262,13 @@ export function useFileOpOrchestration(
       // I-14：必须在取租约**之前**判定（未满足就不该占用互斥域）
       if (!durable()) return refuse<WorkspaceFile>('not-durable');
 
-      const lease = begin('rename', workspacePath);
+      const lease = begin('rename', sourceFile.path);
       if (lease.kind === 'refused') return refuse<WorkspaceFile>(lease.reason);
 
       try {
-        const source = await lookup(host, workspacePath);
+        const outcome = await host.renameFileSafe(sourceFile, name, overwrite);
         if (!ownsLease(session, lease)) return refuse<WorkspaceFile>('session-replaced');
-        if (source === null) return fail<WorkspaceFile>('read', 'E-NOT-FOUND', false);
-
-        const outcome = await host.renameFileSafe(source, name);
-        if (!ownsLease(session, lease)) return refuse<WorkspaceFile>('session-replaced');
-        return settle(lease.leaseId, outcome, fail, finish);
+        return settle(lease.leaseId, outcome, fail, finish, sourceFile.path);
       } finally {
         release(lease.leaseId);
       }
@@ -260,7 +279,11 @@ export function useFileOpOrchestration(
   // ---------------------------------------------------------------- ③ 移动
 
   const moveCurrent = useCallback(
-    async (file: WorkspaceFile, targetDir: string): Promise<CurrentDocOpResult<WorkspaceFile>> => {
+    async (
+      file: WorkspaceFile,
+      targetDir: string,
+      overwrite = false,
+    ): Promise<CurrentDocOpResult<WorkspaceFile>> => {
       if (!host.mounted) return refuse<WorkspaceFile>('host-unmounted');
       if (parentOf(file.path) === targetDir) {
         // 同目录 = 零操作（`canDropInto` 已挡；这里再兜一次，避免制造无用副本）
@@ -271,9 +294,9 @@ export function useFileOpOrchestration(
       const lease = begin('move', file.path);
       if (lease.kind === 'refused') return refuse<WorkspaceFile>(lease.reason);
       try {
-        const outcome = await host.moveFileSafe(file, targetDir);
+        const outcome = await host.moveFileSafe(file, targetDir, overwrite);
         if (!ownsLease(session, lease)) return refuse<WorkspaceFile>('session-replaced');
-        return settle(lease.leaseId, outcome, fail, finish);
+        return settle(lease.leaseId, outcome, fail, finish, file.path);
       } finally {
         release(lease.leaseId);
       }
@@ -327,10 +350,13 @@ export function useFileOpOrchestration(
           return { kind: 'done', value: outcome.value, relPath: outcome.value.path };
         }
         if (outcome.kind === 'partial') {
+          // 副本路径不该出现 partial（它没有删源步骤）；真出现则如实上报，
+          // `sourcePath` 填源文件（面板据此列出「两份」）
           return {
             kind: 'partial',
             value: outcome.created,
             relPath: outcome.created.path,
+            sourcePath: file.path,
             code: outcome.error.code,
             retryable: outcome.error.retryable,
             notice: failNoticeOf(outcome.error.code),
@@ -363,33 +389,13 @@ function ownsLease(session: DocumentSaveSession, lease: Lease): boolean {
   return session.ownsLease(lease.leaseId, lease.opSeq, lease.token);
 }
 
-/** 按相对路径取到 host 的 `WorkspaceFile`（改名需要句柄，路径本身不够） */
-async function lookup(host: SafeWorkspaceHost, relPath: string): Promise<WorkspaceFile | null> {
-  const scannable = host as unknown as { scan?: (force?: boolean) => Promise<unknown[]> };
-  if (typeof scannable.scan !== 'function') return null;
-  const tree = await scannable.scan(true);
-  return findFile(tree, relPath);
-}
-
-function findFile(nodes: readonly unknown[], relPath: string): WorkspaceFile | null {
-  for (const raw of nodes) {
-    if (typeof raw !== 'object' || raw === null) continue;
-    const node = raw as { kind?: string; path?: string; children?: unknown[] };
-    if (node.kind === 'file' && node.path === relPath) return raw as WorkspaceFile;
-    if (node.kind === 'dir' && Array.isArray(node.children)) {
-      const hit = findFile(node.children, relPath);
-      if (hit !== null) return hit;
-    }
-  }
-  return null;
-}
-
 /** 结果 → `CurrentDocOpResult`（四态分流的唯一位置） */
 function settle<T>(
   leaseId: number,
   outcome: FileOpOutcome<T>,
   fail: <U>(stage: string, code: string, retryable: boolean) => CurrentDocOpResult<U>,
   finish: (leaseId: number, file: T, relPath: string) => void,
+  sourcePath: string,
 ): CurrentDocOpResult<T> {
   if (outcome.kind === 'ok') {
     const relPath = pathOf(outcome.value);
@@ -404,6 +410,7 @@ function settle<T>(
       kind: 'partial',
       value: outcome.created,
       relPath,
+      sourcePath,
       code: outcome.error.code,
       retryable: outcome.error.retryable,
       notice: failNoticeOf(outcome.error.code),

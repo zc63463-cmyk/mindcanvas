@@ -68,6 +68,7 @@ function makeFakeWorkspace(initial: Entry[]) {
     scan(force?: boolean): Promise<unknown[]>;
     setDelay(ms: number): void;
     setRemoveError(e: Error | null): void;
+    fileAt(path: string): WorkspaceFile;
     calls: typeof calls;
     files: Map<string, string>;
   } = {
@@ -79,7 +80,7 @@ function makeFakeWorkspace(initial: Entry[]) {
     scan: async (): Promise<unknown[]> =>
       [...files.keys()].map((p) =>
         p.includes('/')
-          ? ({ kind: 'dir', name: p.slice(0, p.indexOf('/')), path: p.slice(0, p.indexOf('/')), children: [fileOf(p)] } satisfies WorkspaceDir & { children: unknown[] })
+          ? ({ kind: 'dir', name: p.slice(0, p.indexOf('/')), path: p.slice(0, p.indexOf('/')), children: [fileOf(p)], handle: {} } satisfies WorkspaceDir & { children: unknown[] })
           : fileOf(p),
       ),
     setDelay(ms: number) {
@@ -88,9 +89,16 @@ function makeFakeWorkspace(initial: Entry[]) {
     setRemoveError(e: Error | null) {
       removeError = e;
     },
+    fileAt(path: string): WorkspaceFile {
+      return fileOf(path);
+    },
     async renameFileSafe(file, newName): Promise<FileOpOutcome<WorkspaceFile>> {
       calls.rename += 1;
       if (renameDelayMs > 0) await new Promise((r) => setTimeout(r, renameDelayMs));
+      // 源不在磁盘上 → 读取阶段失败（真实 host 的 `readFile` 会抛 E-NOT-FOUND）
+      if (!files.has(file.path)) {
+        return { kind: 'failed', stage: 'read', error: { code: 'E-NOT-FOUND', retryable: false } };
+      }
       const text = files.get(file.path) ?? '';
       // 改名**保留所在目录**（真实 host 是 `joinPath(parentPath, finalName)`）；
       // 用裸 `newName` 会把嵌套文件挪到根目录 —— 那也是目的地的落点。
@@ -218,7 +226,7 @@ describe('F1 · 当前文档改名编排', () => {
   it('① 无在途写入 → 租约立即授予，改名成功且旧路径不再存在', async () => {
     const host = makeFakeWorkspace([{ name: '研发/架构.mm.md', content: '# 架构正文' }]);
     const h = mountOrchestration(host);
-    const result = await h.view.result.current.renameCurrent('研发/架构.mm.md', '架构设计.mm.md');
+    const result = await h.view.result.current.renameCurrent(host.fileAt('研发/架构.mm.md'), '架构设计.mm.md');
     expect(result.kind).toBe('done');
     expect(result.kind === 'done' ? result.relPath : null).toBe('研发/架构设计.mm.md');
     // ⑦ 旧路径不再存在
@@ -229,7 +237,7 @@ describe('F1 · 当前文档改名编排', () => {
   it('★④ 改名后目的地重绑到新路径（R-01 核心）', async () => {
     const host = makeFakeWorkspace([{ name: '架构.mm.md', content: '# 正文' }]);
     const h = mountOrchestration(host);
-    await h.view.result.current.renameCurrent('架构.mm.md', '架构设计.mm.md');
+    await h.view.result.current.renameCurrent(host.fileAt('架构.mm.md'), '架构设计.mm.md');
     expect(h.rebound).toEqual(['架构设计.mm.md']);
     // 目的地已换：后续保存不会写回旧名字
     const info = h.session.getDestinationInfo();
@@ -241,7 +249,7 @@ describe('F1 · 当前文档改名编排', () => {
   it('★⑤ 新文件内容 = 改名时的磁盘内容（I-14 前置的意义）', async () => {
     const host = makeFakeWorkspace([{ name: '架构.mm.md', content: '# 已落盘的旧内容' }]);
     const h = mountOrchestration(host);
-    await h.view.result.current.renameCurrent('架构.mm.md', '新名.mm.md');
+    await h.view.result.current.renameCurrent(host.fileAt('架构.mm.md'), '新名.mm.md');
     // rename 复制的是磁盘快照，故新文件内容 = 改名前的磁盘内容
     expect(host.files.get('新名.mm.md')).toBe('# 已落盘的旧内容');
   });
@@ -249,7 +257,7 @@ describe('F1 · 当前文档改名编排', () => {
   it('★I-14 前置：未落盘（durable=false）→ 拒绝，零 I/O', async () => {
     const host = makeFakeWorkspace([{ name: 'a.mm.md', content: '# a' }]);
     const h = mountOrchestration(host, { durable: false });
-    const result = await h.view.result.current.renameCurrent('a.mm.md', 'b.mm.md');
+    const result = await h.view.result.current.renameCurrent(host.fileAt('a.mm.md'), 'b.mm.md');
     expect(result.kind).toBe('refused');
     expect(result.kind === 'refused' ? result.reason : null).toBe('not-durable');
     expect(host.calls.rename).toBe(0); // 零 I/O
@@ -260,7 +268,7 @@ describe('F1 · 当前文档改名编排', () => {
     // 「saved 但内容又变过」= 磁盘上是旧快照；此时改名会把旧内容带到新文件
     const host = makeFakeWorkspace([{ name: 'a.mm.md', content: '# 旧快照' }]);
     const h = mountOrchestration(host, { current: false });
-    const result = await h.view.result.current.renameCurrent('a.mm.md', 'b.mm.md');
+    const result = await h.view.result.current.renameCurrent(host.fileAt('a.mm.md'), 'b.mm.md');
     expect(result.kind === 'refused' ? result.reason : null).toBe('not-durable');
     expect(host.calls.rename).toBe(0);
   });
@@ -286,7 +294,7 @@ describe('F1 · 当前文档改名编排', () => {
     await Promise.resolve();
     expect(h.session.physicalWritesInFlight).toBe(1);
 
-    const result = await h.view.result.current.renameCurrent('a.mm.md', 'b.mm.md');
+    const result = await h.view.result.current.renameCurrent(host.fileAt('a.mm.md'), 'b.mm.md');
     expect(result.kind === 'refused' ? result.reason : null).toBe('busy-physical');
     expect(h.notices).toContain(FILE_OP_REFUSAL_NOTICE['busy-physical']);
     expect(host.calls.rename).toBe(0); // 零副作用
@@ -301,7 +309,7 @@ describe('F1 · 当前文档改名编排', () => {
     const host = makeFakeWorkspace([{ name: 'a.mm.md', content: '# a' }]);
     const h = mountOrchestration(host);
     h.session.beginExclusiveOp('delete', { scopeId: 'ws:test', relPath: 'a.mm.md' });
-    const result = await h.view.result.current.renameCurrent('a.mm.md', 'b.mm.md');
+    const result = await h.view.result.current.renameCurrent(host.fileAt('a.mm.md'), 'b.mm.md');
     expect(result.kind === 'refused' ? result.reason : null).toBe('busy-lease');
     expect(h.notices).toContain(FILE_OP_REFUSAL_NOTICE['busy-lease']);
     expect(host.calls.rename).toBe(0);
@@ -310,7 +318,7 @@ describe('F1 · 当前文档改名编排', () => {
   it('租约在操作结束后被释放（不泄漏互斥）', async () => {
     const host = makeFakeWorkspace([{ name: 'a.mm.md', content: '# a' }]);
     const h = mountOrchestration(host);
-    const ok = await h.view.result.current.renameCurrent('a.mm.md', 'b.mm.md');
+    const ok = await h.view.result.current.renameCurrent(host.fileAt('a.mm.md'), 'b.mm.md');
     expect(ok.kind).toBe('done');
     expect(h.session.leaseIdOf()).toBeNull();
     // 可再次取租约（没有泄漏）
@@ -320,8 +328,8 @@ describe('F1 · 当前文档改名编排', () => {
   it('失败路径也释放租约（不把互斥留在原地）', async () => {
     const host = makeFakeWorkspace([]); // 源不存在 → lookup 返回 null
     const h = mountOrchestration(host);
-    // 源不在文件表里，但 scan 会为空 → E-NOT-FOUND
-    const result = await h.view.result.current.renameCurrent('不存在.mm.md', 'b.mm.md');
+    // 源不在文件表里 → 读取阶段 E-NOT-FOUND（与真实 host 的 readFile 抛错同口径）
+    const result = await h.view.result.current.renameCurrent(host.fileAt('不存在.mm.md'), 'b.mm.md');
     expect(result.kind).toBe('failed');
     expect(result.kind === 'failed' ? result.code : null).toBe('E-NOT-FOUND');
     expect(h.session.leaseIdOf()).toBeNull();
@@ -330,7 +338,7 @@ describe('F1 · 当前文档改名编排', () => {
   it('仅大小写差异 → 拒绝（不静默加序号）', async () => {
     const host = makeFakeWorkspace([{ name: 'Note.mm.md', content: '# n' }]);
     const h = mountOrchestration(host);
-    const result = await h.view.result.current.renameCurrent('Note.mm.md', 'note.mm.md');
+    const result = await h.view.result.current.renameCurrent(host.fileAt('Note.mm.md'), 'note.mm.md');
     expect(result.kind === 'refused' ? result.reason : null).toBe('case-only');
     expect(host.calls.rename).toBe(0);
     expect(h.notices[0]).toBe(FILE_OP_REFUSAL_NOTICE['case-only']);
@@ -339,7 +347,7 @@ describe('F1 · 当前文档改名编排', () => {
   it('与源同名 → 零 I/O 静默取消（不打扰用户）', async () => {
     const host = makeFakeWorkspace([{ name: 'a.mm.md', content: '# a' }]);
     const h = mountOrchestration(host);
-    const result = await h.view.result.current.renameCurrent('a.mm.md', 'a.mm.md');
+    const result = await h.view.result.current.renameCurrent(host.fileAt('a.mm.md'), 'a.mm.md');
     expect(result.kind === 'refused' ? result.reason : null).toBe('same-name');
     expect(host.calls.rename).toBe(0);
     expect(h.notices).toHaveLength(0); // 静默：不弹任何东西
@@ -349,10 +357,10 @@ describe('F1 · 当前文档改名编排', () => {
     const host = makeFakeWorkspace([{ name: 'a.mm.md', content: '# a' }]);
     const h = mountOrchestration(host);
     expect(
-      (await h.view.result.current.renameCurrent('a.mm.md', '   ')).kind === 'refused',
+      (await h.view.result.current.renameCurrent(host.fileAt('a.mm.md'), '   ')).kind === 'refused',
     ).toBe(true);
     expect(
-      (await h.view.result.current.renameCurrent('a.mm.md', 'x/y.mm.md')).kind === 'refused',
+      (await h.view.result.current.renameCurrent(host.fileAt('a.mm.md'), 'x/y.mm.md')).kind === 'refused',
     ).toBe(true);
     expect(host.calls.rename).toBe(0);
     expect(h.notices).toContain(FILE_OP_REFUSAL_NOTICE['invalid-name']);
@@ -361,7 +369,7 @@ describe('F1 · 当前文档改名编排', () => {
   it('⑥⑦ 改名成功后若仍 dirty → 释放后补写一次（内容不丢）', async () => {
     const host = makeFakeWorkspace([{ name: 'a.mm.md', content: '# a' }]);
     const h = mountOrchestration(host, { dirty: true });
-    await h.view.result.current.renameCurrent('a.mm.md', 'b.mm.md');
+    await h.view.result.current.renameCurrent(host.fileAt('a.mm.md'), 'b.mm.md');
     // 租约期间编辑过 → 释放后补写（写新目的地）
     expect(h.afterReleaseCount()).toBe(1);
   });
@@ -369,7 +377,7 @@ describe('F1 · 当前文档改名编排', () => {
   it('改名成功后不 dirty → 不补写（避免无谓写入）', async () => {
     const host = makeFakeWorkspace([{ name: 'a.mm.md', content: '# a' }]);
     const h = mountOrchestration(host, { dirty: false });
-    await h.view.result.current.renameCurrent('a.mm.md', 'b.mm.md');
+    await h.view.result.current.renameCurrent(host.fileAt('a.mm.md'), 'b.mm.md');
     expect(h.afterReleaseCount()).toBe(0);
   });
 
@@ -377,7 +385,7 @@ describe('F1 · 当前文档改名编排', () => {
     const host = makeFakeWorkspace([{ name: 'a.mm.md', content: '# a' }]);
     (host as { mounted: boolean }).mounted = false;
     const h = mountOrchestration(host);
-    const result = await h.view.result.current.renameCurrent('a.mm.md', 'b.mm.md');
+    const result = await h.view.result.current.renameCurrent(host.fileAt('a.mm.md'), 'b.mm.md');
     expect(result.kind === 'refused' ? result.reason : null).toBe('host-unmounted');
     expect(host.calls.rename).toBe(0);
   });
@@ -441,7 +449,7 @@ describe('★F1 · 会话被替换后的迟到回调（L2 第②条）', () => {
     const host = makeFakeWorkspace([{ name: 'a.mm.md', content: '# a' }]);
     const h = mountOrchestration(host);
     host.setDelay(50);
-    const pending = h.view.result.current.renameCurrent('a.mm.md', 'b.mm.md');
+    const pending = h.view.result.current.renameCurrent(host.fileAt('a.mm.md'), 'b.mm.md');
     // 操作在途时替换会话（模拟用户切到另一篇文档）
     await act(async () => {
       await vi.advanceTimersByTimeAsync(10);
