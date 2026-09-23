@@ -1,0 +1,171 @@
+══════════════════════════════════════════════════════════════════
+NC-2-NOT-HARDCODED · 2026-09-23 18:42:16
+判别目标：『两处文案表不是各自硬编码』具有判别力
+cwd 路由：canvas 测试 → /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas
+══════════════════════════════════════════════════════════════════
+
+─── [0] 前提：notices-consistency 存在且为绿 ───
+$ pwd
+/Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas
+$ pnpm vitest run tests/notices-consistency.test.tsx
+
+ Test Files  1 passed (1)
+      Tests  22 passed (22)
+   Start at  18:42:16
+   Duration  2.32s (transform 1.26s, setup 0ms, import 1.62s, tests 114ms, environment 494ms)
+
+notices_exit=0
+
+─── [1] 判别对象：两处文案表 ───
+侧 B（唯一事实源）：apps/canvas/src/assetNotices.ts 的 FILE_OP_FAIL_COPY
+$ sed -n '71,74p' src/assetNotices.ts
+    | export const FILE_OP_FAIL_COPY: Record<FileOpErrorCode, string> = {
+    |   'E-PERMISSION': '没有写入权限：请重新授权后重试。',
+    |   'E-NOT-FOUND': '文件已不在磁盘上（可能被外部改名或删除），列表已刷新。',
+    |   'E-EXISTS': '目标位置已有同名文件。',
+
+侧 A（P0-A 遗留表，应当只是广播）：src/hooks/useFileOpOrchestration.ts 的 FILE_OP_FAIL_NOTICE
+$ grep -n 'FILE_OP_FAIL_NOTICE' src/hooks/useFileOpOrchestration.ts
+83: * 窄成 `Record<FileOpErrorCode, string>` 会让 `FILE_OP_FAIL_NOTICE[code]`
+86:export const FILE_OP_FAIL_NOTICE: Record<string, string> = {
+98:  return FILE_OP_FAIL_NOTICE[code] ?? FILE_OP_FAIL_COPY['E-UNKNOWN'];
+$ sed -n '88,91p' src/hooks/useFileOpOrchestration.ts
+    | };
+    | 
+    | /**
+    |  * 未知码 → 通用文案（不把内部码暴露给用户）。
+
+─── [1b] 观测用例（既有，期望不动）───
+$ grep -n 'P0-A 既有表 FILE_OP_FAIL_NOTICE 与唯一事实源逐码相等' tests/notices-consistency.test.tsx
+120:  it('P0-A 既有表 FILE_OP_FAIL_NOTICE 与唯一事实源逐码相等（收敛不靠人眼）', () => {
+$ sed -n '/P0-A 既有表/,/^  });/p' tests/notices-consistency.test.tsx
+    |   it('P0-A 既有表 FILE_OP_FAIL_NOTICE 与唯一事实源逐码相等（收敛不靠人眼）', () => {
+    |     for (const code of FILE_OP_ERROR_CODES_EXHAUSTIVE) {
+    |       expect(
+    |         FILE_OP_FAIL_NOTICE[code],
+    |         `${code}：P0-A 遗留表与 assetNotices 分叉了（这正是 §5.2 要消灭的「两套说法」）`,
+    |       ).toBe(FILE_OP_FAIL_COPY[code]);
+    |     }
+    |   });
+
+─── [2] 基线：未中性化 ───
+$ pnpm vitest run tests/notices-consistency.test.tsx
+ Test Files  1 passed (1)
+      Tests  22 passed (22)
+baseline_exit_code=0
+
+─── [3] 备份 + 中性化：一侧绕过唯一事实源，私写一份改标点的文案 ───
+$ cp -p src/hooks/useFileOpOrchestration.ts /tmp/nc2/useFileOpOrchestration.ts.bak
+$ cp -p tests/notices-consistency.test.tsx /tmp/nc2/notices-consistency.test.tsx.bak   # 观测用例一并备份（只读不改）
+$ shasum -a 256 原文件与备份（应相同）
+f0bf5140a996c56d6ffa896ddabe090a18dedc299f3049068f0201d153a41b1c  /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas/src/hooks/useFileOpOrchestration.ts
+f0bf5140a996c56d6ffa896ddabe090a18dedc299f3049068f0201d153a41b1c  /tmp/nc2/useFileOpOrchestration.ts.bak
+python: NC-2 anchor 替换 1 处（私写一份 E-NOT-FOUND 文案）
+
+$ grep -c '列表已刷新！' src/hooks/useFileOpOrchestration.ts   # 落盘计数：基线 0 → 现在应 1
+  基线 grep 计数 = 0
+  现在 grep 计数 = 1
+$ grep -n 'NC-2 中性化' src/hooks/useFileOpOrchestration.ts   # 落盘确认行原文
+88:  // ─── NC-2 中性化（临时，勿提交）────────────────────────────────
+$ sed -n '88,97p' src/hooks/useFileOpOrchestration.ts   # 中性化后的盘上原文
+    |   // ─── NC-2 中性化（临时，勿提交）────────────────────────────────
+    |   // 判别目标：一侧绕过 assetNotices.ts 私写一份文案 → 「同一错误码两处同文案」
+    |   // 必须转红。这里覆盖 E-NOT-FOUND 并把句末句号改成叹号（仅标点差异），
+    |   // 模拟「两处各自硬编码、各自漂移」。
+    |   'E-NOT-FOUND': '文件已不在磁盘上（可能被外部改名或删除），列表已刷新！',
+    | };
+    | 
+    | /**
+    |  * 未知码 → 通用文案（不把内部码暴露给用户）。
+    |  *
+$ grep -c '列表已刷新。' src/assetNotices.ts   # 唯一事实源侧仍是句号（证明『一侧』）
+1
+
+─── [4] 中性化后跑观测用例（期望：转红 + exit 非 0）───
+$ pnpm vitest run tests/notices-consistency.test.tsx
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./vite.config" without a file extension (vitest.config.ts:4:24). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas
+
+ ❯ tests/notices-consistency.test.tsx (22 tests | 1 failed) 136ms
+     ✓ 文件侧表与资产侧入口对每个码给同一串字节 2ms
+     × P0-A 既有表 FILE_OP_FAIL_NOTICE 与唯一事实源逐码相等（收敛不靠人眼） 7ms
+     ✓ 删除流的 busyLease / busyPhysical 与文件操作拒绝表**逐字**相同（同一租约，不许两种说法） 0ms
+     ✓ 静默语义（空串）只落在明确的两处：拒绝表的 same-name 与删除流的 cancelled 1ms
+     ✓ 八个失败码一个不缺，且都能取到非 undefined 文案 1ms
+     ✓ 八个拒绝理由一个不缺（含空串的 same-name） 0ms
+     ✓ 资产插入三键（上游）+ 应用层兜底一键 / 会话四条 / 删除流五条，键集合精确相等 1ms
+     ✓ 资产的每个用户可见串都在本文件可见的表里（表清单完整，漏表即红） 1ms
+     ✓ 插入被拒的三条**不得**退化成同一句（恢复路径不同：§4.9 / I-10） 0ms
+     ✓ 会话级四条**都**必须说「没有写入持久存储」（§4.3 纪律：不许把能用说成已保存） 0ms
+     ✓ 每一串文案都过既有守卫 isForbiddenAssetCopy（不另写正则） 0ms
+     ✓ 守卫本身有效（负控：喂它一句禁止表述必须为 true） 0ms
+     ✓ 两域文案都不得把「写入成功」说成「可携带」（I-12 的关键分界） 0ms
+     ✓ 未确认写入 / 同名副本两条插值文案也在扫描面内 0ms
+     ✓ busy=true 禁用两个**会改磁盘**的动作，但两条「退出通道」不得被锁（保留两份 / 稍后处理） 62ms
+     ✓ busy 缺省（不传）= 不禁用 —— 这正是此前全仓的形态，故调用方必须显式传入 9ms
+     ✓ busy 的真值来自状态机：在途为 true，动作结束后回到 false（不留在 true 上） 12ms
+     ✓ 每句迁移文案在 src 里恰好 1 处活字面量，且落在 assetNotices.ts 34ms
+     ✓ 旧的「上传失败，请重试。」只剩注释里的历史记录，没有任何活字面量 2ms
+     ✓ 旧的「文件已不在磁盘上。」（同码第二套说法）已无活字面量 1ms
+     ✓ 上传失败入口：E-ABORT 静默、其余按 FILE_OP_FAIL_COPY 逐码（迁移动机） 0ms
+     ✓ 插入被拒入口：三条给出三句不同的话，且兜底不退化成空气泡 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/notices-consistency.test.tsx > ① 同一错误码 → 同一文案（跨域不分叉） > P0-A 既有表 FILE_OP_FAIL_NOTICE 与唯一事实源逐码相等（收敛不靠人眼）
+AssertionError: E-NOT-FOUND：P0-A 遗留表与 assetNotices 分叉了（这正是 §5.2 要消灭的「两套说法」）: expected '文件已不在磁盘上（可能被外部改名或删除），列表已刷新！' to be '文件已不在磁盘上（可能被外部改名或删除），列表已刷新。' // Object.is equality
+
+Expected: "文件已不在磁盘上（可能被外部改名或删除），列表已刷新。"
+Received: "文件已不在磁盘上（可能被外部改名或删除），列表已刷新！"
+
+ ❯ tests/notices-consistency.test.tsx:125:9
+    123|         FILE_OP_FAIL_NOTICE[code],
+    124|         `${code}：P0-A 遗留表与 assetNotices 分叉了（这正是 §5.2 要消灭的「两套说法」）`,
+    125|       ).toBe(FILE_OP_FAIL_COPY[code]);
+       |         ^
+    126|     }
+    127|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 21 passed (22)
+   Start at  18:42:22
+   Duration  2.49s (transform 1.39s, setup 0ms, import 1.78s, tests 136ms, environment 456ms)
+
+──────────────────────────────────────────────
+red_exit_code=1
+red_failed_tests=1
+
+─── [5] 还原：备份 + cmp 字节校验 ───
+$ cp -p /tmp/nc2/useFileOpOrchestration.ts.bak src/hooks/useFileOpOrchestration.ts
+$ cmp /tmp/nc2/useFileOpOrchestration.ts.bak src/hooks/useFileOpOrchestration.ts
+BYTE-IDENTICAL (cmp exit 0)
+$ shasum -a 256 src/hooks/useFileOpOrchestration.ts   # 与 [3] 记录的备份哈希比对
+f0bf5140a996c56d6ffa896ddabe090a18dedc299f3049068f0201d153a41b1c  /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas/src/hooks/useFileOpOrchestration.ts
+$ grep -c 'NC-2 中性化' src/hooks/useFileOpOrchestration.ts   # 必须 0
+  = 0
+$ grep -c '列表已刷新！' src/hooks/useFileOpOrchestration.ts   # 必须 0
+  = 0
+$ cmp /tmp/nc2/notices-consistency.test.tsx.bak tests/notices-consistency.test.tsx   # 观测用例未动
+OBS-UNTOUCHED (期望没动过)
+
+─── [6] 还原后回绿 ───
+$ pnpm vitest run tests/notices-consistency.test.tsx
+ Test Files  1 passed (1)
+      Tests  22 passed (22)
+restore_test_exit_code=0
+
+$ pnpm vitest run   # 全量
+ Test Files  57 passed (57)
+      Tests  653 passed (653)
+restore_full_exit_code=0
+
+══════════════════════════════════════════════════════════════════
+NC-2 结论：中性化（一侧私写改标点文案）→ 『两处同文案』用例转红且 exit 非 0；
+           还原后回绿。verdict = discriminating
+══════════════════════════════════════════════════════════════════

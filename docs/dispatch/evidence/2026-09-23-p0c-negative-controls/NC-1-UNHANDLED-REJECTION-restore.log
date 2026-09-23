@@ -1,0 +1,32 @@
+
+══════════════════════════════════════════════════════════════════
+NC-1-UNHANDLED-REJECTION · 还原段（备份 + cmp 字节校验；禁用 git checkout）
+══════════════════════════════════════════════════════════════════
+
+$ cp -p /tmp/ncprobe/useDocumentSaveSession.ts.bak src/hooks/useDocumentSaveSession.ts
+$ cmp /tmp/ncprobe/useDocumentSaveSession.ts.bak src/hooks/useDocumentSaveSession.ts
+cmp_exit=0  (0 = 字节一致)
+
+$ shasum -a 256 src/hooks/useDocumentSaveSession.ts
+ba22e0c56510cb062e3625dcff684a795a6d544bb57287366a0a99ac3f4ef5ba  src/hooks/useDocumentSaveSession.ts
+   ↑ 与 [3] 中性化**之前**记录的备份哈希逐字符相同
+
+$ grep -c 'NC-1 中性化' src/hooks/useDocumentSaveSession.ts   # 变异标记必须归零
+0
+$ grep -c 'writeFailed = true;' src/hooks/useDocumentSaveSession.ts   # 统一错误处理必须回来
+1
+
+$ cmp /tmp/ncprobe/save-lifecycle.test.tsx.bak tests/save-lifecycle.test.tsx
+OBS-UNTOUCHED (cmp exit 0)   # 观测用例全程未动（纪律 7：期望不动）
+
+$ pnpm vitest run tests/save-lifecycle.test.tsx
+ Test Files  1 passed (1)
+      Tests  17 passed (17)
+restore_test_exit=0
+restore_Unhandled_Rejection_lines=0
+
+$ pnpm vitest run   # 全量
+ Test Files  57 passed (57)
+      Tests  653 passed (653)
+restore_full_exit_code=0
+restore_Unhandled_Rejection_lines=0

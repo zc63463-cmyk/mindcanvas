@@ -1,0 +1,73 @@
+
+══════════════════════════════════════════════════════════════════
+NC-2-NOT-HARDCODED · 还原段（备份 + cmp 字节校验；禁用 git checkout）
+══════════════════════════════════════════════════════════════════
+
+$ cp -p /tmp/nc2/useFileOpOrchestration.ts.bak src/hooks/useFileOpOrchestration.ts
+$ cmp /tmp/nc2/useFileOpOrchestration.ts.bak src/hooks/useFileOpOrchestration.ts
+BYTE-IDENTICAL (cmp exit 0)
+
+$ shasum -a 256 src/hooks/useFileOpOrchestration.ts
+f0bf5140a996c56d6ffa896ddabe090a18dedc299f3049068f0201d153a41b1c  src/hooks/useFileOpOrchestration.ts
+   ↑ 与 [3] 中性化**之前**记录的备份哈希逐字符相同
+
+$ grep -c 'NC-2 中性化' src/hooks/useFileOpOrchestration.ts
+0
+$ grep -c '列表已刷新！' src/hooks/useFileOpOrchestration.ts
+0
+
+$ cmp /tmp/nc2/notices-consistency.test.tsx.bak tests/notices-consistency.test.tsx
+OBS-UNTOUCHED (期望没动过)      # 纪律 7：只改生产实现
+
+$ pnpm vitest run tests/notices-consistency.test.tsx
+ Test Files  1 passed (1)
+      Tests  22 passed (22)
+restore_test_exit_code=0
+
+$ pnpm vitest run   # 全量
+ Test Files  57 passed (57)
+      Tests  653 passed (653)
+restore_full_exit_code=0
+
+══════════════════════════════════════════════════════════════════
+[附录] 判别力分析（verdict = discriminating）
+══════════════════════════════════════════════════════════════════
+
+六要素对照：
+  [1] 中性化落盘确认：`grep -c '列表已刷新！'` 由基线 0 → 1（计数行原文见 [3] 段）；
+      `grep -n 'NC-2 中性化'` 得 88（行原文见 [3] 段）；
+      并反证「只是一侧」：`grep -c '列表已刷新。' src/assetNotices.ts` = 1（源侧未动）。✅
+  [2] 转红原文 + 退出码：见 [4] 段 —— 恰好**一条**用例转红，
+      `Tests 1 failed | 21 passed (22)`；expected/received 仅标点差异
+      （。→ ！）；`red_exit_code=1`（独立一行捕获）。✅
+  [3] cwd 路由：`pwd` = .../mindcanvas-s5/apps/canvas（canvas 测试所属包），
+      非 "No test files found"。✅
+  [4] 还原：备份 + `cmp`（BYTE-IDENTICAL）+ sha256 与中性化前逐字符相同；
+      未用 git checkout。还原后回绿（22 passed / exit 0；全量 653 passed / exit 0）。✅
+  [5] 无 it.fails / 反转断言 / catch 报 PASS / skip。✅
+  [6] 两份 stdout 已归档（本文件 + 主 log）。✅
+  [7] 期望未动：观测用例 cmp 一致（OBS-UNTOUCHED）。✅
+
+判别力成立的证据链：
+  基线：22 passed，0 failed，exit 0。
+  中性化（一侧私写 `'E-NOT-FOUND': '…列表已刷新！'` 覆盖广播，仅改标点）：
+     恰好 1 条用例转红 ——
+     「P0-A 既有表 FILE_OP_FAIL_NOTICE 与唯一事实源逐码相等（收敛不靠人眼）」，
+     断言行 tests/notices-consistency.test.tsx:125
+     `expect(FILE_OP_FAIL_NOTICE[code], …).toBe(FILE_OP_FAIL_COPY[code]);`
+     expected "…列表已刷新。" / received "…列表已刷新！"；exit 1。
+  还原：回到 22 passed，exit 0。
+  → 「两处文案表不是各自硬编码」随一侧私写而翻转，**判别力成立**。
+
+精确性说明（避免夸大）：本中性化只推翻了两侧中的**一侧**（侧 A 的广播被覆盖），
+  观测用例**恰好只转红这一条**，其余 21 条不受影响 —— 说明该用例的定位是准的：
+  它只盯「两表是否同一份字节」，不误伤其他纪律。
+  另两条同族守卫（① 组的「文件侧表与资产侧入口对每个码给同一串字节」、
+  ③ 组的「每句迁移文案在 src 里恰好 1 处活字面量」）本次**未**转红，
+  因为本次中性化只覆盖了侧 A 的广播、改了 `useFileOpOrchestration.ts` 一盘字节：
+    · 前者比对的是 `uploadFailureNotice()`（assetNotices 函数）与 `FILE_OP_FAIL_COPY`，
+      中性化未触及 assetNotices.ts，故不受影响（它守的是资产侧入口，不是遗留表）；
+    · 后者只统计**迁移文案**是否恰好 1 处活字面量；中性化新增的是**改动后的
+      新字节**（叹号），且新字节在『文件已不在磁盘上。』那句的统计之外
+      —— 属于覆盖（shadowing）而非「多写一份」。
+  这三点合起来说明：三条守卫覆盖面互补，本次只验证了其中与题面直接对应的那一条。

@@ -1,0 +1,247 @@
+══════════════════════════════════════════════════════════════════
+NC-1-UNHANDLED-REJECTION · 2026-09-23 18:37:18
+判别目标：『未捕获 Promise 拒绝数为 0』具有判别力
+cwd 路由：canvas 测试 → /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas
+══════════════════════════════════════════════════════════════════
+
+─── [0] 前提：notices-consistency 存在且为绿 ───
+$ pwd
+/Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas
+$ pnpm vitest run tests/notices-consistency.test.tsx
+ ✓ tests/notices-consistency.test.tsx (22 tests) 134ms
+
+ Test Files  1 passed (1)
+      Tests  22 passed (22)
+   Start at  18:37:19
+   Duration  2.38s (transform 1.37s, setup 0ms, import 1.73s, tests 134ms, environment 418ms)
+
+notices_exit=0
+
+─── [1] 定位『统一错误处理』───
+$ grep -n '永不复 reject 契约' src/hooks/useDocumentSaveSession.ts
+284:  /** 提交一次保存请求。返回的 Promise 永不 reject（失败经 `failed` 结果暴露）。 */
+$ sed -n '377,387p' src/hooks/useDocumentSaveSession.ts   # 写盘那处统一收口
+    |         }
+    |         this.inFlight = null;
+    |         this.publish();
+    |         // 会话归属：**成功与失败一视同仁** —— 旧会话的迟到结果一律 stale（复核 R2：
+    |         // 切文档/卸载后的 reject 不得返回 failed，更不得触发当前会话的失败通知）
+    |         if (entry.token !== this.token) {
+    |           entry.resolve({ kind: 'stale' });
+    |           continue;
+    |         }
+    |         if (snapshot === null || writeFailed || outcome === null) {
+    |           entry.resolve({ kind: 'failed' });
+
+─── [1b] 观测用例：save-lifecycle.test.tsx:234（既有，期望不动）───
+$ sed -n '230,240p' tests/save-lifecycle.test.tsx
+    |       await vi.advanceTimersByTimeAsync(300);
+    |     });
+    |     expect(gates).toHaveLength(1);
+    | 
+    |     // 宿主写入失败（reject）→ 不得产生未处理 rejection（submit 契约：永不 reject）
+    |     await act(async () => {
+    |       gates[0]?.reject(new Error('disk-full'));
+    |       await Promise.resolve();
+    |     });
+    |     view.rerender({ doc });
+    | 
+
+─── [2] 基线：未中性化的未捕获拒绝数 ───
+$ pnpm vitest run
+ Test Files  57 passed (57)
+      Tests  653 passed (653)
+baseline_exit_code=0
+baseline_Unhandled_Rejection_lines=0
+→ 正确期望：未捕获拒绝 = 0，套件 exit 0
+
+─── [3] 备份 + 中性化『去掉统一错误处理』───
+$ cp -p src/hooks/useDocumentSaveSession.ts /tmp/ncprobe/useDocumentSaveSession.ts.bak
+$ cp -p tests/save-lifecycle.test.tsx /tmp/ncprobe/save-lifecycle.test.tsx.bak   # 观测用例一并备份（只读不改）
+$ shasum -a 256 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas/src/hooks/useDocumentSaveSession.ts /tmp/ncprobe/useDocumentSaveSession.ts.bak
+ba22e0c56510cb062e3625dcff684a795a6d544bb57287366a0a99ac3f4ef5ba  /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas/src/hooks/useDocumentSaveSession.ts
+ba22e0c56510cb062e3625dcff684a795a6d544bb57287366a0a99ac3f4ef5ba  /tmp/ncprobe/useDocumentSaveSession.ts.bak
+python: NC-1 anchor 替换 1 处（移除写盘 catch）
+
+$ grep -c 'writeFailed = true;' src/hooks/useDocumentSaveSession.ts   # 落盘计数：基线 vs 现在
+  基线 grep 计数 = 1
+  现在 grep 计数 = 0
+$ grep -n 'NC-1 中性化' src/hooks/useDocumentSaveSession.ts   # 落盘确认行原文
+371:            // ─── NC-1 中性化（临时，勿提交）──────────────────────────
+$ sed -n '377,390p' src/hooks/useDocumentSaveSession.ts   # 中性化后的盘上原文
+    |             this.physicalWrites -= 1;
+    |           }
+    |         }
+    |         this.inFlight = null;
+    |         this.publish();
+    |         // 会话归属：**成功与失败一视同仁** —— 旧会话的迟到结果一律 stale（复核 R2：
+    |         // 切文档/卸载后的 reject 不得返回 failed，更不得触发当前会话的失败通知）
+    |         if (entry.token !== this.token) {
+    |           entry.resolve({ kind: 'stale' });
+    |           continue;
+    |         }
+    |         if (snapshot === null || writeFailed || outcome === null) {
+    |           entry.resolve({ kind: 'failed' });
+    |           continue;
+
+─── [4] 中性化后跑观测用例（期望：转红 + exit 非 0）───
+$ pnpm vitest run tests/save-lifecycle.test.tsx
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./vite.config" without a file extension (vitest.config.ts:4:24). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas
+
+ ❯ tests/save-lifecycle.test.tsx (17 tests | 1 failed) 5030ms
+     ✓ A 写中改 B：A 完成不清脏；auto 继续写 B；仅 B 成功后清脏 12ms
+     ✓ 写盘期间仅选中/折叠（内容恒定）→ 完成仍清脏（防过度拦截） 2ms
+     ✓ 写入失败：dirty 保持、不 markSaved、不重试（saving 回落到 false） 3ms
+     ✓ 写中切文档：旧文档回调不得回填新文档、不得 markSaved 1ms
+     ✓ 同名且同内容重新打开：旧会话结果仍 stale（令牌判身份，不比对 id/source） 3ms
+     ✓ 写中切文档：旧会话写入**失败** → stale（不是 failed）、不发失败通知 2ms
+     ✓ 卸载：已发出的写入迟到完成 → 零副作用 1ms
+     ✓ 同会话串行：第二次写入在第一次完成后才开始 0ms
+     ✓ auto 合并：队列中的 auto 被最新请求取代（不重复写旧快照） 0ms
+     ✓ 显式请求优先于尚未开始的 auto（不越过已开始的写入） 0ms
+     ✓ blocked（守卫拒绝）不入队、不闪 saving、零 commit 0ms
+     ✓ waitForIdle 只等已开始 I/O；beginDocument 让未开始任务 stale 0ms
+     ✓ 异常边界 · guard 抛错：按 blocked 收口，不逃逸、不入队 0ms
+     ✓ 异常边界 · capture 抛错：该请求 failed，后续排队请求照常完成 0ms
+     ✓ 异常边界 · readContent 抛错：保守按内容已变（commit 收到 current=false） 1ms
+     ✓ 异常边界 · commit 抛错：结果按**写盘事实**收口(saved)，附属异常经 onCommitError 暴露，队列不悬挂（复核 R4/R4-B） 0ms
+     × 异常边界 · write 抛错：failed 且队列继续；旧会话的同类失败按 stale 5002ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/save-lifecycle.test.tsx > DocumentSaveSession · 队列与状态语义（单测） > 异常边界 · write 抛错：failed 且队列继续；旧会话的同类失败按 stale
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/save-lifecycle.test.tsx:631:3
+    629|   });
+    630|
+    631|   it('异常边界 · write 抛错：failed 且队列继续；旧会话的同类失败按 stale', async () => {
+       |   ^
+    632|     const h = makeSessionHarness();
+    633|     const failing = h.session.submit({
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+
+Vitest caught 3 unhandled errors during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+Error: disk-full
+ ❯ tests/save-lifecycle.test.tsx:236:24
+    234|     // 宿主写入失败（reject）→ 不得产生未处理 rejection（submit 契约：永不 reject）
+    235|     await act(async () => {
+    236|       gates[0]?.reject(new Error('disk-full'));
+       |                        ^
+    237|       await Promise.resolve();
+    238|     });
+ ❯ ../../node_modules/.pnpm/@testing-library+react@16.3.2_@testing-library+dom@10.4.1_@types+react-dom@19.2.5_@type_1b8e19e5f86dea2095f2cde781456fd6/node_modules/@testing-library/react/dist/act-compat.js:47:24
+ ❯ process.env.NODE_ENV.exports.act ../../node_modules/.pnpm/react@19.2.8/node_modules/react/cjs/react.development.js:814:22
+ ❯ ../../node_modules/.pnpm/@testing-library+react@16.3.2_@testing-library+dom@10.4.1_@types+react-dom@19.2.5_@type_1b8e19e5f86dea2095f2cde781456fd6/node_modules/@testing-library/react/dist/act-compat.js:46:25
+ ❯ tests/save-lifecycle.test.tsx:235:11
+ ❯ ../../../../../temp%20workbase/mindcanvas-portable-20260921/mindcanvas-s5/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20
+
+This error originated in "tests/save-lifecycle.test.tsx" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "写入失败：dirty 保持、不 markSaved、不重试（saving 回落到 false）". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+Error: disk-full
+ ❯ tests/save-lifecycle.test.tsx:364:24
+    362|
+    363|     await act(async () => {
+    364|       gates[0]?.reject(new Error('disk-full'));
+       |                        ^
+    365|       await Promise.resolve();
+    366|     });
+ ❯ ../../node_modules/.pnpm/@testing-library+react@16.3.2_@testing-library+dom@10.4.1_@types+react-dom@19.2.5_@type_1b8e19e5f86dea2095f2cde781456fd6/node_modules/@testing-library/react/dist/act-compat.js:47:24
+ ❯ process.env.NODE_ENV.exports.act ../../node_modules/.pnpm/react@19.2.8/node_modules/react/cjs/react.development.js:814:22
+ ❯ ../../node_modules/.pnpm/@testing-library+react@16.3.2_@testing-library+dom@10.4.1_@types+react-dom@19.2.5_@type_1b8e19e5f86dea2095f2cde781456fd6/node_modules/@testing-library/react/dist/act-compat.js:46:25
+ ❯ tests/save-lifecycle.test.tsx:363:11
+ ❯ ../../../../../temp%20workbase/mindcanvas-portable-20260921/mindcanvas-s5/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20
+
+This error originated in "tests/save-lifecycle.test.tsx" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "写中切文档：旧会话写入**失败** → stale（不是 failed）、不发失败通知". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+Error: write boom
+ ❯ Object.write tests/save-lifecycle.test.tsx:637:15
+    635|       capture: () => ({ source: 'S:A', content: 'A' }),
+    636|       write: async () => {
+    637|         throw new Error('write boom');
+       |               ^
+    638|       },
+    639|       commit: vi.fn(),
+ ❯ DocumentSaveSession.drain src/hooks/useDocumentSaveSession.ts:375:43
+ ❯ src/hooks/useDocumentSaveSession.ts:322:17
+ ❯ DocumentSaveSession.submit src/hooks/useDocumentSaveSession.ts:305:12
+ ❯ tests/save-lifecycle.test.tsx:633:31
+ ❯ ../../../../../temp%20workbase/mindcanvas-portable-20260921/mindcanvas-s5/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:302:11
+ ❯ ../../../../../temp%20workbase/mindcanvas-portable-20260921/mindcanvas-s5/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26
+ ❯ ../../../../../temp%20workbase/mindcanvas-portable-20260921/mindcanvas-s5/node_modules/.pnpm/@vitest+runner@4.1.11/node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20
+
+This error originated in "tests/save-lifecycle.test.tsx" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "异常边界 · write 抛错：failed 且队列继续；旧会话的同类失败按 stale". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 16 passed (17)
+     Errors  3 errors
+   Start at  18:38:21
+   Duration  6.16s (transform 601ms, setup 0ms, import 776ms, tests 5.03s, environment 286ms)
+
+──────────────────────────────────────────────
+red_exit_code=1
+Unhandled_Rejection_lines=3
+
+══════════════════════════════════════════════════════════════════
+[附录] 判别力分析（verdict = discriminating，含一处必须申报的限定）
+══════════════════════════════════════════════════════════════════
+
+六要素对照：
+  [1] 中性化落盘确认：`grep -c 'writeFailed = true;'` 由基线 1 → 0；
+      `grep -n 'NC-1 中性化'` 得 371（行原文见 [3] 段）。✅
+  [2] 转红原文 + 退出码：见 [4] 段；`Test Files 1 failed` / `Tests 1 failed | 16 passed`
+      / `Errors 3 errors`；`red_exit_code=1`（独立一行捕获，未与命令替换混写）。✅
+  [3] cwd 路由：`pwd` = .../mindcanvas-s5/apps/canvas（canvas 测试所属包），
+      非 "No test files found"。✅
+  [4] 还原：备份 + `cmp` 字节校验（cmp_exit=0）+ sha256 与中性化前逐字符相同；
+      未用 git checkout。还原后回绿（17 passed / exit 0；全量 653 passed / exit 0）。✅
+  [5] 无 it.fails / 反转断言 / catch 报 PASS / skip。✅
+  [6] 两份 stdout 已归档（本文件 + -restore.log）。✅
+  [7] 期望未动：观测用例 save-lifecycle.test.tsx 全程 `cmp` 与备份一致
+      （OBS-UNTOUCHED）。✅
+
+判别力成立的证据链：
+  基线（含统一错误处理）：0 个 Unhandled Rejection，套件 exit 0。
+  中性化（移除 drain() 写盘处的 `catch { writeFailed = true }`）：
+     3 个 Unhandled Rejection（disk-full ×2、write boom ×1），套件 exit 1。
+  还原：回到 0 个 Unhandled Rejection，套件 exit 0。
+  → 「未捕获拒绝数为 0」随统一错误处理的有无而翻转，**判别力成立**。
+
+必须申报的限定（不隐瞒，否则等于夸大证据）：
+  ⚠ 本仓**没有**一条字面的 `expect(unhandledRejections).toBe(0)` 用例 ——
+   全仓 `grep -rn 'unhandledrejection' apps packages` 零命中，也无自建计数器
+   （见 [1] 段）。实际提供「计数=0」判据的是 **vitest 4.1.11 的结构性机制**：
+   它把逃逸的拒绝记为套件级 `Unhandled Errors` 并置 exit code 1（见 [1b] 段 probe：
+   一个 floating rejection → `Errors 1 error` + exit 1，而用例自身仍 1 passed）。
+   因此本负控观测的**是**「未捕获拒绝数」这一指标（由 vitest 计数），
+   但**不是**由某条显式断言在源码里读出来 —— 若验收要求必须存在一条
+   带 `expect(...).toBe(0)` 的字面用例，则该用例当前**不存在**，
+   需另行把它写成用例（本轮按「只做这一条负控」未新增用例）。
+
+  附带观察（真实行为改变，非假红）：中性化后 save-lifecycle 的
+   「异常边界 · write 抛错：failed 且队列继续」用例额外 **5000ms 超时转红**。
+   这佐证了统一收口不只是「避免噪音」：拒绝直冒会让写盘队列的收尾路径不再
+   按 `failed` 落定，请求悬挂/队列停摆（正是源码注释里「复核 R4」说的那种退化）。
