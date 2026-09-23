@@ -102,10 +102,16 @@ export interface SidePanelsProps {
    *
    * 由调用方（MindmapStage）注入——它持有工作区写入器与宿主（本组件只做编排）。
    * 缺省时退回 `assetValueOf` 的旧形态（向后兼容老调用方）。
+   *
+   * **第三参 `alreadyInWorkspace`（P0-FIX-R1 R1-1）**：由本组件按所选**条目的来源**给出，
+   * 而不是让归一化器按 id 前缀猜。判据是 `item.origin === 'workspace-assets'` ——
+   * 只有清单里标了「字节在磁盘上」的项才算「已在工作区」；浏览器素材库里同名同 id
+   * （`assets/a.png`）的项**不是**，它必须走三选 + 复制字节（否则蓝图字节被静默丢弃）。
    */
   normalizeInsert?: (
     item: AssetItem,
     action: AssetInsertAction,
+    alreadyInWorkspace: boolean,
   ) => Promise<{ refId: string } | null>;
   /**
    * 归一化被拒（未挂载工作区 / 格式不支持 / 写失败）时回传的**拒绝键**。
@@ -166,7 +172,10 @@ export function SidePanels({
   const resolveRefId = useCallback(
     async (item: AssetItem, action: AssetInsertAction): Promise<string | null> => {
       if (normalizeInsert) {
-        const result = await normalizeInsert(item, action);
+        // R1-1：把「这一项的字节是否已经在工作区磁盘上」作为**显式判据**传下去。
+        // 只有 `origin === 'workspace-assets'` 才算——浏览器素材库的项即使 id 形如
+        // `assets/a.png` 也不是（那正是「蓝图字节被红图顶替」的入口）。
+        const result = await normalizeInsert(item, action, item.origin === 'workspace-assets');
         if (result !== null) return result.refId;
       }
       // 无注入归一化器（测试 / 老调用方）：只允许自包含形态，否则拒绝
