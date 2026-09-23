@@ -19,7 +19,7 @@
  */
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { useState } from 'react';
-import type { FileOpOutcome, FsFileHandle, WorkspaceDir, WorkspaceFile } from '@mindcanvas/react';
+import type { FileOpOutcome, FsFileHandle, WorkspaceDir, WorkspaceFile, WorkspaceNode } from '@mindcanvas/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DocumentSaveSession } from '../src/hooks/useDocumentSaveSession';
 import {
@@ -65,12 +65,25 @@ function makeHost(initial: Array<[string, string]>) {
     scopeId: 'ws:test',
     state,
     fileAt: fileOf,
-    async scan(): Promise<unknown[]> {
-      return [...state.files.keys()].map((p) =>
-        p.includes('/')
-          ? ({ kind: 'dir', name: p.slice(0, p.indexOf('/')), path: p.slice(0, p.indexOf('/')), children: [fileOf(p)], handle: {} } satisfies WorkspaceDir & { children: unknown[] })
-          : fileOf(p),
-      );
+    async scan(): Promise<WorkspaceNode[]> {
+      // 目录先聚合，再把文件挂进去 —— 与真实 host 的 scan 形状一致
+      const dirs = new Map<string, WorkspaceDir>();
+      const out: WorkspaceNode[] = [];
+      for (const path of state.files.keys()) {
+        if (!path.includes('/')) {
+          out.push(fileOf(path));
+          continue;
+        }
+        const dirPath = path.slice(0, path.indexOf('/'));
+        let dir = dirs.get(dirPath);
+        if (dir === undefined) {
+          dir = { kind: 'dir', name: dirPath, path: dirPath, children: [], handle: {} as WorkspaceDir['handle'] };
+          dirs.set(dirPath, dir);
+          out.push(dir);
+        }
+        dir.children.push(fileOf(path));
+      }
+      return out;
     },
     async statFile(file) {
       if (state.statOverride !== null) return state.statOverride;

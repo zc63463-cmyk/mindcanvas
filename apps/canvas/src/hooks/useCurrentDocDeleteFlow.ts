@@ -37,7 +37,7 @@ import type { WorkspaceFile } from '@mindcanvas/react';
 import { subscribeCompositionEnd } from '../draftFlush.js';
 import type { FlushOutcome, FlushResult } from '../documentLifecycle.js';
 import type { FileOpController } from '../useFileOpController.js';
-import { type CurrentDocOpResult, type FileOpRefusal } from './useFileOpOrchestration.js';
+import type { CurrentDocOpResult, FileOpRefusal } from './useFileOpOrchestration.js';
 
 /** F2 的待决状态（面板据此渲染；null = 无待决） */
 export type DeletePending =

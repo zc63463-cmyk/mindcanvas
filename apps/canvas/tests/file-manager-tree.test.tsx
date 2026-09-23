@@ -146,6 +146,12 @@ const expandDir = (c: HTMLElement, path: string): void => {
   if (!btn) throw new Error(`目录行 ${path} 没有切换按钮`);
   fireEvent.click(btn);
 };
+/** 取一个必须存在的元素（不用非空断言：lint 会记 warning） */
+const must = (c: HTMLElement, selector: string): HTMLElement => {
+  const el = c.querySelector(selector);
+  if (el === null) throw new Error(`找不到元素 ${selector}`);
+  return el as HTMLElement;
+};
 const docRow = (c: HTMLElement, name: string): HTMLElement => {
   const el = c.querySelector(`[data-doc-name="${name}"]`);
   if (!el) throw new Error(`找不到文件行 ${name}`);
@@ -296,15 +302,15 @@ describe('文件工作台 · 右键菜单', () => {
     // A-D3：原 window.confirm 改为内联确认条（data-fm-confirm）
     fireEvent.contextMenu(docRow(container, '首页.mm.md'));
     await waitFor(() => expect(container.querySelector('[data-menu-delete]')).not.toBeNull());
-    fireEvent.click(container.querySelector('[data-menu-delete]')!);
+    fireEvent.click(must(container, '[data-menu-delete]'));
     await waitFor(() => expect(container.querySelector('[data-fm-confirm]')).not.toBeNull());
-    fireEvent.click(container.querySelector('[data-fm-confirm-cancel]')!);
+    fireEvent.click(must(container, '[data-fm-confirm-cancel]'));
     await waitFor(() => expect(container.querySelector('[data-fm-confirm]')).toBeNull());
     expect(calls.removed.length).toBe(0);
 
     fireEvent.contextMenu(docRow(container, '首页.mm.md'));
     await waitFor(() => expect(container.querySelector('[data-menu-delete]')).not.toBeNull());
-    fireEvent.click(container.querySelector('[data-menu-delete]')!);
+    fireEvent.click(must(container, '[data-menu-delete]'));
     await waitFor(() => expect(container.querySelector('[data-fm-confirm]')).not.toBeNull());
     fireEvent.click(container.querySelector('[data-fm-confirm-ok]')!);
     await waitFor(() => expect(calls.removed.length).toBe(1));
@@ -316,7 +322,7 @@ describe('文件工作台 · 右键菜单', () => {
     await waitFor(() => expect(screen.getByText('首页.mm.md')).toBeDefined());
     fireEvent.contextMenu(docRow(container, '首页.mm.md'));
     await waitFor(() => expect(container.querySelector('[data-menu-rename]')).not.toBeNull());
-    fireEvent.click(container.querySelector('[data-menu-rename]')!);
+    fireEvent.click(must(container, '[data-menu-rename]'));
     const input = await waitFor(() => container.querySelector('[data-rename-input]') as HTMLInputElement);
     fireEvent.change(input, { target: { value: '新首页.mm.md' } });
     fireEvent.blur(input);
@@ -599,7 +605,7 @@ describe('P0-A · 当前文档操作分流', () => {
     await waitFor(() => expect(container.querySelector('[data-doc-path="研发/架构.mm.md"]')).not.toBeNull());
     fireEvent.contextMenu(docRow(container, '架构.mm.md'));
     await waitFor(() => expect(container.querySelector('[data-menu-delete]')).not.toBeNull());
-    fireEvent.click(container.querySelector('[data-menu-delete]')!);
+    fireEvent.click(must(container, '[data-menu-delete]'));
     // 当前文档：直接进 F2 流程，**不**出现既有确认条
     await waitFor(() => expect(ops.deleted).toEqual(['研发/架构.mm.md']));
     expect(container.querySelector('[data-fm-confirm]')).toBeNull();
@@ -610,7 +616,7 @@ describe('P0-A · 当前文档操作分流', () => {
     await waitFor(() => expect(screen.getByText('首页.mm.md')).toBeDefined());
     fireEvent.contextMenu(docRow(container, '首页.mm.md'));
     await waitFor(() => expect(container.querySelector('[data-menu-delete]')).not.toBeNull());
-    fireEvent.click(container.querySelector('[data-menu-delete]')!);
+    fireEvent.click(must(container, '[data-menu-delete]'));
     await waitFor(() => expect(container.querySelector('[data-fm-confirm]')).not.toBeNull());
     expect(ops.deleted).toHaveLength(0);
     expect(calls.removed).toHaveLength(0); // 确认条未确认 → 零删除
@@ -620,8 +626,8 @@ describe('P0-A · 当前文档操作分流', () => {
     const { container, ops } = setupWithCurrent('研发/架构.mm.md');
     await waitFor(() => expect(screen.getByText('首页.mm.md')).toBeDefined());
     fireEvent.contextMenu(docRow(container, '首页.mm.md'));
-    const dup = await waitFor(() => container.querySelector('[data-menu-duplicate]'));
-    fireEvent.click(dup!);
+    const dup = await waitFor(() => must(container, '[data-menu-duplicate]'));
+    fireEvent.click(dup);
     await waitFor(() => expect(ops.duplicated).toEqual(['首页.mm.md']));
   });
 
@@ -671,11 +677,11 @@ describe('P0-A · 当前文档操作分流', () => {
     if (personal === null) throw new Error('找不到 个人/笔记.mm.md 行');
     fireEvent.contextMenu(personal);
     await waitFor(() => expect(container.querySelector('[data-menu-delete]')).not.toBeNull());
-    fireEvent.click(container.querySelector('[data-menu-delete]')!);
+    fireEvent.click(must(container, '[data-menu-delete]'));
     await waitFor(() => expect(container.querySelector('[data-fm-confirm]')).not.toBeNull());
     expect(ops.deleted).toHaveLength(0); // 不是当前文档 → 没进 F2
     expect(calls.removed).toHaveLength(0); // 确认条未确认 → 零删除
-    fireEvent.click(container.querySelector('[data-fm-confirm-cancel]')!);
+    fireEvent.click(must(container, '[data-fm-confirm-cancel]'));
   });
 
   it('未注入 currentDocOps（旧调用方）→ 不渲染副本入口且不报错', async () => {

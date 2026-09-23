@@ -243,12 +243,20 @@ export type FileNameProblem =
 export function checkFileName(next: string, prevName: string | null): FileNameProblem {
   if (next.trim() === '') return 'empty';
   if (next.includes('/') || next.includes('\\')) return 'separator';
-  // eslint-disable-next-line no-control-regex -- 控制字符判定正是本函数的目的
-  if (/[\u0000-\u001f\u007f]/.test(next)) return 'control';
+  if (hasControlChar(next)) return 'control';
   if (prevName === null) return null;
   if (next === prevName) return 'same';
   if (next.toLowerCase() === prevName.toLowerCase()) return 'case-only';
   return null;
+}
+
+/** 是否含控制字符（含 DEL）。用码位比较而非正则：正则字面量里写控制字符会触发 lint 规则 */
+function hasControlChar(text: string): boolean {
+  for (const ch of text) {
+    const code = ch.codePointAt(0);
+    if (code !== undefined && (code < 0x20 || code === 0x7f)) return true;
+  }
+  return false;
 }
 
 /**

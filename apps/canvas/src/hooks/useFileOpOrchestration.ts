@@ -222,17 +222,6 @@ export function useFileOpOrchestration(
     return state.durable && state.current;
   }, [readDoc]);
 
-  /** ⑤ 重绑 + ⑦ 补写 + ⑥ 条件释放（成功与部分成功共用的收尾） */
-  const finish = useCallback(
-    (leaseId: number, file: WorkspaceFile, relPath: string): void => {
-      // 重绑目的地：改名/移动之后，后续保存必须写新路径（否则旧文件被「复活」，R-01）
-      session.rebindDestination(destinationOf(host, file, relPath));
-      onRebound(file);
-      release(leaseId);
-    },
-    [session, host, onRebound],
-  );
-
   /** ⑥ 条件释放 + ⑦ 补写：仅当租约仍是自己的（I-19） */
   const release = useCallback(
     (leaseId: number): void => {
@@ -242,6 +231,17 @@ export function useFileOpOrchestration(
       if (readDoc().dirty) onAfterRelease?.();
     },
     [session, readDoc, onAfterRelease],
+  );
+
+  /** ⑤ 重绑 + ⑦ 补写 + ⑥ 条件释放（成功与部分成功共用的收尾） */
+  const finish = useCallback(
+    (leaseId: number, file: WorkspaceFile, relPath: string): void => {
+      // 重绑目的地：改名/移动之后，后续保存必须写新路径（否则旧文件被「复活」，R-01）
+      session.rebindDestination(destinationOf(host, file, relPath));
+      onRebound(file);
+      release(leaseId);
+    },
+    [session, host, onRebound, release],
   );
 
   // ---------------------------------------------------------------- ③ 改名

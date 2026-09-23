@@ -42,15 +42,17 @@ import {
 } from './FileManagerWiring.js';
 import { useIndexWiring } from './useIndexWiring.js';
 import { useFileTreeOps } from './useFileTreeOps.js';
+import { useFileManagerRouting } from './useFileManagerRouting.js';
+import type { CurrentDocOps } from './currentDocOps.js';
+import type { PartialChoice, RenameDirtyChoice } from './FileOpPanels.js';
+import { FileManagerOpStack } from './FileManagerOpStack.js';
 import {
-  FileOpNotice,
-  PartialSuccessPanel,
-  RenameConflictPanel,
-  RenameDirtyPanel,
-  type PartialChoice,
-  type RenameConflictChoice,
-  type RenameDirtyChoice,
-} from './FileOpPanels.js';
+  DeleteConfirmBar,
+  FileManagerFooter,
+  FileManagerHeader,
+  NewFolderNameBar,
+  TreeErrorBar,
+} from './FileManagerInlineBars.js';
 
 // 既有调用方（FileManagerModal / 测试）从这里取这些符号：保持在原位置可见，
 // 拆分只搬家不改进口（否则所有消费点都要改路径，纯属噪音）。
@@ -103,40 +105,8 @@ export interface FileManagerProps {
   currentDocOps?: CurrentDocOps | null;
 }
 
-/**
- * P0-A：当前文档操作面（由 `useFileOpController` + `useCurrentDocDeleteFlow` 组装）。
- *
- * 为什么用「回调包」而不是把 hook 塞进面板：面板只该渲染，不该知道租约/目的地。
- */
-export interface CurrentDocOps {
-  /** 当前文档的相对路径（判断「是不是当前文档」） */
-  currentPath: string | null;
-  /** UI 待决状态（三块面板 + 提示） */
-  ui: {
-    dirtyChoice: { name: string; apply: (choice: RenameDirtyChoice) => void } | null;
-    partial:
-      | {
-          createdPath: string;
-          sourcePath: string;
-          reason: string;
-          copyHasNewChanges: boolean;
-          apply: (choice: PartialChoice) => void;
-        }
-      | null;
-    notice: string | null;
-  };
-  /** 改名（含冲突三选：目标已存在时由面板先问，再带 overwrite 重入） */
-  rename(file: WorkspaceFile, nextName: string, overwrite?: boolean): Promise<void>;
-  /** 移动 */
-  move(file: WorkspaceFile, targetDir: string): Promise<void>;
-  /** 创建副本 */
-  duplicate(file: WorkspaceFile): Promise<void>;
-  /** 删除（F2 流程，含确认条） */
-  delete(file: WorkspaceFile): Promise<void>;
-  /** 冲突三选：先算「保留两份」的名字 */
-  resolveConflictName(dirPath: string, name: string): Promise<string>;
-  dismissNotice(): void;
-}
+// P0-A：当前文档操作面（类型定义在 `currentDocOps.ts`，避免拆分子模块反向 import 造成环）
+export type { CurrentDocOps } from './currentDocOps.js';
 
 export function FileManager({
   library,
@@ -165,15 +135,6 @@ export function FileManager({
   const [tab, setTab] = useState<FileManagerTab>('tree');
   /** A-D3：待删除确认目标（内联确认条；替代被 webview 静默吞掉的 window.confirm） */
   const [pendingDelete, setPendingDelete] = useState<TreeNode | null>(null);
-  /** P0-A：改名冲突三选（目标已存在）；null = 无冲突 */
-  const [conflict, setConflict] = useState<{
-    file: WorkspaceFile;
-    dirPath: string;
-    name: string;
-    keepBothName: string;
-    /** 带最终名重入（`overwrite=true` 表示用户选了「替换目标文件」） */
-    reapply: (name: string, overwrite: boolean) => void;
-  } | null>(null);
   /** A-D3：新建文件夹内联命名目标（替代 window.prompt）；node 供将来在行内锚定输入用 */
   const [namingTarget, setNamingTarget] = useState<{ parentPath: string; node?: TreeNode } | null>(
     null,
@@ -286,101 +247,24 @@ export function FileManager({
 
   // ---------------------------------------------------------------- P0-A：当前文档操作路由
   //
-  // 为什么在这里分流（而不是让 useFileTreeOps 全部改走 *Safe）：只有**当前文档**需要
-  // 租约、I-14 前置与目的地重绑；其他节点的普通操作保持既有语义不变
-  // （既有用例对它们有断言，见 acceptance §4「必须一起核对的既有断言边界」）。
-  const isCurrentDoc = useCallback(
-    (file: WorkspaceFile): boolean => currentDocOps !== null && currentDocOps.currentPath === file.path,
-    [currentDocOps],
-  );
-
-  /** 改名/Save 的统一入口：冲突三选由面板先问，再带 overwrite 重入 */
-  const requestRename = useCallback(
-    (file: WorkspaceFile, name: string): void => {
-      if (currentDocOps === null || !isCurrentDoc(file)) {
-        const node = allDocs.find((d) => d.wsFile === file);
-        if (node) void commitRename(node, name);
-        return;
-      }
-      void (async () => {
-        const dirPath = file.path.includes('/') ? file.path.slice(0, file.path.lastIndexOf('/')) : '';
-        const keepBoth = await currentDocOps.resolveConflictName(dirPath, name);
-        if (keepBoth === name) {
-          // 无冲突：直接改名
-          void currentDocOps.rename(file, name);
-          return;
-        }
-        // 目标已存在 → 冲突三选（不静默加序号、不静默覆盖，§5.2②）
-        setConflict({
-          file,
-          dirPath,
-          name,
-          keepBothName: keepBoth,
-          reapply: (finalName, overwrite) => void currentDocOps.rename(file, finalName, overwrite),
-        });
-      })();
-    },
-    [currentDocOps, isCurrentDoc, commitRename, allDocs],
-  );
-
-  const keepBothResolved = conflict?.keepBothName ?? '';
-  const onConflictChoose = useCallback(
-    (choice: RenameConflictChoice): void => {
-      const current = conflict;
-      setConflict(null);
-      if (current === null || choice === 'cancel') return; // 取消 → 零 I/O
-      // 「保留两份」→ 用序号名且不覆盖；「替换目标文件」→ 原名 + overwrite
-      if (choice === 'keep-both') current.reapply(keepBothResolved, false);
-      else current.reapply(current.name, true);
-    },
-    [conflict, keepBothResolved],
-  );
-
-  /** 删除入口：当前文档走 F2 流程（草稿/组合/三选），其余走既有确认条 */
-  const requestDelete = useCallback(
-    (node: TreeNode): void => {
-      if (currentDocOps !== null && node.wsFile && isCurrentDoc(node.wsFile)) {
-        setPendingDelete(null);
-        void currentDocOps.delete(node.wsFile);
-        return;
-      }
-      confirmTarget(node);
-    },
-    [currentDocOps, isCurrentDoc, confirmTarget],
-  );
-
-  /**
-   * 树内联改名的**路由包装**（`FileManagerTree` 只认 `(node, name)`）。
-   *
-   * 当前文档 → 走 `requestRename`（冲突三选 + I-14 + 目的地重绑）；
-   * 其余 → 既有 `commitRename`（语义与断言都不动）。
-   */
-  const commitRenameRouted = useCallback(
-    (node: TreeNode, nextName: string): void => {
-      if (currentDocOps !== null && node.wsFile && isCurrentDoc(node.wsFile)) {
-        setRenamingKey(null);
-        const name = nextName.trim();
-        if (name === '' || name === node.name) return; // 与源同名 → 零 I/O 取消
-        requestRename(node.wsFile, name);
-        return;
-      }
-      void commitRename(node, nextName);
-    },
-    [currentDocOps, isCurrentDoc, requestRename, commitRename],
-  );
-
-  /** 拖拽归位：当前文档走重绑编排（新目的地），其余走既有 moveFile */
-  const dropIntoRouted = useCallback(
-    (node: TreeNode, target: TreeNode): void => {
-      setDropTarget(null);
-      if (currentDocOps !== null && node.wsFile && isCurrentDoc(node.wsFile)) {
-        void currentDocOps.move(node.wsFile, target.fullPath);
-        return;
-      }
-      void dropInto(node, target);
-    },
-    [currentDocOps, isCurrentDoc, dropInto, setDropTarget],
-  );
+  // 实现已抽到 `useFileManagerRouting.ts`（`bigFiles` 预算）：
+  // 只有**当前文档**走租约/目的地重绑，其余节点保持既有语义。
+  const {
+    conflict,
+    onConflictChoose,
+    requestDelete,
+    commitRenameRouted,
+    dropIntoRouted,
+  } = useFileManagerRouting({
+    currentDocOps,
+    allDocs,
+    commitRename,
+    dropInto,
+    confirmTarget,
+    setPendingDelete,
+    setRenamingKey,
+    setDropTarget,
+  });
 
   // 树行渲染上下文：值 + 原样透传的回调（组装逻辑在同名适配模块，见 FileManagerWiring）
   const treeCtx: FileManagerTreeCtx = buildTreeCtx({
@@ -404,6 +288,20 @@ export function FileManager({
     allDocs,
     openNode,
   });
+
+  /**
+   * 「创建副本」入口（§3.5）。用局部常量而不是内联三元 —— 内联写法会为了窄化
+   * `menuNode.wsFile` 而引入一次 `as`（代码预算 `asCast` 为 0）。
+   */
+  const dupFile = menuNode?.wsFile ?? null;
+  const dupOps = currentDocOps;
+  const duplicateHandler =
+    dupOps === null || dupFile === null
+      ? undefined
+      : (): void => {
+          closeMenu();
+          void dupOps.duplicate(dupFile);
+        };
 
   /** 树节点查询（「最近」/「收藏」两个视图共用） */
   const matchQuery = useCallback(
@@ -469,50 +367,15 @@ export function FileManager({
         overflow: 'hidden',
       }}
     >
-      {/* 头部：标题 + 操作 + 关闭 */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: '12px 14px',
-          borderBottom: `1px solid ${CHROME.panelBorder}`,
+      {/* 头部：标题 + 操作 + 关闭 —— 已抽到 FileManagerInlineBars */}
+      <FileManagerHeader
+        onNewFolder={() => setNamingTarget({ parentPath: '' })}
+        onNewDoc={() => {
+          setMenu(null);
+          void createDocIn('');
         }}
-      >
-        <span style={{ fontWeight: 600 }}>文件工作台</span>
-        <span style={{ flex: 1 }} />
-        <button
-          type="button"
-          data-fm-new-folder
-          style={btnBase}
-          onClick={() => setNamingTarget({ parentPath: '' })}
-        >
-          📁 新建文件夹
-        </button>
-        <button
-          type="button"
-          data-fm-new-doc
-          style={{
-            ...btnBase,
-            borderColor: CHROME.neon,
-            color: CHROME.neon,
-          }}
-          onClick={() => {
-            setMenu(null);
-            void createDocIn('');
-          }}
-        >
-          ＋ 新建导图
-        </button>
-        <button
-          type="button"
-          data-fm-close
-          style={btnBase}
-          onClick={onClose}
-        >
-          关闭
-        </button>
-      </div>
+        onClose={onClose}
+      />
 
       <StorageBar
         mounted={useWorkspace}
@@ -560,113 +423,36 @@ export function FileManager({
         </span>
       </div>
 
-      {/* A-D3：删除内联确认条（替代 window.confirm——webview 下会被静默吞掉） */}
+      {/* A-D3：删除内联确认条 —— 已抽到 FileManagerInlineBars */}
       {pendingDelete !== null && (
-        <div
-          data-fm-confirm
-          style={{
-            ...inlineBarStyle,
-            border: `1px solid ${CHROME.warn}`,
-            background: 'rgba(226,75,74,0.08)',
-          }}
-        >
-          <span style={{ flex: 1 }}>
-            删除{pendingDelete.type === 'dir' ? `文件夹「${pendingDelete.name}」及其全部内容` : `文件「${pendingDelete.name}」`}？{' '}
-            <span style={{ color: CHROME.textMuted }}>
-              （{useWorkspace ? '会真实删除磁盘文件' : '所含文档将退回根目录'}）
-            </span>
-          </span>
-          <button
-            type="button"
-            data-fm-confirm-ok
-            style={{ ...btnBase, borderColor: CHROME.warn, color: CHROME.warn }}
-            onClick={() => void doRemove(pendingDelete)}
-          >
-            删除
-          </button>
-          <button
-            type="button"
-            data-fm-confirm-cancel
-            style={btnBase}
-            onClick={() => setPendingDelete(null)}
-          >
-            取消
-          </button>
-        </div>
+        <DeleteConfirmBar
+          target={pendingDelete}
+          useWorkspace={useWorkspace}
+          onConfirm={() => void doRemove(pendingDelete)}
+          onCancel={() => setPendingDelete(null)}
+        />
       )}
 
-      {/*
-        P0-A：当前文档操作的四块内联反馈（⑥）。
-        顺序固定：冲突三选 → 未保存三选 → 部分成功 → 提示条；
-        同时只会出现一块（状态机保证），但并列渲染不会互相遮挡。
-      */}
-      {conflict !== null && (
-        <RenameConflictPanel
-          name={conflict.name}
-          keepBothName={conflict.keepBothName}
-          onChoose={onConflictChoose}
-        />
-      )}
-      {currentDocOps?.ui.dirtyChoice != null && (
-        <RenameDirtyPanel
-          name={currentDocOps.ui.dirtyChoice.name}
-          onChoose={currentDocOps.ui.dirtyChoice.apply}
-        />
-      )}
-      {currentDocOps?.ui.partial != null && (
-        <PartialSuccessPanel
-          createdPath={currentDocOps.ui.partial.createdPath}
-          sourcePath={currentDocOps.ui.partial.sourcePath}
-          reason={currentDocOps.ui.partial.reason}
-          copyHasNewChanges={currentDocOps.ui.partial.copyHasNewChanges}
-          onChoose={currentDocOps.ui.partial.apply}
-        />
-      )}
-      {currentDocOps != null && (
-        <FileOpNotice notice={currentDocOps.ui.notice} onDismiss={currentDocOps.dismissNotice} />
-      )}
+      {/* P0-A：当前文档操作的四块内联反馈（⑥）—— 已抽到 FileManagerOpStack */}
+      <FileManagerOpStack
+        conflict={conflict}
+        onConflictChoose={onConflictChoose}
+        currentDocOps={currentDocOps}
+      />
 
-      {/* A-D3：新建文件夹内联命名（替代 window.prompt；Enter 提交 / Esc 取消） */}
+      {/* A-D3：新建文件夹内联命名 —— 已抽到 FileManagerInlineBars */}
       {namingTarget !== null && (
-        <div
-          data-fm-name
-          style={{ ...inlineBarStyle, border: `1px solid ${CHROME.panelBorderStrong}` }}
-        >
-          <span style={{ color: CHROME.textMuted, whiteSpace: 'nowrap' }}>
-            新建文件夹{namingTarget.parentPath === '' ? '' : `于「${namingTarget.parentPath}」`}：
-          </span>
-          <input
-            autoFocus
-            data-fm-name-input
-            defaultValue="新文件夹"
-            onFocus={(e) => e.currentTarget.select()}
-            onKeyDown={(ev) => {
-              if (ev.key === 'Enter') {
-                const name = ev.currentTarget.value;
-                setNamingTarget(null);
-                void createDirIn(namingTarget.parentPath, name);
-              }
-              if (ev.key === 'Escape') setNamingTarget(null);
-            }}
-            style={inputStyle()}
-          />
-        </div>
+        <NewFolderNameBar
+          parentPath={namingTarget.parentPath}
+          onSubmit={(name) => {
+            setNamingTarget(null);
+            void createDirIn(namingTarget.parentPath, name);
+          }}
+          onCancel={() => setNamingTarget(null)}
+        />
       )}
 
-      {error && (
-        <div
-          style={{
-            margin: '0 12px 8px',
-            padding: '6px 8px',
-            borderRadius: 6,
-            border: `1px solid ${CHROME.warn}`,
-            color: CHROME.warn,
-            fontSize: CHROME.fontSizeSmall,
-          }}
-        >
-          {error}
-        </div>
-      )}
+      {error && <TreeErrorBar message={error} />}
 
       {/* 树状 / 平铺内容区域 */}
       <div data-fm-tree style={{ overflow: 'auto', flex: 1, padding: '2px 0 8px' }}>
@@ -737,16 +523,7 @@ export function FileManager({
       <MigrateFailedNotice count={migrateFailed} />
       <ProjectionFailureNotice failed={projectionFailed} />
 
-      <div
-        style={{
-          padding: '8px 12px',
-          borderTop: `1px solid ${CHROME.panelBorder}`,
-          fontSize: CHROME.fontSizeSmall,
-          color: CHROME.textMuted,
-        }}
-      >
-        拖拽文件到 📁 文件夹即可归位 · 右键文件/文件夹可新建、重命名、删除
-      </div>
+      <FileManagerFooter />
 
       {/* 右键菜单 */}
       {menu && menuNode && (
@@ -771,14 +548,7 @@ export function FileManager({
             // 当前文档 → F2 流程（租约 + 草稿/组合 + 三选）；其余 → 既有内联确认条
             requestDelete(menuNode);
           }}
-          onDuplicate={
-            currentDocOps !== null && menuNode.wsFile
-              ? () => {
-                  closeMenu();
-                  void currentDocOps.duplicate(menuNode.wsFile as WorkspaceFile);
-                }
-              : undefined
-          }
+          onDuplicate={duplicateHandler}
         />
       )}
     </div>

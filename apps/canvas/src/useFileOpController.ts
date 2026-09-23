@@ -14,7 +14,7 @@
  * 绝不能拿同一个快照和自己比（那样永远「未变」，复查形同虚设）。
  */
 import { useCallback, useState } from 'react';
-import type { FileOpOutcome, WorkspaceDir, WorkspaceFile } from '@mindcanvas/react';
+import type { FileOpOutcome, WorkspaceDir, WorkspaceFile, WorkspaceNode } from '@mindcanvas/react';
 import { statUnchanged, uniqueCopyName } from '@mindcanvas/react';
 import type { PartialChoice, RenameDirtyChoice } from './FileOpPanels.js';
 import {
@@ -30,7 +30,7 @@ export interface OpWorkspaceHost {
   mounted: boolean;
   name: string | null;
   scopeId?: string | null;
-  scan(force?: boolean): Promise<unknown[]>;
+  scan(force?: boolean): Promise<WorkspaceNode[]>;
   statFile(file: WorkspaceFile): Promise<FileStatSnapshot | null>;
   resolveCopyName(dirPath: string, name: string): Promise<string>;
   removeFileSafe(file: WorkspaceFile): Promise<FileOpOutcome<null>>;
@@ -225,7 +225,8 @@ export function useFileOpController(options: FileOpControllerOptions): FileOpCon
       absorb(result);
       if (result.kind === 'partial') {
         // L4：记下**操作完成时**的源快照，供「重试删除原文件」比对
-        const snapshot = await host?.statFile({ ...file, path: result.sourcePath } as WorkspaceFile);
+        const source = host === null ? null : findIn(await host.scan(true), result.sourcePath);
+        const snapshot = source === null ? null : await host?.statFile(source);
         await reload();
         const state: PartialPanelState = {
           createdPath: result.relPath,
@@ -344,16 +345,20 @@ export function useFileOpController(options: FileOpControllerOptions): FileOpCon
   };
 }
 
-/** 按相对路径找 host 上的文件（部分成功面板的动作需要句柄） */
-function findIn(nodes: readonly unknown[], relPath: string): WorkspaceFile | null {
-  for (const raw of nodes) {
-    if (typeof raw !== 'object' || raw === null) continue;
-    const node = raw as { kind?: string; path?: string; children?: unknown[] };
-    if (node.kind === 'file' && node.path === relPath) return raw as WorkspaceFile;
-    if (node.kind === 'dir' && Array.isArray(node.children)) {
-      const hit = findIn(node.children, relPath);
-      if (hit !== null) return hit;
+/**
+ * 按相对路径找 host 上的文件（部分成功面板的动作需要句柄）。
+ *
+ * 用**结构窄化**而不是 `as`：只认「有 kind/path/handle 的 file 节点」与
+ * 「有 children 的 dir 节点」，不满足形状的输入直接跳过（代码预算 `asCast` 为 0）。
+ */
+function findIn(nodes: readonly WorkspaceNode[], relPath: string): WorkspaceFile | null {
+  for (const node of nodes) {
+    if (node.kind === 'file') {
+      if (node.path === relPath) return node;
+      continue;
     }
+    const hit = findIn(node.children, relPath);
+    if (hit !== null) return hit;
   }
   return null;
 }

@@ -14,15 +14,19 @@
  * 宿主保持 `null` 状态，调用方回落既有的 `LocalDocHost`（单文件句柄闭环）。
  */
 import { isAbortError } from './fsError.js';
+import { iterateDir, listAssetFilesOp, readAssetFileOp, hasAssetOp, writeAssetOp, type AssetHostEnv } from './directoryHostAssets.js';
+import { ASSETS_DIR, SCAN_SKIP_DIRS } from './directoryHostConstants.js';
+import type { FileOpOutcome, FileStatSnapshot } from './fileOps.js';
 import {
-  type FileOpOutcome,
-  type FileStatSnapshot,
-  duplicateName,
-  failFileOp,
-  partialFileOp,
-  toFileOpError,
-  uniqueCopyName,
-} from './fileOps.js';
+  type SafeHostEnv,
+  duplicateFileSafeOp,
+  moveFileSafeOp,
+  removeDirSafeOp,
+  removeFileSafeOp,
+  renameFileSafeOp,
+  resolveCopyNameOp,
+  statFileOf,
+} from './directoryHostOps.js';
 import { getDirectoryHandle, verifyPermission, writeWorkspaceRegistry } from './handleStore.js';
 import { BROWSER_SCOPE, applyIdentity, markDormant } from './scopeIdentity.js';
 import type { ScopeId, ScopeState } from './workspaceScope.js';
@@ -37,19 +41,7 @@ import {
   type WorkspaceNode,
 } from './directoryTypes.js';
 
-/** 扫描时的默认跳过目录（这些目录里不会有导图，遍历纯属浪费） */
-export const SCAN_SKIP_DIRS: readonly string[] = [
-  'node_modules',
-  '.git',
-  '.obsidian',
-  '.vscode',
-  'dist',
-  'build',
-  '.cache',
-];
-
-/** 工作区内资产目录名（T4） */
-export const ASSETS_DIR = 'assets';
+export { ASSETS_DIR, SCAN_SKIP_DIRS };
 
 export interface ScanOptions {
   /** 递归深度上限（防符号链接环 / 超深目录把浏览器拖死） */
@@ -71,16 +63,7 @@ export function isDirectoryPickerSupported(): boolean {
   return typeof window !== 'undefined' && typeof window.showDirectoryPicker === 'function';
 }
 
-/** 遍历目录项：优先 values()，退回 entries()（不同 Chromium 版本实现不同） */
-async function* iterate(dir: FsDirectoryHandle): AsyncGenerator<FsEntryHandle> {
-  if (typeof dir.values === 'function') {
-    yield* dir.values();
-    return;
-  }
-  if (typeof dir.entries === 'function') {
-    for await (const [, entry] of dir.entries()) yield entry;
-  }
-}
+// 目录遍历已抽到 `directoryHostAssets.ts`（`iterateDir`）—— 扫描与资产列出共用同一实现。
 
 /**
  * 拆文件名与扩展名，`.mm.md` 视为**一个整体扩展名**。
@@ -266,7 +249,7 @@ export class DirectoryWorkspaceHost {
   ): Promise<WorkspaceNode[]> {
     if (depth > st.maxDepth || st.count.n >= st.maxFiles) return [];
     const out: WorkspaceNode[] = [];
-    for await (const entry of iterate(dir)) {
+    for await (const entry of iterateDir(dir)) {
       if (st.count.n >= st.maxFiles) break;
       const rawName = Reflect.get(entry, 'name');
       if (typeof rawName !== 'string') continue;
@@ -413,309 +396,99 @@ export class DirectoryWorkspaceHost {
 
   // ---------------------------------------------------------------- P0-A：*Safe 变体
   //
-  // 既有 `renameFile` / `moveFile` / `removeFile` / `removeDir` 保持签名与抛错行为不变
-  // （既有用例 `directory-host.test.ts` 的期望不因此改动）；UI 一律改调这里的 `*Safe`。
-  //
-  // 为什么必须有 `*Safe`：移动/改名 = 「复制到目标 → 删源」，**不是原子操作**。
-  // 旧实现下「目标已建、删源失败」只能靠 `catch` 收到一个异常，调用方无从知道目标是否
-  // 已经建成（R-02 孤儿副本；R-03 无用户可见通道）。`partial` 这一态把这个事实显式化。
+  // 实现已抽到 `directoryHostOps.ts`（`bigFiles` 预算）；这里只做一行转发，
+  // 保持既有调用面（`host.renameFileSafe(...)` 等）不变。
+  // 既有 `renameFile` / `moveFile` / `removeFile` / `removeDir` 签名与抛错行为**不变**。
 
-  /** 取文件尺寸/时间戳快照（部分成功后的「外部修改复查」用；读不到 → null = 不可复查） */
-  async statFile(file: WorkspaceFile): Promise<FileStatSnapshot | null> {
-    const { ts, size } = await statOf(file.handle);
-    if (ts === 0 && size === 0) return null;
-    return { size, lastModified: ts };
+  /** 宿主内部能力（供 `*Safe` 实现模块使用） */
+  private safeEnv(): SafeHostEnv {
+    return {
+      requireRoot: () => this.requireRoot(),
+      dirAt,
+      readFile: (file) => this.readFile(file),
+      writeFile: (file, text) => this.writeFile(file, text),
+      statOf,
+      uniqueName: (dir, name) => this.uniqueName(dir, name),
+      invalidateTree: () => {
+        this.tree = null;
+      },
+    };
   }
 
-  /**
-   * 改名（安全变体）：读旧内容 → 建新文件 → 删旧。
-   *
-   * @param overwrite `false`（缺省）= 不静默加序号也不覆盖，同名直接 `E-EXISTS` 失败，
-   *   由 UI 走冲突三选后带明确的 `overwrite`/`newName` 重入。
-   *   旧 `renameFile` 的静默加序号行为保留在它自己身上，不改（既有用例锚定该行为）。
-   */
+  /** 取文件尺寸/时间戳快照（外部修改复查用） */
+  async statFile(file: WorkspaceFile): Promise<FileStatSnapshot | null> {
+    return statFileOf(this.safeEnv(), file);
+  }
+
+  /** 改名（安全变体） */
   async renameFileSafe(
     file: WorkspaceFile,
     newName: string,
     overwrite = false,
   ): Promise<FileOpOutcome<WorkspaceFile>> {
-    let text: string;
-    try {
-      text = await this.readFile(file);
-    } catch (e) {
-      return failFileOp('read', e);
-    }
-    const parentPath = parentOf(file.path);
-    return this.writeThenRemoveSource(parentPath, newName, text, file, overwrite);
+    return renameFileSafeOp(this.safeEnv(), file, newName, overwrite);
   }
 
-  /**
-   * 移动（安全变体）：复制到目标目录 → 删源。
-   *
-   * 返回 `partial` 时 `created` 就是新位置的文件 —— 调用方应把**会话目的地重绑到它**
-   * （file-management §5.3「当前目的地 = 新文件」），并保留「重试删除原始 / 保留两份 /
-   * 撤销新副本」三条出路。
-   */
+  /** 移动（安全变体） */
   async moveFileSafe(
     file: WorkspaceFile,
     targetDirPath: string,
     overwrite = false,
   ): Promise<FileOpOutcome<WorkspaceFile>> {
-    if (parentOf(file.path) === targetDirPath) {
-      // 同目录「移动」是空操作：不制造副本、不删源
-      return { kind: 'ok', value: file };
-    }
-    let text: string;
-    try {
-      text = await this.readFile(file);
-    } catch (e) {
-      return failFileOp('read', e);
-    }
-    return this.writeThenRemoveSource(targetDirPath, file.name, text, file, overwrite);
+    return moveFileSafeOp(this.safeEnv(), file, targetDirPath, overwrite);
   }
 
-  /**
-   * 「复制到目标 → 删源」的共同步骤（改名与移动只差目标目录与目标名）。
-   *
-   * 分步结果归因：
-   *  - 目标写入失败 → `failed('write')`，**源未动**（磁盘上仍只有原件，可安全重试）；
-   *  - 源删除失败 → `partial`（两份都在；这是必须让用户看见的事实，不是普通失败）。
-   */
-  private async writeThenRemoveSource(
-    targetDirPath: string,
-    targetName: string,
-    text: string,
-    source: WorkspaceFile,
-    overwrite: boolean,
-  ): Promise<FileOpOutcome<WorkspaceFile>> {
-    let created: WorkspaceFile;
-    try {
-      const dir = await dirAt(this.requireRoot(), targetDirPath);
-      if (typeof dir.getFileHandle !== 'function' || typeof dir.removeEntry !== 'function') {
-        return {
-          kind: 'failed',
-          stage: 'write',
-          error: toFileOpError(Object.assign(new Error('目录句柄不可写'), { name: 'NotSupportedError' })),
-        };
-      }
-      const finalName = overwrite ? targetName : await this.uniqueName(dir, targetName);
-      const handle = await dir.getFileHandle(finalName, { create: true });
-      created = {
-        kind: 'file',
-        name: finalName,
-        path: joinPath(targetDirPath, finalName),
-        handle,
-        ts: Date.now(),
-        size: text.length,
-      };
-      await this.writeFile(created, text);
-    } catch (e) {
-      return failFileOp('write', e);
-    }
-    this.tree = null;
-    try {
-      await this.removeSource(source);
-    } catch (e) {
-      // 目标已建成、源还在 → 两份。**不得**把这里降级成 failed：
-      // 目标确实写了（用户能在新位置打开），说「移动失败」会掩盖磁盘现状。
-      return partialFileOp(created, e);
-    }
-    this.tree = null;
-    return { kind: 'ok', value: created };
-  }
-
-  /**
-   * 删除源文件（内部）：`removeEntry` **可选**能力必须显式判定。
-   *
-   * 旧 `removeFile` 写的是 `await dir.removeEntry?.(...)` —— 能力缺失时整句变成
-   * `await undefined`，**静默成功**：UI 以为删掉了，磁盘上文件还在（`directoryHost.ts:326,334`）。
-   * 这里把能力缺失变成 `E-UNAVAILABLE`。
-   */
-  private async removeSource(file: WorkspaceFile): Promise<void> {
-    const dir = await dirAt(this.requireRoot(), parentOf(file.path));
-    if (typeof dir.removeEntry !== 'function') {
-      throw Object.assign(new Error('目录句柄不支持删除'), { name: 'NotSupportedError' });
-    }
-    await dir.removeEntry(file.name);
-  }
-
-  /** 删除文件（安全变体）：能力缺失 → `E-UNAVAILABLE`；不存在 → `E-NOT-FOUND`（都可见） */
+  /** 删除文件（安全变体） */
   async removeFileSafe(file: WorkspaceFile): Promise<FileOpOutcome<null>> {
-    try {
-      await this.removeSource(file);
-    } catch (e) {
-      const error = toFileOpError(e);
-      const stage = error.code === 'E-PERMISSION' ? 'permission' : 'delete';
-      return { kind: 'failed', stage, error };
-    }
-    this.tree = null;
-    return { kind: 'ok', value: null };
+    return removeFileSafeOp(this.safeEnv(), file);
   }
 
-  /** 递归删除目录（安全变体）：同 `removeFileSafe`，能力缺失不再静默成功 */
+  /** 递归删除目录（安全变体） */
   async removeDirSafe(dir: WorkspaceDir): Promise<FileOpOutcome<null>> {
-    try {
-      const parent = await dirAt(this.requireRoot(), parentOf(dir.path));
-      if (typeof parent.removeEntry !== 'function') {
-        throw Object.assign(new Error('目录句柄不支持删除'), { name: 'NotSupportedError' });
-      }
-      await parent.removeEntry(dir.name, { recursive: true });
-    } catch (e) {
-      const error = toFileOpError(e);
-      const stage = error.code === 'E-PERMISSION' ? 'permission' : 'delete';
-      return { kind: 'failed', stage, error };
-    }
-    this.tree = null;
-    return { kind: 'ok', value: null };
+    return removeDirSafeOp(this.safeEnv(), dir);
   }
 
-  /**
-   * 创建副本（§3.5）：**读源 → 同目录新建**，源一字不改。
-   *
-   * 与移动/改名的关键区别：没有「删源」这一步，所以不存在部分成功 ——
-   * 要么新文件建成，要么什么都没变。副本沿用同一批 `assets/...` 引用（不复制二进制）。
-   */
+  /** 创建副本（§3.5） */
   async duplicateFileSafe(file: WorkspaceFile): Promise<FileOpOutcome<WorkspaceFile>> {
-    let text: string;
-    try {
-      text = await this.readFile(file);
-    } catch (e) {
-      return failFileOp('read', e);
-    }
-    const parentPath = parentOf(file.path);
-    try {
-      const dir = await dirAt(this.requireRoot(), parentPath);
-      if (typeof dir.getFileHandle !== 'function') {
-        return {
-          kind: 'failed',
-          stage: 'write',
-          error: toFileOpError(Object.assign(new Error('目录句柄不可写'), { name: 'NotSupportedError' })),
-        };
-      }
-      const name = await duplicateName(file.name, async (candidate) => {
-        try {
-          await dir.getFileHandle?.(candidate);
-          return true;
-        } catch {
-          return false;
-        }
-      });
-      const handle = await dir.getFileHandle(name, { create: true });
-      const copy: WorkspaceFile = {
-        kind: 'file',
-        name,
-        path: joinPath(parentPath, name),
-        handle,
-        ts: Date.now(),
-        size: text.length,
-      };
-      await this.writeFile(copy, text);
-      this.tree = null;
-      return { kind: 'ok', value: copy };
-    } catch (e) {
-      return failFileOp('write', e);
-    }
+    return duplicateFileSafeOp(this.safeEnv(), file);
   }
 
-  /** 带序号的目标名（冲突三选之「保留两份」）：不改既有 `uniqueName` 的私有形态 */
+  /** 带序号的目标名（冲突三选之「保留两份」） */
   async resolveCopyName(dirPath: string, name: string): Promise<string> {
-    const dir = await dirAt(this.requireRoot(), dirPath);
-    return uniqueCopyName(name, async (candidate) => {
-      if (typeof dir.getFileHandle !== 'function') return false;
-      try {
-        await dir.getFileHandle(candidate);
-        return true;
-      } catch {
-        return false;
-      }
-    });
+    return resolveCopyNameOp(this.safeEnv(), dirPath, name);
   }
 
   // ---------------------------------------------------------------- T4 资产落盘
+  //
+  // 实现已抽到 `directoryHostAssets.ts`（`bigFiles` 预算）；这里只做一行转发。
 
-  /**
-   * 资产写进工作区的 `./assets/`（真实磁盘文件，非 IndexedDB）。
-   *
-   * @returns 相对工作区根的路径（如 `assets/diagram.png`），
-   *          导图里就用它引用 → 整个文件夹拷走也能离线浏览。
-   */
+  /** 宿主内部能力（供资产实现模块使用） */
+  private assetEnv(): AssetHostEnv {
+    return {
+      requireRoot: () => this.requireRoot(),
+      dirAt,
+      statOf,
+    };
+  }
+
+  /** 资产写进工作区的 `./assets/`，返回相对路径 */
   async writeAsset(name: string, data: ArrayBuffer | string, mime: string): Promise<string> {
-    const root = this.requireRoot();
-    const assets = await this.ensureAssetsDir(root);
-    if (typeof assets.getFileHandle !== 'function') throw new Error('目录句柄不可写');
-    const handle = await assets.getFileHandle(name, { create: true });
-    const writable = await handle.createWritable();
-    await writable.write(
-      typeof data === 'string' ? new Blob([data], { type: mime }) : new Blob([data], { type: mime }),
-    );
-    await writable.close();
-    return `${ASSETS_DIR}/${name}`;
+    return writeAssetOp(this.assetEnv(), name, data, mime);
   }
 
-  /** 确保 `./assets/` 存在（不存在则创建） */
-  private async ensureAssetsDir(root: FsDirectoryHandle): Promise<FsDirectoryHandle> {
-    if (typeof root.getDirectoryHandle !== 'function') throw new Error('目录句柄不可写');
-    return root.getDirectoryHandle(ASSETS_DIR, { create: true });
-  }
-
-  /**
-   * 读取 `./assets/` 下的资产（供刷新后重建 objectURL 缓存）。
-   * 不是导图文件，故不受 `isWorkspaceDocName` 限制 —— 这里是**显式按路径取**。
-   */
+  /** 读取 `./assets/` 下的资产（刷新后重建 objectURL 缓存用） */
   async readAssetFile(relPath: string): Promise<File | null> {
-    try {
-      const segs = relPath.split('/').filter((s) => s.length > 0);
-      const fileName = segs.pop();
-      if (fileName === undefined) return null;
-      const dir = await dirAt(this.requireRoot(), segs.join('/'));
-      if (typeof dir.getFileHandle !== 'function') return null;
-      const handle = await dir.getFileHandle(fileName);
-      return (await handle.getFile?.()) ?? null;
-    } catch {
-      return null;
-    }
+    return readAssetFileOp(this.assetEnv(), relPath);
   }
 
-  /** 列出 `./assets/` 下的全部资产（刷新后用于恢复图库） */
+  /** 列出 `./assets/` 下的全部资产 */
   async listAssetFiles(): Promise<WorkspaceFile[]> {
-    try {
-      const root = this.requireRoot();
-      if (typeof root.getDirectoryHandle !== 'function') return [];
-      const assets = await root.getDirectoryHandle(ASSETS_DIR);
-      const out: WorkspaceFile[] = [];
-      for await (const entry of iterate(assets)) {
-        if (!isFileEntry(entry)) continue;
-        const rawName = Reflect.get(entry, 'name');
-        if (typeof rawName !== 'string') continue;
-        const { ts, size } = await statOf(entry);
-        out.push({
-          kind: 'file',
-          name: rawName,
-          path: `${ASSETS_DIR}/${rawName}`,
-          handle: entry,
-          ts,
-          size,
-        });
-      }
-      return out;
-    } catch {
-      return []; // assets/ 还没建过 → 视为空
-    }
+    return listAssetFilesOp(this.assetEnv());
   }
 
-  /** 资产是否已存在于磁盘（避免重复写入） */
+  /** 资产是否已存在于磁盘 */
   async hasAsset(relPath: string): Promise<boolean> {
-    try {
-      const segs = relPath.split('/').filter((s) => s.length > 0);
-      const fileName = segs.pop();
-      if (fileName === undefined) return false;
-      const dir = await dirAt(this.requireRoot(), segs.join('/'));
-      if (typeof dir.getFileHandle !== 'function') return false;
-      await dir.getFileHandle(fileName);
-      return true;
-    } catch {
-      return false;
-    }
+    return hasAssetOp(this.assetEnv(), relPath);
   }
 }
 

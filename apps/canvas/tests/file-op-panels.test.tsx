@@ -12,6 +12,13 @@
  */
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+/** 取一个必须存在的元素（不用非空断言：lint 会记 warning，而这里本就需要「不存在即失败」） */
+function must(c: HTMLElement, selector: string): HTMLElement {
+  const el = c.querySelector(selector);
+  if (el === null) throw new Error(`找不到元素 ${selector}`);
+  return el as HTMLElement;
+}
 import {
   FileOpNotice,
   PartialSuccessPanel,
@@ -60,7 +67,7 @@ describe('冲突三选（§5.2②）', () => {
       const { container, unmount } = render(
         <RenameConflictPanel name="a.mm.md" keepBothName="a 2.mm.md" onChoose={onChoose} />,
       );
-      fireEvent.click(container.querySelector(selector)!);
+      fireEvent.click(must(container, selector));
       expect(onChoose).toHaveBeenCalledWith(choice);
       unmount();
     }
@@ -108,7 +115,7 @@ describe('★部分成功面板（§5.3 + L3）', () => {
     const { container } = render(
       <PartialSuccessPanel {...base} onChoose={onChoose} copyHasNewChanges />,
     );
-    fireEvent.click(container.querySelector('[data-fm-partial-discard-copy]')!);
+    fireEvent.click(must(container, '[data-fm-partial-discard-copy]'));
     expect(onChoose).toHaveBeenCalledWith('discard-copy-changes');
     // 绝不能把「放弃改动」悄悄当成普通撤销（两者的语义与后果不同）
     expect(onChoose).not.toHaveBeenCalledWith('undo-copy');
@@ -119,7 +126,7 @@ describe('★部分成功面板（§5.3 + L3）', () => {
     const { container } = render(
       <PartialSuccessPanel {...base} onChoose={onChoose} copyHasNewChanges={false} />,
     );
-    fireEvent.click(container.querySelector('[data-fm-partial-undo]')!);
+    fireEvent.click(must(container, '[data-fm-partial-undo]'));
     expect(onChoose).toHaveBeenCalledWith('undo-copy');
   });
 
@@ -134,7 +141,7 @@ describe('★部分成功面板（§5.3 + L3）', () => {
       const { container, unmount } = render(
         <PartialSuccessPanel {...base} onChoose={onChoose} copyHasNewChanges={false} />,
       );
-      fireEvent.click(container.querySelector(selector)!);
+      fireEvent.click(must(container, selector));
       expect(onChoose).toHaveBeenCalledWith(choice);
       unmount();
     }
@@ -169,7 +176,7 @@ describe('未保存三选（§5.2⑤）', () => {
     ] as const) {
       const onChoose = vi.fn();
       const { container, unmount } = render(<RenameDirtyPanel name="a.mm.md" onChoose={onChoose} />);
-      fireEvent.click(container.querySelector(selector)!);
+      fireEvent.click(must(container, selector));
       expect(onChoose).toHaveBeenCalledWith(choice);
       unmount();
     }
@@ -183,7 +190,7 @@ describe('提示条（错误码 → 文案的呈现）', () => {
       <FileOpNotice notice="没有写入权限：请重新授权后重试。" onDismiss={onDismiss} />,
     );
     expect(container.querySelector('[data-fm-op-notice]')).not.toBeNull();
-    fireEvent.click(container.querySelector('[data-fm-op-notice-dismiss]')!);
+    fireEvent.click(must(container, '[data-fm-op-notice-dismiss]'));
     expect(onDismiss).toHaveBeenCalled();
   });
 

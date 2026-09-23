@@ -27,7 +27,6 @@ import {
   type SafeWorkspaceHost,
   useFileOpOrchestration,
 } from '../src/hooks/useFileOpOrchestration';
-import type { SaveDestination } from '../src/hooks/saveDestination';
 
 // ---------------------------------------------------------------- 内存 Fake 工作区
 
