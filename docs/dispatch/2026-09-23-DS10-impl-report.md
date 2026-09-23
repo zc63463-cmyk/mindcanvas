@@ -12,10 +12,13 @@
 
 | 锚 | 开工（本批第一步） | 收工 | 一致？ |
 |---|---|---|---|
-| `git rev-parse HEAD` | `4c8c1aa7e6f98eb94ac76c91126e23af75da3409` | `1c29e4f7558c7a6fbf3821baa3bc55f6bc9c653a` | 变化（归因见下） |
+| `git rev-parse HEAD` | `4c8c1aa7e6f98eb94ac76c91126e23af75da3409` | `f4b40369e5d8b5e61778096d6ee006b121cea727` | 变化（归因见 §1.2） |
 | `git rev-parse HEAD:packages` | `27b2909c1ebe9bcf049d3998e52a56109d26b0ac` | `27b2909c1ebe9bcf049d3998e52a56109d26b0ac` | **一致**（未动包） |
-| `git rev-parse HEAD:apps` | `284402420f23666b9702b8aface15a8d5da79ab5` | `9ac8350d11d98351ceb3b67fb05b57684b36f7da` | 变化（归因见下） |
+| `git rev-parse HEAD:apps` | `284402420f23666b9702b8aface15a8d5da79ab5` | `3cd755d212923f409e44a20d855fd02b572e2c66` | 变化（归因见 §1.2） |
 | `git status --porcelain` | 空 | 空 | 一致 |
+
+> 收工锚取**本回执提交之后**的值（`f4b40369` 即本回执）。
+> 若不计回执本身，前一条为 `46af988`（`HEAD:apps` = `9ac8350d…`）。
 
 ### 1.1 开工 HEAD 与派单书期望值的差异（如实报告，非本批引入）
 
@@ -31,8 +34,9 @@
 
 ### 1.2 收工锚变化的归因
 
-`HEAD:apps` 由 `284402420f…` 变为 `9ac8350d…`，**全部**归因于本批 3 条提交
-（`db9ac72`、`a083730`、`5a595a6`），且仅涉及 `apps/canvas`。
+`HEAD:apps` 由 `284402420f…` 变为 `3cd755d2…`，**全部**归因于本批提交
+（`db9ac72` 实现、`5a595a6` 编排接线、`a083730` 测试、`1c29e4f` 证据、
+`46af988` 格式修补、`f4b40369` 本回执），且除回执/证据外仅涉及 `apps/canvas`。
 `HEAD:packages` 未变 —— 本批未改任何包侧代码（N-1 的「不得动包侧契约」纪律保持）。
 
 ---
