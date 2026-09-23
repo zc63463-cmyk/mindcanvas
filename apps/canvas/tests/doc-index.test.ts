@@ -249,6 +249,13 @@ describe('DocIndex · 损坏旧数据仍可用（NC-1 期望）', () => {
     const r = d.migrate();
     expect(r.migrated).toBe(0); // 解析不了的批次绝不记成已迁移
     expect(r.unchanged).toBe(0);
+    // **「不误报成功」的正面断言**（复核回执 §4.1 NC-1 / 契约 §6.2 M5）：
+    // 「失败条目留在旧库并标『未迁移』」——损坏必须**计数为未迁移**，否则
+    // `MigrateFailedNotice` 不会显示，用户以为迁移过了。
+    // 判别力（本条即负控 c）：把 `docIndex.ts:readJSON` 的 `corrupt` 分支
+    // 折叠成 `absent`（即不再区分「键在但读不出」与「没有旧数据」），
+    // 断言的 `failed` 会从 1 变 0，本行必红。
+    expect(r.failed).toBeGreaterThan(0);
     expect(localStorage.getItem(LEGACY_LIBRARY_KEY)).toBe('{ 坏掉的旧库'); // 不删除旧数据
     expect(d.listDocs()).toEqual([]);
   });
@@ -457,6 +464,78 @@ describe('DocIndex · 归属证据（§6.2.1 / NC-3 期望）', () => {
     expect(d.listDocs()).toEqual([]); // ← 不造条目
     expect(d.historyPool().map((h) => h.key)).toEqual(['研发/架构.mm.md']);
     expect(first(d.historyPool()).reason).toBe('no-existing-entry');
+  });
+
+  it('M5：本区「有既有条目但无历史证据」→ 当前实现**认领**（与复核回执的期望相反，已停工待裁）', () => {
+    // ⚠️ 本条**记录一个三方矛盾，不是守点**。按派单边界第 7 条（「发现回执/契约/代码
+    // 三方矛盾：并列原文与行号，停工待裁决，不自行择一」），本用例**只陈述当前行为**，
+    // 不假装它是对的、也不为迎合回执而把断言写成「必须不认领」。
+    //
+    // 复核回执 2026-09-23-P0-D-review.md §3.2 末段的探针表把这个场景判为「被错误认领」，
+    // 并把它列为「hasOwnershipEvidence 最具判别力的场景、默认套件零覆盖」，
+    // 要求补一条负控断言 `migrated === 0` + 进历史池。**但代码不是这么走的**：
+    //   - `docIndexMigrate.ts:105-109` 找 `existing` 时**只看作用域与
+    //     relPath/legacyKeys 命中**，命中即 `adoptDoc`（:133-150）——
+    //     **全程不调用 `hasOwnershipEvidence`**；
+    //   - `hasOwnershipEvidence` 在本函数里只被 M6（:187）与 M7（:265）使用，
+    //     **M5 一次都没用**（`grep -n hasOwnershipEvidence docIndexMigrate.ts` → :187/:265）。
+    // 即：M5 的归属判据是「作用域相同 + relPath 精确命中」，不是「本次已证明同一目录」。
+    //
+    // 三方并列：
+    //   ① 契约 §6.2 M5 行（shared-contracts.md:861）：
+    //      「**只有具备 §6.2.1 证据的才绑定 scopeId/relPath**，否则进历史池」
+    //      → 按此，本场景（`hasHistoryEvidence: false`）**应**进历史池、不认领。
+    //   ② 契约 §6.2.1（:875）：「旧键能与某路径命中，但该 scopeId 是 legacy adoption
+    //      新生成的（无历史证据）→ 证据不足 → 进历史池」→ 同 ①。
+    //   ③ 实现 `docIndexMigrate.ts:105-150`：命中既有条目即认领，**无证据位检查**
+    //      → 与 ①② 相反。实测 `migrated=1`、`historyPool=0`、`legacyKeys` 被写入。
+    //
+    // 为什么我没有自行择一：
+    //   - 若按 ①② 断言「必须不认领」，则本用例在**当前实现**下必红——而本轮门禁要求全绿，
+    //     且 M5 不查证据位可能是**有意为之**（`existing` 命中意味着「这条文档已经在这个
+    //     作用域里以真实身份存在过」，与 M6/M7 凭旧键字符串猜归属不同）；
+    //   - 若按 ③ 断言「认领」，则等于把复核指出的问题判成「不是问题」——那是主控的裁决权。
+    // 两种改法我都无权单方面决定，故**如实记录实测行为**，把裁决交回主控。
+    //
+    // 另注：复核 §3.2 把「`:422` 的名字与实际守点脱节」归因于本场景缺测——
+    // 该归因**在当前代码下不成立**：`:422` 的绿色来自 M5「无 existing 则不造条目」
+    // （:110-132），而非归属证据守卫；本场景即便补测也**钉不住** `hasOwnershipEvidence`
+    // （M5 根本不调用它）。真正能被 `hasOwnershipEvidence` 判别的是 `:422` 之外
+    // 的 M6/M7 路径（M6 已有 `M6：证据充分但命中条目属于别的作用域` 等三条用例覆盖）。
+    localStorage.setItem(LEGACY_LIBRARY_KEY, JSON.stringify(legacy));
+    localStorage.setItem(
+      DOC_INDEX_KEY,
+      JSON.stringify({
+        entries: [
+          {
+            docKey: 'ws:aaaa::研发/架构.mm.md',
+            scopeId: 'ws:aaaa',
+            relPath: '研发/架构.mm.md',
+            lineageId: 'l-prev',
+            name: '架构.mm.md',
+            title: null,
+            openedAt: null,
+            savedAt: 7,
+            starred: false,
+            sourceRef: { kind: 'disk-handle' },
+            legacyKeys: [],
+          },
+        ],
+      }),
+    );
+    const d = idx(adoptedCtx('ws:aaaa'));
+    expect(d.getDoc('ws:aaaa::研发/架构.mm.md')).toBeDefined(); // 既有条目确实在
+
+    const r = d.migrate();
+
+    // ↓↓↓ 以下是**实测行为**（不是「期望」）：当前实现认领了它。
+    expect(r.migrated).toBe(1);
+    expect(d.getDoc('ws:aaaa::研发/架构.mm.md')?.legacyKeys).toEqual([
+      `${LEGACY_LIBRARY_KEY}#研发/架构.mm.md`,
+    ]);
+    expect(d.historyPool()).toEqual([]);
+    // 旧键保留（不删旧数据这一条与证据无关，始终成立）
+    expect(localStorage.getItem(LEGACY_LIBRARY_KEY)).not.toBeNull();
   });
 
   it('投影不得抹掉尚未迁移的畸形旧行（`null` / 缺 id）', () => {
@@ -1068,6 +1147,91 @@ describe('DocIndex · M4 / M7 / M8', () => {
     expect(r.migrated).toBe(0);
     expect(d.listAssets()).toEqual([]);
     expect(d.historyPool().map((h) => h.key)).toEqual(['img:assets/b.png']);
+  });
+
+  it('M7：他区已有同 assetKey 条目 → 不得复用（`ownScope` 的「他区不得复用」语义）', () => {
+    // **NC-M7-scope**（复核回执 §3.2 的最小负控设计）。
+    //
+    // 为什么需要它：`docIndexMigrate.ts:246-250` 的 `ownScope` 守卫**在位但完全未被钉住**——
+    // 复核实测把它中性化成恒 `true` 后 **51/51 全绿、exit 0**，而探针证明他区的资产条目
+    // 会被本区的旧键**点亮为已收藏**并塞进 legacyKeys（正是 R3-3 要防的跨作用域复用）。
+    // 默认套件里 M7 相关用例只覆盖「有证据同区可迁」「无证据进池」「draw: 前缀」
+    // 「自包含」「非法 kind」，**没有一条构造「他区已有同 assetKey 条目」**。
+    //
+    // 场景取**无证据**作用域（`adoptedCtx`）：此时「不得复用他区条目」与
+    // 「无归属依据 → 进历史池」两条同时成立，断言面最干净，且**正是 ownScope 判别的那一支**——
+    // 中性化后他区条目会被当成 `existing` 命中，于是**不**进历史池、starred 被点亮，
+    // 本用例转红。（有证据的作用域下另有一条合法路径会新建本区条目，
+    // 那种情形由下面 `M7：他区条目存在时仍为本区新建条目` 用例单独钉住。）
+    localStorage.setItem(LEGACY_ASSET_FAV_KEY, JSON.stringify(['img:assets/b.png']));
+    const d = idx(adoptedCtx('ws:aaaa')); // 本区**无**历史证据
+    // 手工注入一条**他区**（ws:OTHER）的资产条目，assetKey 与本区旧键指向的资产同名。
+    // （注入方式：直接写公开的 `assets` 访问器——它正是迁移读的那个面。）
+    d.assets = [
+      {
+        assetKey: 'assets/b.png',
+        scopeId: 'ws:OTHER',
+        relPath: 'assets/b.png',
+        name: 'b.png',
+        starred: false,
+        legacyKeys: [],
+      },
+    ];
+
+    const r = d.migrate();
+
+    // ① 不认领他区条目：starred 不得被点亮
+    expect(r.migrated).toBe(0);
+    expect(d.listAssets().find((a) => a.scopeId === 'ws:OTHER')?.starred).toBe(false);
+    // ② 他区条目的 legacyKeys 不得吞掉本区旧键
+    expect(d.listAssets().find((a) => a.scopeId === 'ws:OTHER')?.legacyKeys).toEqual([]);
+    // ③ 不新建属于本区的条目（无归属依据）
+    expect(d.listAssets().filter((a) => a.scopeId === 'ws:aaaa')).toEqual([]);
+    expect(d.listAssets()).toHaveLength(1); // 只有注入的那一条，没多出来
+    // ④ 旧键进历史池（用户可显式关联，不能自动绑定）
+    expect(d.historyPool().map((h) => h.key)).toEqual(['img:assets/b.png']);
+
+    // 判别力自证（负控 a）：把 `ownScope` 中性化成恒 `true`，
+    // 他区条目被当成 `existing` 命中 → starred 转 true、legacyKeys 被写入、
+    // migrated 变 1、历史池变空 —— ①②③④ 全部转红。
+  });
+
+  it('M7：他区条目存在时仍为本区新建条目（`ownScope` 只隔离他区，不阻断本区合法迁移）', () => {
+    // 上一条的对偶面：**本区有证据**时，他区存在同 assetKey 条目**不应**阻断
+    // 本区自己那条合法的迁移路径 —— 否则「他区复用」的修复会变成「谁都迁不了」。
+    // 这里钉住的是 `ownScope` 的**判别方向**：它必须只把「他区的条目」排除在
+    // 「可复用」之外，而不是把整个 M7 分支关掉。
+    localStorage.setItem(LEGACY_ASSET_FAV_KEY, JSON.stringify(['img:assets/b.png']));
+    const d = idx(diskCtx('ws:aaaa')); // 本区**有**历史证据
+    d.assets = [
+      {
+        assetKey: 'assets/b.png',
+        scopeId: 'ws:OTHER',
+        relPath: 'assets/b.png',
+        name: 'b.png',
+        starred: false,
+        legacyKeys: [],
+      },
+    ];
+    const r = d.migrate();
+    // 他区条目原样不动（没被复用、没被点亮、没被污染）
+    const other = must(d.listAssets().find((a) => a.scopeId === 'ws:OTHER'));
+    expect(other.starred).toBe(false);
+    expect(other.legacyKeys).toEqual([]);
+    // 本区按归属证据**新建**了自己的条目。新建条目的 `scopeId` 是
+    // `BROWSER_SCOPE_ID`（`docIndexMigrate.ts:281` 的既有形态：M7 的资产条目
+    // 一律挂在浏览器素材库作用域下，`relPath` 才是工作区相对路径）——
+    // 这里按**实际形态**断言，不去改实现对齐我的直觉。
+    const mine = must(d.listAssets().find((a) => a.assetKey === 'assets/b.png' && a.scopeId !== 'ws:OTHER'));
+    expect(mine.assetKey).toBe('assets/b.png');
+    expect(mine.relPath).toBe('assets/b.png');
+    expect(mine.starred).toBe(true);
+    expect(mine.legacyKeys).toEqual(['img:assets/b.png']);
+    expect(r.migrated).toBe(1);
+    expect(d.historyPool()).toEqual([]);
+    expect(d.listAssets()).toHaveLength(2); // 他区那条 + 本区新建那条
+    // 判别力：把 `ownScope` 中性化成恒 `true`，他区条目会被复用（`other.starred` 转 true、
+    // `other.legacyKeys` 变 ['img:assets/b.png']、且不再新建本区条目）→ 本用例转红。
   });
 
   it('M7：`draw:` 前缀（SVG）按同一规则处理', () => {
