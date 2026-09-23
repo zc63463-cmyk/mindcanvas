@@ -4,6 +4,11 @@ dist/
 *.tsbuildinfo
 coverage/
 *.log
+# 例外：判别性负控的原始输出必须入库（docs/dispatch/evidence/ 下各批次的 .log）——
+# 否则 `git add <目录>` 会被 `*.log` 静默跳过，回执里「真实退出码 / 转红原文 / 还原 sha256」
+# 变成不可核（P0-A 收工核查实测命中：22 份日志在盘但零跟踪，仅 SUMMARY.md 入库）。
+# 验证：git check-ignore -v <日志路径> 不再命中；git ls-files <目录> 计数等于期望。
+!docs/dispatch/evidence/**/*.log
 .DS_Store
 Thumbs.db
 .env

@@ -1,0 +1,90 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./vite.config" without a file extension (vitest.config.ts:4:24). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas
+
+ ❯ tests/rename-current-doc.test.tsx (20 tests | 3 failed) 43ms
+     ✓ ① 无在途写入 → 租约立即授予，改名成功且旧路径不再存在 13ms
+     × ★④ 改名后目的地重绑到新路径（R-01 核心） 7ms
+     × ★F1 负控①：目的地**必须**由编排层重绑（不是靠 Stage 顺手做的） 4ms
+     ✓ ★⑤ 新文件内容 = 改名时的磁盘内容（I-14 前置的意义） 2ms
+     ✓ ★I-14 前置：未落盘（durable=false）→ 拒绝，零 I/O 3ms
+     ✓ ★I-14 前置：磁盘是旧快照（current=false）→ 同样拒绝 2ms
+     ✓ ★① 在途物理写 → busy-physical 拒绝（文案精确，零 I/O） 2ms
+     ✓ ★已有租约 → busy-lease 拒绝 2ms
+     ✓ 租约在操作结束后被释放（不泄漏互斥） 1ms
+     ✓ 失败路径也释放租约（不把互斥留在原地） 1ms
+     ✓ 仅大小写差异 → 拒绝（不静默加序号） 0ms
+     ✓ 与源同名 → 零 I/O 静默取消（不打扰用户） 0ms
+     ✓ 非法名（空 / 含分隔符）→ 拒绝并提示 0ms
+     ✓ ⑥⑦ 改名成功后若仍 dirty → 释放后补写一次（内容不丢） 0ms
+     ✓ 改名成功后不 dirty → 不补写（避免无谓写入） 0ms
+     ✓ ★host 未挂载 → 拒绝且零 I/O 0ms
+     × 移动成功后目的地重绑到新目录路径 1ms
+     ✓ 移动同样受 I-14 前置约束 0ms
+     ✓ 移动到同一目录 → 零操作（不制造无用副本） 0ms
+     ✓ host 操作期间切文档 → 归属复核失败，零重绑（不写旧文档也不写新文档） 2ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/rename-current-doc.test.tsx > F1 · 当前文档改名编排 > ★④ 改名后目的地重绑到新路径（R-01 核心）
+AssertionError: expected null to be '架构设计.mm.md' // Object.is equality
+
+- Expected:
+"架构设计.mm.md"
+
++ Received:
+null
+
+ ❯ tests/rename-current-doc.test.tsx:240:26
+    238|     // 目的地已换：后续保存不会写回旧名字
+    239|     const info = h.session.getDestinationInfo();
+    240|     expect(info.relPath).toBe('架构设计.mm.md');
+       |                          ^
+    241|     expect(info.name).toBe('架构设计.mm.md');
+    242|     expect(h.session.getDestination()?.name).toBe('架构设计.mm.md');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/rename-current-doc.test.tsx > F1 · 当前文档改名编排 > ★F1 负控①：目的地**必须**由编排层重绑（不是靠 Stage 顺手做的）
+AssertionError: expected 'none' to be 'disk' // Object.is equality
+
+Expected: "disk"
+Received: "none"
+
+ ❯ tests/rename-current-doc.test.tsx:255:23
+    253|     // 会话目的地已换：后续保存不会写回旧名字
+    254|     const info = h.session.getDestinationInfo();
+    255|     expect(info.kind).toBe('disk');
+       |                       ^
+    256|     expect(info.relPath).toBe('架构设计.mm.md');
+    257|     expect(info.name).toBe('架构设计.mm.md');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/rename-current-doc.test.tsx > F1 · 当前文档移动编排 > 移动成功后目的地重绑到新目录路径
+AssertionError: expected null to be '归档/架构.mm.md' // Object.is equality
+
+- Expected:
+"归档/架构.mm.md"
+
++ Received:
+null
+
+ ❯ tests/rename-current-doc.test.tsx:421:52
+    419|     expect(result.kind).toBe('done');
+    420|     expect(h.rebound).toEqual(['归档/架构.mm.md']);
+    421|     expect(h.session.getDestinationInfo().relPath).toBe('归档/架构.mm.md');
+       |                                                    ^
+    422|     expect(host.files.has('架构.mm.md')).toBe(false);
+    423|     expect(host.files.get('归档/架构.mm.md')).toBe('# 架构');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 17 passed (20)
+   Start at  11:08:04
+   Duration  4.04s (transform 1.64s, setup 0ms, import 2.06s, tests 43ms, environment 1.78s)
+

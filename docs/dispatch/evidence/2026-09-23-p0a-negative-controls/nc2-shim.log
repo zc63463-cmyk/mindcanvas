@@ -1,0 +1,60 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./vite.config" without a file extension (vitest.config.ts:4:24). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas
+
+ ❯ tests/file-op-lease.test.tsx (20 tests | 1 failed) 59ms
+     ✓ 无在途写入 → 立即授予，返回 leaseId 与 opSeq 4ms
+     ✓ 已有租约 → busy-lease（单租约：不重入） 2ms
+     ✓ ★物理写在途 → busy-physical（**不得**静默等待；I-17） 1ms
+     × ★★跨会话物理写：切文档后旧会话的写入仍在途 → 仍须 busy-physical（I-17 的真正边界） 9ms
+     ✓ 物理写计数在写入失败时同样回落（否则永久卡住 beginExclusiveOp） 0ms
+     ✓ ★租约期间 submit 一律 blocked 且**不入队**（L1 负控锚点） 0ms
+     ✓ 租约期间 manual / save-as 同样 blocked（同一互斥域，不弹选择器） 1ms
+     ✓ 释放后 submit 恢复可用 1ms
+     ✓ 非持有者 endExclusiveOp 是 no-op（不解开别人的租约） 1ms
+     ✓ ★旧请求的无条件 finally 释放不得解开新请求的租约（L2 反例） 3ms
+     ✓ 持有者释放 → 租约清空 0ms
+     ✓ ownsLease：租约仍在 + 令牌未变 + 代次未变 → true 0ms
+     ✓ 会话被替换（token 变）→ ownsLease 失败（迟到回调零回填） 0ms
+     ✓ 代次不匹配（opSeq 变）→ ownsLease 失败 0ms
+     ✓ 目标作用域与会话目的地不一致 → session-replaced（拒绝跨会话操作） 0ms
+     ✓ 已释放的租约 → ownsLease 失败（不能拿旧租约继续写状态） 0ms
+     ✓ 租约期间编辑 → auto 定时器到期 → submit 被 blocked 且零写入 25ms
+     ✓ ★释放租约后，dirty 内容由下一次 auto 补写（内容不丢） 2ms
+     ✓ 租约期间 Ctrl+S（manual）→ blocked，零写入、dirty 不变、saving 不闪 3ms
+     ✓ 租约期间另存为 → blocked（不弹选择器：save 零调用） 3ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/file-op-lease.test.tsx > 租约 · 授予与拒绝（I-16 / I-17） > ★★跨会话物理写：切文档后旧会话的写入仍在途 → 仍须 busy-physical（I-17 的真正边界）
+AssertionError: expected { kind: 'granted', leaseId: 1, …(1) } to deeply equal { kind: 'refused', …(1) }
+
+- Expected
++ Received
+
+  {
+-   "kind": "refused",
+-   "reason": "busy-physical",
++   "kind": "granted",
++   "leaseId": 1,
++   "opSeq": 1,
+  }
+
+ ❯ tests/file-op-lease.test.tsx:170:48
+    168|     // 但磁盘上的写还没结束，故租约必须仍被拒
+    169|     expect(session.physicalWritesInFlight).toBe(1);
+    170|     expect(session.beginExclusiveOp('rename')).toEqual({
+       |                                                ^
+    171|       kind: 'refused',
+    172|       reason: 'busy-physical',
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 19 passed (20)
+   Start at  11:06:52
+   Duration  5.66s (transform 2.87s, setup 0ms, import 3.76s, tests 59ms, environment 1.63s)
+

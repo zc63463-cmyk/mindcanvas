@@ -1,0 +1,70 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./vite.config" without a file extension (vitest.config.ts:4:24). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas
+
+ ❯ tests/file-op-panels.test.tsx (13 tests | 2 failed) 211ms
+     ✓ 三个动作齐全，且「保留两份」是默认焦点（不静默替换） 52ms
+     ✓ 三选分别回传对应 choice（不吞动作、不自动选） 34ms
+     ✓ ★必须出现「两份」说明并同时列出新位置与旧位置（F3 负控：不得按「移动失败」呈现） 17ms
+     ✓ 三个动作齐备（重试删除原文件 / 保留两份 / 撤销新副本） 8ms
+     × ★L3 保护：有改动时**不渲染**「撤销新副本」，只给「放弃这些改动并删除副本」 11ms
+     × ★L3：显式「放弃这些改动并删除副本」才回传 discard-copy-changes（不是 undo-copy） 14ms
+     ✓ 无改动时「撤销新副本」直接可用，回传 undo-copy 9ms
+     ✓ 四个动作分别回传对应 choice 36ms
+     ✓ busy 时禁用写入类动作（防重复点击造出第二次删除） 8ms
+     ✓ 三个动作齐备且「保存并改名」为默认焦点 5ms
+     ✓ 三分支分别回传 9ms
+     ✓ 非空文案 → 渲染并可关闭 6ms
+     ✓ ★空文案 / null → **不渲染**（静默取消 = 不打扰用户） 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/file-op-panels.test.tsx > ★部分成功面板（§5.3 + L3） > ★L3 保护：有改动时**不渲染**「撤销新副本」，只给「放弃这些改动并删除副本」
+AssertionError: expected <button type="button" …(2)></button> to be null
+
+- Expected:
+null
+
++ Received:
+<button
+  data-fm-partial-undo="true"
+  style="display: inline-flex; align-items: center; justify-content: center; gap: 4px; background: none; border: 1px rgb(247, 107, 88); border-radius: 9px; color: rgb(247, 107, 88); cursor: pointer; font-family: \"Segoe UI\", \"Microsoft YaHei\", \"PingFang SC\", sans-serif; font-size: 11px; padding: 4px 10px; white-space: nowrap;"
+  type="button"
+>
+  撤销新副本
+</button>
+
+ ❯ tests/file-op-panels.test.tsx:99:63
+     97|     // 这是 L3 的第二段（渲染层）。状态层判据正确但这里放行的话，用户仍能一键删掉有改动的副本。
+     98|     const { container } = render(<PartialSuccessPanel {...base} copyHa…
+     99|     expect(container.querySelector('[data-fm-partial-undo]')).toBeNull…
+       |                                                               ^
+    100|     expect(container.querySelector('[data-fm-partial-discard-copy]')).…
+    101|     // 并且明确告知后果
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/file-op-panels.test.tsx > ★部分成功面板（§5.3 + L3） > ★L3：显式「放弃这些改动并删除副本」才回传 discard-copy-changes（不是 undo-copy）
+Error: Unable to fire a "click" event - please provide a DOM element.
+ ❯ createEvent ../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/events.js:27:11
+ ❯ createEvent.<computed> [as click] ../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/events.js:106:38
+ ❯ fireEvent.<computed> [as click] ../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/events.js:110:68
+ ❯ fireEvent.<computed> [as click] ../../node_modules/.pnpm/@testing-library+react@16.3.2_@testing-library+dom@10.4.1_@types+react-dom@19.2.5_@type_1b8e19e5f86dea2095f2cde781456fd6/node_modules/@testing-library/react/dist/fire-event.js:15:52
+ ❯ tests/file-op-panels.test.tsx:111:15
+    109|       <PartialSuccessPanel {...base} onChoose={onChoose} copyHasNewCha…
+    110|     );
+    111|     fireEvent.click(container.querySelector('[data-fm-partial-discard-…
+       |               ^
+    112|     expect(onChoose).toHaveBeenCalledWith('discard-copy-changes');
+    113|     // 绝不能把「放弃改动」悄悄当成普通撤销（两者的语义与后果不同）
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 11 passed (13)
+   Start at  11:09:17
+   Duration  3.95s (transform 1.47s, setup 0ms, import 1.95s, tests 211ms, environment 1.66s)
+

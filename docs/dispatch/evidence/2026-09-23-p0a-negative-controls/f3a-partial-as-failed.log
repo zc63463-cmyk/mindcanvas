@@ -1,0 +1,230 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./vite.config" without a file extension (vitest.config.ts:4:24). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas
+
+ ❯ tests/file-op-partial.test.tsx (19 tests | 12 failed) 76ms
+     × ★① 出现「两份」说明，且同时列出新位置与旧位置（不呈现为「移动失败」） 23ms
+     × ② 未编辑副本时 copyHasNewChanges=false（提供「撤销新副本」直接入口） 7ms
+     × ★③ 「重试删除原文件」只删源、**不重建目标**（不覆盖新副本内容） 9ms
+     × 「保留两份」：关闭面板 + 明确提示旧文件仍在（不删任何东西） 5ms
+     × ★「撤销新副本」：删掉副本、回到旧位置（源保留） 3ms
+     × 撤销失败 → 如实说「两份都在，请手动处理」（不假装成功） 2ms
+     ✓ 「稍后处理」：关闭面板、零删除（本轮不自动重试） 2ms
+     ✓ dirty 的当前文档移动前先出三选（不直接动手） 2ms
+     × ★copyHasNewChanges=true：当前文档就是新副本且有改动 → 保护触发 5ms
+     × ★保护分支下不提供「撤销新副本」直接入口（只有显式放弃改动） 4ms
+     × ★「放弃这些改动并删除副本」是保护分支下的可删路径 3ms
+     × 源被外部修改（size 不同）→ **不删除**，转「保留两份」 1ms
+     × 源未被修改（快照一致）→ 允许删除 1ms
+     × ★快照不可读（null）→ 保守不删（不可判定 ≠ 可删） 1ms
+     ✓ 源已被外部删除 → 如实提示并刷新（不当成删除成功） 1ms
+     ✓ 副本成功：源一字不改、副本内容一致、不换目的地（当前文档仍是原文档） 1ms
+     ✓ 删除成功 → done 且文件消失 1ms
+     ✓ 权限被拒 → 失败提示（文件保留、目的地不变） 1ms
+     ✓ 删除不写目的地（目的地仍指原文档，直到会话关闭） 1ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 12 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/file-op-partial.test.tsx > F3 · 部分成功：目标已建、源删除失败 > ★① 出现「两份」说明，且同时列出新位置与旧位置（不呈现为「移动失败」）
+AssertionError: expected null not to be null
+ ❯ tests/file-op-partial.test.tsx:196:23
+    194|     });
+    195|     const panel = h.view.result.current.ui.partial;
+    196|     expect(panel).not.toBeNull();
+       |                       ^
+    197|     expect(panel?.createdPath).toBe('归档/架构.mm.md');
+    198|     expect(panel?.sourcePath).toBe('架构.mm.md');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/12]⎯
+
+ FAIL  tests/file-op-partial.test.tsx > F3 · 部分成功：目标已建、源删除失败 > ② 未编辑副本时 copyHasNewChanges=false（提供「撤销新副本」直接入口）
+AssertionError: expected undefined to be false // Object.is equality
+
+- Expected:
+false
+
++ Received:
+undefined
+
+ ❯ tests/file-op-partial.test.tsx:212:65
+    210|       await h.view.result.current.requestMove(host.fileAt('架构.mm.md'),…
+    211|     });
+    212|     expect(h.view.result.current.ui.partial?.copyHasNewChanges).toBe(f…
+       |                                                                 ^
+    213|   });
+    214|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/12]⎯
+
+ FAIL  tests/file-op-partial.test.tsx > F3 · 部分成功：目标已建、源删除失败 > ★③ 「重试删除原文件」只删源、**不重建目标**（不覆盖新副本内容）
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/file-op-partial.test.tsx:238:46
+    236|
+    237|     // 源已删
+    238|     expect(host.state.files.has('架构.mm.md')).toBe(false);
+       |                                              ^
+    239|     // **目标内容没有被覆盖**（这正是「盲目重试」会破坏的）
+    240|     expect(host.state.files.get('归档/架构.mm.md')).toBe('# 副本里的新内容');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/12]⎯
+
+ FAIL  tests/file-op-partial.test.tsx > F3 · 部分成功：目标已建、源删除失败 > 「保留两份」：关闭面板 + 明确提示旧文件仍在（不删任何东西）
+AssertionError: expected '没有写入权限：请重新授权后重试。' to contain '保留两份'
+
+Expected: "保留两份"
+Received: "没有写入权限：请重新授权后重试。"
+
+ ❯ tests/file-op-partial.test.tsx:256:45
+    254|     });
+    255|     expect(h.view.result.current.ui.partial).toBeNull();
+    256|     expect(h.view.result.current.ui.notice).toContain('保留两份');
+       |                                             ^
+    257|     // 两份都还在（保留两份 = 不做任何删除）
+    258|     expect(host.state.files.has('归档/架构.mm.md')).toBe(true);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/12]⎯
+
+ FAIL  tests/file-op-partial.test.tsx > F3 · 部分成功：目标已建、源删除失败 > ★「撤销新副本」：删掉副本、回到旧位置（源保留）
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/file-op-partial.test.tsx:276:49
+    274|       await Promise.resolve();
+    275|     });
+    276|     expect(host.state.files.has('归档/架构.mm.md')).toBe(false);
+       |                                                 ^
+    277|     // 源保留（撤销的是**新副本**，不是源）
+    278|     expect(host.state.files.has('架构.mm.md')).toBe(true);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/12]⎯
+
+ FAIL  tests/file-op-partial.test.tsx > F3 · 部分成功：目标已建、源删除失败 > 撤销失败 → 如实说「两份都在，请手动处理」（不假装成功）
+AssertionError: expected '没有写入权限：请重新授权后重试。' to contain '两份都在'
+
+Expected: "两份都在"
+Received: "没有写入权限：请重新授权后重试。"
+
+ ❯ tests/file-op-partial.test.tsx:295:45
+    293|       await Promise.resolve();
+    294|     });
+    295|     expect(h.view.result.current.ui.notice).toContain('两份都在');
+       |                                             ^
+    296|     expect(host.state.files.has('归档/架构.mm.md')).toBe(true);
+    297|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/12]⎯
+
+ FAIL  tests/file-op-partial.test.tsx > ★L3 · 撤销新副本的保护分支 > ★copyHasNewChanges=true：当前文档就是新副本且有改动 → 保护触发
+AssertionError: expected null not to be null
+ ❯ tests/file-op-partial.test.tsx:347:23
+    345|     });
+    346|     const panel = h.view.result.current.ui.partial;
+    347|     expect(panel).not.toBeNull();
+       |                       ^
+    348|     // 当前文档 = 新副本（归档2/架构.mm.md）且 dirty → true（无条件删除会转红的位置）
+    349|     expect(panel?.copyHasNewChanges).toBe(true);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/12]⎯
+
+ FAIL  tests/file-op-partial.test.tsx > ★L3 · 撤销新副本的保护分支 > ★保护分支下不提供「撤销新副本」直接入口（只有显式放弃改动）
+AssertionError: expected undefined to be true // Object.is equality
+
+- Expected:
+true
+
++ Received:
+undefined
+
+ ❯ tests/file-op-partial.test.tsx:367:38
+    365|     });
+    366|     const panel = h.view.result.current.ui.partial;
+    367|     expect(panel?.copyHasNewChanges).toBe(true);
+       |                                      ^
+    368|     // 面板组件按该判据渲染「放弃这些改动并删除副本」而非「撤销新副本」；
+    369|     // 这里钉住状态判据（组件渲染由 FileOpPanels 的用例覆盖）
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/12]⎯
+
+ FAIL  tests/file-op-partial.test.tsx > ★L3 · 撤销新副本的保护分支 > ★「放弃这些改动并删除副本」是保护分支下的可删路径
+AssertionError: expected null not to be null
+ ❯ tests/file-op-partial.test.tsx:387:50
+    385|       await Promise.resolve();
+    386|     });
+    387|     expect(h.view.result.current.ui.partial).not.toBeNull();
+       |                                                  ^
+    388|     // 允许删除后走「放弃改动并删除副本」
+    389|     host.state.removeError = null;
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/12]⎯
+
+ FAIL  tests/file-op-partial.test.tsx > ★L4 · 重试删源前的外部修改复查 > 源被外部修改（size 不同）→ **不删除**，转「保留两份」
+AssertionError: expected '没有写入权限：请重新授权后重试。' to contain '外部修改'
+
+Expected: "外部修改"
+Received: "没有写入权限：请重新授权后重试。"
+
+ ❯ tests/file-op-partial.test.tsx:426:45
+    424|     // 源**仍在**（这正是跳过复查会转红的位置）
+    425|     expect(host.state.files.has('架构.mm.md')).toBe(true);
+    426|     expect(h.view.result.current.ui.notice).toContain('外部修改');
+       |                                             ^
+    427|     // 没有发起删除尝试
+    428|     expect(host.state.calls.remove).toBe(removesBefore);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/12]⎯
+
+ FAIL  tests/file-op-partial.test.tsx > ★L4 · 重试删源前的外部修改复查 > 源未被修改（快照一致）→ 允许删除
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/file-op-partial.test.tsx:446:46
+    444|       await Promise.resolve();
+    445|     });
+    446|     expect(host.state.files.has('架构.mm.md')).toBe(false);
+       |                                              ^
+    447|     expect(h.view.result.current.ui.notice).toContain('已删除原文件');
+    448|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/12]⎯
+
+ FAIL  tests/file-op-partial.test.tsx > ★L4 · 重试删源前的外部修改复查 > ★快照不可读（null）→ 保守不删（不可判定 ≠ 可删）
+AssertionError: expected '没有写入权限：请重新授权后重试。' to contain '未删除'
+
+Expected: "未删除"
+Received: "没有写入权限：请重新授权后重试。"
+
+ ❯ tests/file-op-partial.test.tsx:468:45
+    466|     });
+    467|     expect(host.state.files.has('架构.mm.md')).toBe(true);
+    468|     expect(h.view.result.current.ui.notice).toContain('未删除');
+       |                                             ^
+    469|   });
+    470|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/12]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  12 failed | 7 passed (19)
+   Start at  11:10:00
+   Duration  2.53s (transform 1.16s, setup 0ms, import 1.51s, tests 76ms, environment 824ms)
+

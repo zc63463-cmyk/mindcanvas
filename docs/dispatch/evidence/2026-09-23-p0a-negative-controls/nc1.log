@@ -1,0 +1,263 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./vite.config" without a file extension (vitest.config.ts:4:24). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas
+
+ ❯ tests/save-destination.test.tsx (11 tests | 1 failed) 29ms
+     ✓ 另存为 → 排队 auto：第二次写新文件、含最新编辑、当前句柄不回退、并发为 1 14ms
+     ✓ 另存为 → 排队 manual：同样写新文件（同族风险一并覆盖） 2ms
+     ✓ 另存为取消：目的地不变，后续 auto 仍写原文件 1ms
+     ✓ 附属记录失败（remember 抛错）：写盘事实成立 → saved/current、dirty 清、只发附属警告、后续保存可用（复核 R4-B） 3ms
+     ✓ 另存为失败：目的地不变 + 可见失败通知 1ms
+     ✓ rebindDestination 换作用域/相对路径，且 getDestination 与 getDestinationInfo 描述同一事实 0ms
+     ✓ setDestination（兼容写入口）归一化为同一字段：信息随之更新 0ms
+     ✓ setDestination 传同一句柄 → 保住作用域与相对路径（不被空值冲掉） 0ms
+     ✓ setDestination(undefined) → kind=none 且 durable=false（改名/移动的 I-14 前置判据） 0ms
+     ✓ ★改名重绑后：后续 auto 写新目的地（R-01 的正例） 1ms
+     × ★租约期间 auto 不写盘；释放后补写（含补写用的 flushTick 通道） 6ms
+ ❯ tests/useAutoSave.test.tsx (13 tests | 2 failed) 52ms
+     ✓ dirty+saved+handle：300ms 后保存，写回 savedSource 且不改写 source 20ms
+     ✓ dirty=false → 不排定时器（save 零调用） 2ms
+     ✓ 无 handle → 不排（未落盘文档无自动保存） 1ms
+     ✓ saved=false → 不排（新建未保存文档走手动保存） 1ms
+     ✓ unmount → 清理 pending 定时器（回调不再触发） 3ms
+     ✓ 不同步（synced ≠ doc.source）→ 拒写 + 通知恰一次 + 不闪 saving；同 source 再触发不重复通知 9ms
+     ✓ 写入失败 → 可见失败通知 + dirty 保持 + 不重试 + saving 回落（复核 R3） 2ms
+     ✓ 用户取消保存 → 静默（不报失败通知） 2ms
+     ✓ 置位（ref = doc.source）后 → 写盘恢复 2ms
+     × ★租约期间 auto 提交被挡回 blocked，且**不入队**（saving 不闪） 4ms
+     × ★租约挡回时**不发**守卫拦截文案（那是另一类原因，文案不得混用） 1ms
+     ✓ ★释放租约后 flushTick 递增 → 真的补写一次（内容引用未变也生效） 2ms
+     ✓ ★物理写在途时 auto 仍可继续（physicalWrites 只挡新租约，不挡写入本身） 2ms
+ ❯ tests/file-op-lease.test.tsx (19 tests | 6 failed) 5061ms
+     ✓ 无在途写入 → 立即授予，返回 leaseId 与 opSeq 2ms
+     ✓ 已有租约 → busy-lease（单租约：不重入） 0ms
+     ✓ ★物理写在途 → busy-physical（**不得**静默等待；I-17） 0ms
+     ✓ 物理写计数在写入失败时同样回落（否则永久卡住 beginExclusiveOp） 0ms
+     × ★租约期间 submit 一律 blocked 且**不入队**（L1 负控锚点） 3ms
+     × 租约期间 manual / save-as 同样 blocked（同一互斥域，不弹选择器） 2ms
+     ✓ 释放后 submit 恢复可用 1ms
+     ✓ 非持有者 endExclusiveOp 是 no-op（不解开别人的租约） 0ms
+     ✓ ★旧请求的无条件 finally 释放不得解开新请求的租约（L2 反例） 1ms
+     ✓ 持有者释放 → 租约清空 0ms
+     ✓ ownsLease：租约仍在 + 令牌未变 + 代次未变 → true 0ms
+     ✓ 会话被替换（token 变）→ ownsLease 失败（迟到回调零回填） 1ms
+     ✓ 代次不匹配（opSeq 变）→ ownsLease 失败 0ms
+     ✓ 目标作用域与会话目的地不一致 → session-replaced（拒绝跨会话操作） 1ms
+     ✓ 已释放的租约 → ownsLease 失败（不能拿旧租约继续写状态） 0ms
+     × 租约期间编辑 → auto 定时器到期 → submit 被 blocked 且零写入 21ms
+     × ★释放租约后，dirty 内容由下一次 auto 补写（内容不丢） 14ms
+     × 租约期间 Ctrl+S（manual）→ blocked，零写入、dirty 不变、saving 不闪 5007ms
+     × 租约期间另存为 → blocked（不弹选择器：save 零调用） 5ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 9 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/file-op-lease.test.tsx > 租约 · 授予与拒绝（I-16 / I-17） > ★租约期间 submit 一律 blocked 且**不入队**（L1 负控锚点）
+AssertionError: expected 'saved' to be 'blocked' // Object.is equality
+
+Expected: "blocked"
+Received: "saved"
+
+ ❯ tests/file-op-lease.test.tsx:166:39
+    164|     const session = new DocumentSaveSession({ readContent: () => null …
+    165|     session.beginExclusiveOp('rename');
+    166|     expect(await submitAuto(session)).toBe('blocked');
+       |                                       ^
+    167|     // 不入队：isSaving() 不因被挡回的请求而变 true（saving 不闪）
+    168|     expect(session.isSaving()).toBe(false);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/9]⎯
+
+ FAIL  tests/file-op-lease.test.tsx > 租约 · 授予与拒绝（I-16 / I-17） > 租约期间 manual / save-as 同样 blocked（同一互斥域，不弹选择器）
+AssertionError: expected { kind: 'saved', current: false } to deeply equal { kind: 'blocked' }
+
+- Expected
++ Received
+
+  {
+-   "kind": "blocked",
++   "current": false,
++   "kind": "saved",
+  }
+
+ ❯ tests/file-op-lease.test.tsx:183:17
+    181|         commit: () => {},
+    182|       });
+    183|       expect(c).toEqual({ kind: 'blocked' });
+       |                 ^
+    184|     }
+    185|     // 选择器一次都没被唤起（写入函数零调用）
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/9]⎯
+
+ FAIL  tests/file-op-lease.test.tsx > ★租约 · 与自动保存的交互（L1：租约期间内容变化仍不入队） > 租约期间编辑 → auto 定时器到期 → submit 被 blocked 且零写入
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+Received:
+
+  1st vi.fn() call:
+
+    Array [
+      Object {
+        "handle": Object {
+          "name": "a.mm.md",
+        },
+        "id": "a.mm.md",
+        "name": "a.mm.md",
+        "saved": true,
+        "source": "# 租约期间的编辑
+    ",
+        "ts": 0,
+      },
+    ]
+
+
+Number of calls: 1
+
+ ❯ tests/file-op-lease.test.tsx:304:24
+    302|     });
+    303|     // 写入函数零调用：租约挡回了入口（不是靠清定时器）
+    304|     expect(h.save).not.toHaveBeenCalled();
+       |                        ^
+    305|     // dirty 保持（内容确实还没落盘）
+    306|     expect(h.controller.dirty).toBe(true);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/9]⎯
+
+ FAIL  tests/file-op-lease.test.tsx > ★租约 · 与自动保存的交互（L1：租约期间内容变化仍不入队） > ★释放租约后，dirty 内容由下一次 auto 补写（内容不丢）
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+Received:
+
+  1st vi.fn() call:
+
+    Array [
+      Object {
+        "handle": Object {
+          "name": "a.mm.md",
+        },
+        "id": "a.mm.md",
+        "name": "a.mm.md",
+        "saved": true,
+        "source": "# 租约期间的编辑
+    ",
+        "ts": 0,
+      },
+    ]
+
+
+Number of calls: 1
+
+ ❯ tests/file-op-lease.test.tsx:321:24
+    319|       await vi.advanceTimersByTimeAsync(320);
+    320|     });
+    321|     expect(h.save).not.toHaveBeenCalled();
+       |                        ^
+    322|
+    323|     // 释放后重新排定一次 auto（内容在租约期间已变，deps 已满足；这里再编辑一次触发）
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/9]⎯
+
+ FAIL  tests/file-op-lease.test.tsx > ★租约 · 与自动保存的交互（L1：租约期间内容变化仍不入队） > 租约期间 Ctrl+S（manual）→ blocked，零写入、dirty 不变、saving 不闪
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ tests/file-op-lease.test.tsx:335:3
+    333|   });
+    334|
+    335|   it('租约期间 Ctrl+S（manual）→ blocked，零写入、dirty 不变、saving 不闪', async () =…
+       |   ^
+    336|     const h = makeHarness();
+    337|     act(() => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/9]⎯
+
+ FAIL  tests/file-op-lease.test.tsx > ★租约 · 与自动保存的交互（L1：租约期间内容变化仍不入队） > 租约期间另存为 → blocked（不弹选择器：save 零调用）
+TypeError: Cannot read properties of null (reading 'actions')
+ ❯ tests/file-op-lease.test.tsx:359:49
+    357|     let completion = '';
+    358|     await act(async () => {
+    359|       completion = (await h.view.result.current.actions.handleSaveAs()…
+       |                                                 ^
+    360|     });
+    361|     expect(completion).toBe('blocked');
+ ❯ ../../node_modules/.pnpm/@testing-library+react@16.3.2_@testing-library+dom@10.4.1_@types+react-dom@19.2.5_@type_1b8e19e5f86dea2095f2cde781456fd6/node_modules/@testing-library/react/dist/act-compat.js:47:24
+ ❯ process.env.NODE_ENV.exports.act ../../node_modules/.pnpm/react@19.2.8/node_modules/react/cjs/react.development.js:814:22
+ ❯ ../../node_modules/.pnpm/@testing-library+react@16.3.2_@testing-library+dom@10.4.1_@types+react-dom@19.2.5_@type_1b8e19e5f86dea2095f2cde781456fd6/node_modules/@testing-library/react/dist/act-compat.js:46:25
+ ❯ tests/file-op-lease.test.tsx:358:11
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/9]⎯
+
+ FAIL  tests/save-destination.test.tsx > P0-A · 目的地单一事实源（I-20）与租约的交互 > ★租约期间 auto 不写盘；释放后补写（含补写用的 flushTick 通道）
+AssertionError: expected [ { …(2) } ] to have a length of +0 but got 1
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/save-destination.test.tsx:398:22
+    396|     });
+    397|     // 租约挡回了入口：零写入（不是靠清定时器）
+    398|     expect(h.writes).toHaveLength(0);
+       |                      ^
+    399|
+    400|     if (lease.kind === 'granted') h.session.endExclusiveOp(lease.lease…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/9]⎯
+
+ FAIL  tests/useAutoSave.test.tsx > P0-A · 租约对自动保存的拦截（I-16/I-18） > ★租约期间 auto 提交被挡回 blocked，且**不入队**（saving 不闪）
+AssertionError: expected "vi.fn()" to not be called at all, but actually been called 1 times
+
+Received:
+
+  1st vi.fn() call:
+
+    Array [
+      Object {
+        "handle": Object {
+          "name": "a.mm.md",
+        },
+        "id": "a.mm.md",
+        "name": "a.mm.md",
+        "saved": true,
+        "source": "SRC",
+        "ts": 0,
+      },
+    ]
+
+
+Number of calls: 1
+
+ ❯ tests/useAutoSave.test.tsx:296:32
+    294|       await vi.advanceTimersByTimeAsync(320);
+    295|     });
+    296|     expect(h.docHost.save).not.toHaveBeenCalled();
+       |                                ^
+    297|     // 不入队 → 会话不认为自己「在保存」（saving 不闪）
+    298|     expect(h.session.isSaving()).toBe(false);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/9]⎯
+
+ FAIL  tests/useAutoSave.test.tsx > P0-A · 租约对自动保存的拦截（I-16/I-18） > ★租约挡回时**不发**守卫拦截文案（那是另一类原因，文案不得混用）
+AssertionError: expected "vi.fn()" to be called with arguments: [ Array(1) ]
+
+Number of calls: 0
+
+ ❯ tests/useAutoSave.test.tsx:309:29
+    307|     });
+    308|     // blocked 会发 SAVE_BLOCKED_NOTICE；但绝不能声称「写入忙」或「已保存」
+    309|     expect(h.onBlockedSave).toHaveBeenCalledWith(SAVE_BLOCKED_NOTICE);
+       |                             ^
+    310|     expect(h.onBlockedSave).not.toHaveBeenCalledWith(SAVE_FAILED_NOTIC…
+    311|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/9]⎯
+
+
+ Test Files  3 failed (3)
+      Tests  9 failed | 34 passed (43)
+   Start at  11:05:37
+   Duration  10.36s (transform 1.43s, setup 0ms, import 2.36s, tests 5.14s, environment 2.46s)
+

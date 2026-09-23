@@ -1,0 +1,110 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./vite.config" without a file extension (vitest.config.ts:4:24). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas
+
+ ❯ tests/file-op-partial.test.tsx (19 tests | 2 failed) 46ms
+     ✓ ★① 出现「两份」说明，且同时列出新位置与旧位置（不呈现为「移动失败」） 14ms
+     ✓ ② 未编辑副本时 copyHasNewChanges=false（提供「撤销新副本」直接入口） 1ms
+     × ★③ 「重试删除原文件」只删源、**不重建目标**（不覆盖新副本内容） 6ms
+     ✓ 「保留两份」：关闭面板 + 明确提示旧文件仍在（不删任何东西） 2ms
+     ✓ ★「撤销新副本」：删掉副本、回到旧位置（源保留） 3ms
+     ✓ 撤销失败 → 如实说「两份都在，请手动处理」（不假装成功） 3ms
+     ✓ 「稍后处理」：关闭面板、零删除（本轮不自动重试） 1ms
+     ✓ dirty 的当前文档移动前先出三选（不直接动手） 1ms
+     ✓ ★copyHasNewChanges=true：当前文档就是新副本且有改动 → 保护触发 2ms
+     ✓ ★保护分支下不提供「撤销新副本」直接入口（只有显式放弃改动） 2ms
+     ✓ ★「放弃这些改动并删除副本」是保护分支下的可删路径 3ms
+     ✓ 源被外部修改（size 不同）→ **不删除**，转「保留两份」 1ms
+     × 源未被修改（快照一致）→ 允许删除 2ms
+     ✓ ★快照不可读（null）→ 保守不删（不可判定 ≠ 可删） 1ms
+     ✓ 源已被外部删除 → 如实提示并刷新（不当成删除成功） 1ms
+     ✓ 副本成功：源一字不改、副本内容一致、不换目的地（当前文档仍是原文档） 1ms
+     ✓ 删除成功 → done 且文件消失 1ms
+     ✓ 权限被拒 → 失败提示（文件保留、目的地不变） 1ms
+     ✓ 删除不写目的地（目的地仍指原文档，直到会话关闭） 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/file-op-partial.test.tsx > F3 · 部分成功：目标已建、源删除失败 > ★③ 「重试删除原文件」只删源、**不重建目标**（不覆盖新副本内容）
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/file-op-partial.test.tsx:238:46
+    236|
+    237|     // 源已删
+    238|     expect(host.state.files.has('架构.mm.md')).toBe(false);
+       |                                              ^
+    239|     // **目标内容没有被覆盖**（这正是「盲目重试」会破坏的）
+    240|     expect(host.state.files.get('归档/架构.mm.md')).toBe('# 副本里的新内容');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/file-op-partial.test.tsx > ★L4 · 重试删源前的外部修改复查 > 源未被修改（快照一致）→ 允许删除
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ tests/file-op-partial.test.tsx:446:46
+    444|       await Promise.resolve();
+    445|     });
+    446|     expect(host.state.files.has('架构.mm.md')).toBe(false);
+       |                                              ^
+    447|     expect(h.view.result.current.ui.notice).toContain('已删除原文件');
+    448|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+
+Vitest caught 2 unhandled errors during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+ReferenceError: basename is not defined
+ ❯ src/useFileOpController.ts:201:57
+    199|       }
+    200|       // NEUTRALIZED(F3B): 盲目重试 —— 先重建目标（会覆盖新副本内容）再删源
+    201|       const rebuilt = await orchestration.renameCurrent(source, basena…
+       |                                                         ^
+    202|       void rebuilt;
+    203|       const removed = await host.removeFileSafe(source);
+
+This error originated in "tests/file-op-partial.test.tsx" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "★③ 「重试删除原文件」只删源、**不重建目标**（不覆盖新副本内容）". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+ReferenceError: basename is not defined
+ ❯ src/useFileOpController.ts:201:57
+    199|       }
+    200|       // NEUTRALIZED(F3B): 盲目重试 —— 先重建目标（会覆盖新副本内容）再删源
+    201|       const rebuilt = await orchestration.renameCurrent(source, basena…
+       |                                                         ^
+    202|       void rebuilt;
+    203|       const removed = await host.removeFileSafe(source);
+
+This error originated in "tests/file-op-partial.test.tsx" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The latest test that might've caused the error is "源未被修改（快照一致）→ 允许删除". It might mean one of the following:
+- The error was thrown, while Vitest was running this test.
+- If the error occurred after the test had been completed, this was the last documented test before it was thrown.
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 17 passed (19)
+     Errors  2 errors
+   Start at  11:10:11
+   Duration  2.59s (transform 1.34s, setup 0ms, import 1.68s, tests 46ms, environment 737ms)
+

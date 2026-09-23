@@ -1,0 +1,90 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./vite.config" without a file extension (vitest.config.ts:4:24). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas
+
+ ❯ tests/rename-current-doc.test.tsx (20 tests | 3 failed) 107ms
+     ✓ ① 无在途写入 → 租约立即授予，改名成功且旧路径不再存在 36ms
+     ✓ ★④ 改名后目的地重绑到新路径（R-01 核心） 2ms
+     ✓ ★F1 负控①：目的地**必须**由编排层重绑（不是靠 Stage 顺手做的） 1ms
+     ✓ ★⑤ 新文件内容 = 改名时的磁盘内容（I-14 前置的意义） 1ms
+     × ★I-14 前置：未落盘（durable=false）→ 拒绝，零 I/O 11ms
+     × ★I-14 前置：磁盘是旧快照（current=false）→ 同样拒绝 25ms
+     ✓ ★① 在途物理写 → busy-physical 拒绝（文案精确，零 I/O） 4ms
+     ✓ ★已有租约 → busy-lease 拒绝 4ms
+     ✓ 租约在操作结束后被释放（不泄漏互斥） 2ms
+     ✓ 失败路径也释放租约（不把互斥留在原地） 2ms
+     ✓ 仅大小写差异 → 拒绝（不静默加序号） 1ms
+     ✓ 与源同名 → 零 I/O 静默取消（不打扰用户） 5ms
+     ✓ 非法名（空 / 含分隔符）→ 拒绝并提示 1ms
+     ✓ ⑥⑦ 改名成功后若仍 dirty → 释放后补写一次（内容不丢） 0ms
+     ✓ 改名成功后不 dirty → 不补写（避免无谓写入） 0ms
+     ✓ ★host 未挂载 → 拒绝且零 I/O 1ms
+     ✓ 移动成功后目的地重绑到新目录路径 3ms
+     × 移动同样受 I-14 前置约束 1ms
+     ✓ 移动到同一目录 → 零操作（不制造无用副本） 1ms
+     ✓ host 操作期间切文档 → 归属复核失败，零重绑（不写旧文档也不写新文档） 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/rename-current-doc.test.tsx > F1 · 当前文档改名编排 > ★I-14 前置：未落盘（durable=false）→ 拒绝，零 I/O
+AssertionError: expected 'done' to be 'refused' // Object.is equality
+
+Expected: "refused"
+Received: "done"
+
+ ❯ tests/rename-current-doc.test.tsx:273:25
+    271|     const h = mountOrchestration(host, { durable: false });
+    272|     const result = await h.view.result.current.renameCurrent(host.file…
+    273|     expect(result.kind).toBe('refused');
+       |                         ^
+    274|     expect(result.kind === 'refused' ? result.reason : null).toBe('not…
+    275|     expect(host.calls.rename).toBe(0); // 零 I/O
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  tests/rename-current-doc.test.tsx > F1 · 当前文档改名编排 > ★I-14 前置：磁盘是旧快照（current=false）→ 同样拒绝
+AssertionError: expected null to be 'not-durable' // Object.is equality
+
+- Expected:
+"not-durable"
+
++ Received:
+null
+
+ ❯ tests/rename-current-doc.test.tsx:284:62
+    282|     const h = mountOrchestration(host, { current: false });
+    283|     const result = await h.view.result.current.renameCurrent(host.file…
+    284|     expect(result.kind === 'refused' ? result.reason : null).toBe('not…
+       |                                                              ^
+    285|     expect(host.calls.rename).toBe(0);
+    286|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  tests/rename-current-doc.test.tsx > F1 · 当前文档移动编排 > 移动同样受 I-14 前置约束
+AssertionError: expected null to be 'not-durable' // Object.is equality
+
+- Expected:
+"not-durable"
+
++ Received:
+null
+
+ ❯ tests/rename-current-doc.test.tsx:438:62
+    436|     };
+    437|     const result = await h.view.result.current.moveCurrent(file, '归档');
+    438|     expect(result.kind === 'refused' ? result.reason : null).toBe('not…
+       |                                                              ^
+    439|     expect(host.calls.move).toBe(0);
+    440|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 17 passed (20)
+   Start at  11:08:23
+   Duration  5.22s (transform 2.33s, setup 0ms, import 3.18s, tests 107ms, environment 1.75s)
+

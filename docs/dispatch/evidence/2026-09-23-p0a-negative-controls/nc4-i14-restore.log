@@ -1,0 +1,13 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./vite.config" without a file extension (vitest.config.ts:4:24). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas
+
+ ✓ tests/rename-current-doc.test.tsx (20 tests) 62ms
+
+ Test Files  1 passed (1)
+      Tests  20 passed (20)
+   Start at  11:08:29
+   Duration  5.84s (transform 2.83s, setup 0ms, import 3.38s, tests 62ms, environment 2.13s)
+

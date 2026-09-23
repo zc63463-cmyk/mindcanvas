@@ -1,0 +1,284 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./vite.config" without a file extension (vitest.config.ts:4:24). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas
+
+ ❯ tests/delete-current-doc.test.tsx (21 tests | 13 failed) 55ms
+     ✓ busy-physical → 提示且不进入任何后续分支、不删除 18ms
+     ✓ busy-lease → 提示「正在处理上一步操作」，零副作用 2ms
+     ✓ 组合进行中 → 不弹模态（confirm 不出现）、不删除，提示先结束输入 3ms
+     × ★组合结束后**自动续跑**：不脏 → 直接出确认条（用户不必再点一次） 7ms
+     × ★组合结束后若 dirty → 续跑到三选（不是直接删） 2ms
+     ✓ 组合暂缓不会因为「看了别的节点」而丢目标（组合结束仍续跑） 2ms
+     ✓ flush=failed → 中止删除、提示可修正，且**不**等待 compositionend 2ms
+     × dirty → 出三选（不直接删） 1ms
+     × 不脏 → 直接到确认条（不多问一次） 2ms
+     × 「保存后删除」：先保存成功 → 才删 1ms
+     × ★「保存后删除」但保存失败 → **不删**（可重试） 2ms
+     × ★「放弃修改并删除」：抑制自动保存（防「放弃后又自动保存一次」） 2ms
+     ✓ 「放弃修改并删除」不触发 saveNow（文件不会被重建） 1ms
+     × 取消 → 不删除、不关闭、不保存、抑制计数为 0 1ms
+     × ★取消必须发生在删除**之前**（先删再询问的反例会在这里转红） 1ms
+     × 确认条取消同样零副作用 1ms
+     × 确认 → 执行删除 + 关闭当前文档（回空白态） 1ms
+     × ★删除失败 → **不关闭**当前文档（保留文档与目的地，可重试） 2ms
+     × 删除非当前文档 → 不关闭当前文档（onClosed 只给当前文档） 1ms
+     ✓ 目录删除：确认条带 isDir（文案区分「及其全部内容」） 1ms
+     ✓ hasActiveComposition 反映真实组合事件（产品自身的通道） 1ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 13 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/delete-current-doc.test.tsx > ★F2 · ① 组合输入（IME） > ★组合结束后**自动续跑**：不脏 → 直接出确认条（用户不必再点一次）
+AssertionError: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/delete-current-doc.test.tsx:173:29
+    171|     });
+    172|     expect(h.flow().pending?.kind).toBe('confirm');
+    173|     expect(h.calls.deleted).toBe(0); // 只是到了确认条，还没删
+       |                             ^
+    174|   });
+    175|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/13]⎯
+
+ FAIL  tests/delete-current-doc.test.tsx > ★F2 · ① 组合输入（IME） > ★组合结束后若 dirty → 续跑到三选（不是直接删）
+AssertionError: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/delete-current-doc.test.tsx:190:29
+    188|     });
+    189|     expect(h.flow().pending?.kind).toBe('dirty');
+    190|     expect(h.calls.deleted).toBe(0);
+       |                             ^
+    191|   });
+    192|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/13]⎯
+
+ FAIL  tests/delete-current-doc.test.tsx > F2 · ③ dirty 三选 > dirty → 出三选（不直接删）
+AssertionError: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/delete-current-doc.test.tsx:240:29
+    238|     });
+    239|     expect(h.flow().pending).toMatchObject({ kind: 'dirty', name: '架构.…
+    240|     expect(h.calls.deleted).toBe(0);
+       |                             ^
+    241|   });
+    242|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/13]⎯
+
+ FAIL  tests/delete-current-doc.test.tsx > F2 · ③ dirty 三选 > 不脏 → 直接到确认条（不多问一次）
+AssertionError: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/delete-current-doc.test.tsx:249:29
+    247|     });
+    248|     expect(h.flow().pending?.kind).toBe('confirm');
+    249|     expect(h.calls.deleted).toBe(0); // 确认条本身不执行删除
+       |                             ^
+    250|   });
+    251|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/13]⎯
+
+ FAIL  tests/delete-current-doc.test.tsx > F2 · ③ dirty 三选 > 「保存后删除」：先保存成功 → 才删
+AssertionError: expected 2 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 2
+
+ ❯ tests/delete-current-doc.test.tsx:265:29
+    263|     });
+    264|     expect(h.calls.saved).toBe(1);
+    265|     expect(h.calls.deleted).toBe(1);
+       |                             ^
+    266|   });
+    267|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/13]⎯
+
+ FAIL  tests/delete-current-doc.test.tsx > F2 · ③ dirty 三选 > ★「保存后删除」但保存失败 → **不删**（可重试）
+AssertionError: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/delete-current-doc.test.tsx:282:29
+    280|     });
+    281|     expect(h.calls.saved).toBe(1);
+    282|     expect(h.calls.deleted).toBe(0); // 保存没成功就不删
+       |                             ^
+    283|   });
+    284|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/13]⎯
+
+ FAIL  tests/delete-current-doc.test.tsx > F2 · ③ dirty 三选 > ★「放弃修改并删除」：抑制自动保存（防「放弃后又自动保存一次」）
+AssertionError: expected 2 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 2
+
+ ❯ tests/delete-current-doc.test.tsx:298:29
+    296|     });
+    297|     expect(h.calls.suppressed).toBe(1);
+    298|     expect(h.calls.deleted).toBe(1);
+       |                             ^
+    299|     // 「放弃修改」分支**不得**走保存（否则文件会被重建 —— F2 负控第 2 条）
+    300|     expect(h.calls.saved).toBe(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/13]⎯
+
+ FAIL  tests/delete-current-doc.test.tsx > ★F2 · ④ 取消（零副作用） > 取消 → 不删除、不关闭、不保存、抑制计数为 0
+AssertionError: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/delete-current-doc.test.tsx:330:29
+    328|     });
+    329|     expect(h.flow().pending).toBeNull();
+    330|     expect(h.calls.deleted).toBe(0);
+       |                             ^
+    331|     expect(h.calls.closed).toBe(0);
+    332|     expect(h.calls.saved).toBe(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/13]⎯
+
+ FAIL  tests/delete-current-doc.test.tsx > ★F2 · ④ 取消（零副作用） > ★取消必须发生在删除**之前**（先删再询问的反例会在这里转红）
+AssertionError: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/delete-current-doc.test.tsx:343:29
+    341|     });
+    342|     // 到三选为止，删除函数一次都没被调用 —— 「文档仍可编辑且内容完整」的事实基础
+    343|     expect(h.calls.deleted).toBe(0);
+       |                             ^
+    344|     h.flow().choose('cancel');
+    345|     expect(h.calls.deleted).toBe(0);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/13]⎯
+
+ FAIL  tests/delete-current-doc.test.tsx > ★F2 · ④ 取消（零副作用） > 确认条取消同样零副作用
+AssertionError: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/delete-current-doc.test.tsx:357:29
+    355|       h.flow().choose('cancel');
+    356|     });
+    357|     expect(h.calls.deleted).toBe(0);
+       |                             ^
+    358|     expect(h.flow().pending).toBeNull();
+    359|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/13]⎯
+
+ FAIL  tests/delete-current-doc.test.tsx > ★F2 · ⑤ 确认删除后的收尾 > 确认 → 执行删除 + 关闭当前文档（回空白态）
+AssertionError: expected 2 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 2
+
+ ❯ tests/delete-current-doc.test.tsx:373:29
+    371|       await Promise.resolve();
+    372|     });
+    373|     expect(h.calls.deleted).toBe(1);
+       |                             ^
+    374|     expect(h.calls.closed).toBe(1);
+    375|     expect(h.flow().pending).toBeNull();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/13]⎯
+
+ FAIL  tests/delete-current-doc.test.tsx > ★F2 · ⑤ 确认删除后的收尾 > ★删除失败 → **不关闭**当前文档（保留文档与目的地，可重试）
+AssertionError: expected 2 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 2
+
+ ❯ tests/delete-current-doc.test.tsx:397:29
+    395|       await Promise.resolve();
+    396|     });
+    397|     expect(h.calls.deleted).toBe(1); // 尝试过
+       |                             ^
+    398|     expect(h.calls.closed).toBe(0); // 但**没有**关闭（关键：失败不得留下「已关闭」假象）
+    399|     expect(h.calls.notices).toContain('没有写入权限：请重新授权后重试。');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/13]⎯
+
+ FAIL  tests/delete-current-doc.test.tsx > ★F2 · ⑤ 确认删除后的收尾 > 删除非当前文档 → 不关闭当前文档（onClosed 只给当前文档）
+AssertionError: expected 2 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 2
+
+ ❯ tests/delete-current-doc.test.tsx:412:29
+    410|       await Promise.resolve();
+    411|     });
+    412|     expect(h.calls.deleted).toBe(1);
+       |                             ^
+    413|     expect(h.calls.closed).toBe(0);
+    414|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/13]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  13 failed | 8 passed (21)
+   Start at  11:09:35
+   Duration  4.13s (transform 1.99s, setup 0ms, import 2.62s, tests 55ms, environment 1.22s)
+

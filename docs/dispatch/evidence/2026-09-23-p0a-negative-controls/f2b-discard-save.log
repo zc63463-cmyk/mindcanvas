@@ -1,0 +1,75 @@
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./vite.config" without a file extension (vitest.config.ts:4:24). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas
+
+ ❯ tests/delete-current-doc.test.tsx (21 tests | 2 failed) 42ms
+     ✓ busy-physical → 提示且不进入任何后续分支、不删除 8ms
+     ✓ busy-lease → 提示「正在处理上一步操作」，零副作用 1ms
+     ✓ 组合进行中 → 不弹模态（confirm 不出现）、不删除，提示先结束输入 1ms
+     ✓ ★组合结束后**自动续跑**：不脏 → 直接出确认条（用户不必再点一次） 2ms
+     ✓ ★组合结束后若 dirty → 续跑到三选（不是直接删） 2ms
+     ✓ 组合暂缓不会因为「看了别的节点」而丢目标（组合结束仍续跑） 2ms
+     ✓ flush=failed → 中止删除、提示可修正，且**不**等待 compositionend 1ms
+     ✓ dirty → 出三选（不直接删） 2ms
+     ✓ 不脏 → 直接到确认条（不多问一次） 1ms
+     ✓ 「保存后删除」：先保存成功 → 才删 2ms
+     ✓ ★「保存后删除」但保存失败 → **不删**（可重试） 1ms
+     × ★「放弃修改并删除」：抑制自动保存（防「放弃后又自动保存一次」） 7ms
+     × 「放弃修改并删除」不触发 saveNow（文件不会被重建） 2ms
+     ✓ 取消 → 不删除、不关闭、不保存、抑制计数为 0 2ms
+     ✓ ★取消必须发生在删除**之前**（先删再询问的反例会在这里转红） 2ms
+     ✓ 确认条取消同样零副作用 3ms
+     ✓ 确认 → 执行删除 + 关闭当前文档（回空白态） 1ms
+     ✓ ★删除失败 → **不关闭**当前文档（保留文档与目的地，可重试） 1ms
+     ✓ 删除非当前文档 → 不关闭当前文档（onClosed 只给当前文档） 1ms
+     ✓ 目录删除：确认条带 isDir（文案区分「及其全部内容」） 0ms
+     ✓ hasActiveComposition 反映真实组合事件（产品自身的通道） 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/delete-current-doc.test.tsx > F2 · ③ dirty 三选 > ★「放弃修改并删除」：抑制自动保存（防「放弃后又自动保存一次」）
+AssertionError: expected +0 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 0
+
+ ❯ tests/delete-current-doc.test.tsx:297:32
+    295|       await Promise.resolve();
+    296|     });
+    297|     expect(h.calls.suppressed).toBe(1);
+       |                                ^
+    298|     expect(h.calls.deleted).toBe(1);
+    299|     // 「放弃修改」分支**不得**走保存（否则文件会被重建 —— F2 负控第 2 条）
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  tests/delete-current-doc.test.tsx > F2 · ③ dirty 三选 > 「放弃修改并删除」不触发 saveNow（文件不会被重建）
+AssertionError: expected 1 to be +0 // Object.is equality
+
+- Expected
++ Received
+
+- 0
++ 1
+
+ ❯ tests/delete-current-doc.test.tsx:314:27
+    312|       await Promise.resolve();
+    313|     });
+    314|     expect(h.calls.saved).toBe(savedBefore);
+       |                           ^
+    315|   });
+    316| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 19 passed (21)
+   Start at  11:09:48
+   Duration  2.48s (transform 1.23s, setup 0ms, import 1.59s, tests 42ms, environment 695ms)
+
