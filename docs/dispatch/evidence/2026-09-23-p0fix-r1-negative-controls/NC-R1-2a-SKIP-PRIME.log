@@ -1,5 +1,5 @@
 ══════════════════════════════════════════════════════════════════
-NC-R1-2a @ 2026-09-23 23:39:17
+NC-R1-2a @ 2026-09-24 04:28:21
 判别目标: primeWorkspaceAsset
 cwd route: apps/canvas (run tests inside the package; wrong cwd yields a fake red)
 ══════════════════════════════════════════════════════════════════
@@ -15,11 +15,11 @@ $ sha256(before) = 2fd76a1df2a7954dcefa94c4a3e4a73a50c3392ee76043e547e330ec0c515
   - import "./vite.config" without a file extension (vitest.config.ts:4:24). Add the file extension
 Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
  RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas
- ✓ tests/asset-insert-normalize.test.tsx (28 tests) 382ms
+ ✓ tests/asset-insert-normalize.test.tsx (28 tests) 301ms
  Test Files  1 passed (1)
       Tests  28 passed (28)
-   Start at  23:39:17
-   Duration  2.11s (transform 840ms, setup 0ms, import 1.11s, tests 382ms, environment 522ms)
+   Start at  04:28:21
+   Duration  3.22s (transform 1.91s, setup 0ms, import 2.29s, tests 301ms, environment 504ms)
 baseline_exit_code=0
 
 ─── [3] 备份 + 变异（只动生产代码，观测用例一并备份只读）───
@@ -35,35 +35,35 @@ nc_marker_count=1
   - import "./vite.config" without a file extension (vitest.config.ts:4:24). Add the file extension
 Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
  RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas
- ❯ tests/asset-insert-normalize.test.tsx (28 tests | 1 failed) 181ms
-     ✓ 磁盘已有 a.png（红）→ 归一化产出 assets/a 2.png，原文件**逐字节不变** 3ms
+ ❯ tests/asset-insert-normalize.test.tsx (28 tests | 1 failed) 527ms
+     ✓ 磁盘已有 a.png（红）→ 归一化产出 assets/a 2.png，原文件**逐字节不变** 6ms
      ✓ 同名冲突选「取消」→ refused，**磁盘零写入** 1ms
      ✓ 同名冲突显式「替换」→ 写原名（引用解析到新内容） 0ms
-     ✓ ③④ 重开解析：归一化后的引用在**新一次解析**里指向写入的字节 1ms
-     ✓ 未占用同名 → 直接用原名，不产生多余副本 1ms
+     ✓ ③④ 重开解析：归一化后的引用在**新一次解析**里指向写入的字节 0ms
+     ✓ 未占用同名 → 直接用原名，不产生多余副本 0ms
      ✓ **磁盘项**（id 即目标路径）→ 复用，不重复写（幂等） 0ms
-     ✓ **浏览器项**同名（id 也是 assets/a.png 但来自素材库）→ 必须走三选，不静默复用 1ms
+     ✓ **浏览器项**同名（id 也是 assets/a.png 但来自素材库）→ 必须走三选，不静默复用 0ms
      ✓ 落盘抛错 → refused(write-failed)（零副作用） 0ms
      ✓ 位图（无源码）+ 无工作区 → refused(no-workspace)，**不写任何新形态引用** 0ms
      ✓ 小 SVG 源码 + 无工作区 → 内联 data URL（自包含，脱离工作区仍显示） 7ms
-     ✓ builtin 项 → 归一化产出内联 data URL，**不是** builtin:<id> 2ms
-     ✓ builtin 项即使已挂载工作区也内联（三种语义同口径，不自相矛盾） 2ms
-     ✓ builtinInlineRef 只对 source=builtin 且有源码的项生效（不误捕普通资产） 1ms
+     ✓ builtin 项 → 归一化产出内联 data URL，**不是** builtin:<id> 6ms
+     ✓ builtin 项即使已挂载工作区也内联（三种语义同口径，不自相矛盾） 4ms
+     ✓ builtinInlineRef 只对 source=builtin 且有源码的项生效（不误捕普通资产） 3ms
      ✓ 净化失败的 SVG → 拒绝（不开绕过净化的旁路） 0ms
      ✓ fileNameOfAsset：assets/<rel> 取末段，其余取 name 0ms
      ✓ inlineRefOf：非 SVG 源码 → null（调用方按不支持处置） 0ms
-     ✓ writer.hasAsset 抛错 → 视为未占用（保守：宁可多写一份也不覆盖） 1ms
+     ✓ writer.hasAsset 抛错 → 视为未占用（保守：宁可多写一份也不覆盖） 0ms
      ✓ 写盘抛错 → refused(write-failed)（零副作用，调用方不得改文档） 0ms
-     ✓ (b) 选**浏览器库项**插入 → 落盘 assets/a 2.png 字节 = 蓝图 fixture（逐字节） 1ms
+     ✓ (b) 选**浏览器库项**插入 → 落盘 assets/a 2.png 字节 = 蓝图 fixture（逐字节） 0ms
      ✓ (b) 接线级：真实 WorkspaceAssetHost 下，选浏览器库项 → 落盘字节 = 蓝图（不是磁盘红图） 1ms
      ✓ 同一字符串 id 的两个来源 → 归一化结果不同（判别性：来源真的参与路由） 0ms
-     ✓ (e) 未挂载 → 浏览器库位图仍被拒绝；小 SVG 仍可内联（不回归） 2ms
-     ✓ (f) origin 不进文档引用：refId 只有 assets/<rel> / data: / builtin 三形态 0ms
-     × 写成功即触发宿主预热：写后立刻 resolveAssetState 命中（同一会话、无清单刷新） 4ms
-     ✓ 旧宿主（无 primeWorkspaceAsset）→ 行为同今：插入仍成功（可选面不破兼容） 0ms
+     ✓ (e) 未挂载 → 浏览器库位图仍被拒绝；小 SVG 仍可内联（不回归） 3ms
+     ✓ (f) origin 不进文档引用：refId 只有 assets/<rel> / data: / builtin 三形态 1ms
+     × 写成功即触发宿主预热：写后立刻 resolveAssetState 命中（同一会话、无清单刷新） 17ms
+     ✓ 旧宿主（无 primeWorkspaceAsset）→ 行为同今：插入仍成功（可选面不破兼容） 1ms
      ✓ 预热抛错 → 插入仍是 normalized（磁盘事实成立，best-effort） 0ms
-     ✓ 内置图标 + 子分支 → controller 收到的是 data: URL，不是 builtin:<id> 107ms
-     ✓ icon 语义同样内联（child 与 icon 同口径，不自相矛盾） 43ms
+     ✓ 内置图标 + 子分支 → controller 收到的是 data: URL，不是 builtin:<id>  310ms
+     ✓ icon 语义同样内联（child 与 icon 同口径，不自相矛盾） 164ms
 ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
  FAIL  tests/asset-insert-normalize.test.tsx > R1-2(g)：归一化写后同会话可解析（不经 listAssets） > 写成功即触发宿主预热：写后立刻 resolveAssetState 命中（同一会话、无清单刷新）
 AssertionError: expected 'unresolved' to be 'resolved' // Object.is equality
@@ -79,8 +79,8 @@ Received: "unresolved"
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
  Test Files  1 failed (1)
       Tests  1 failed | 27 passed (28)
-   Start at  23:39:20
-   Duration  1.75s (transform 798ms, setup 0ms, import 1.03s, tests 181ms, environment 454ms)
+   Start at  04:28:25
+   Duration  3.66s (transform 2.07s, setup 0ms, import 2.50s, tests 527ms, environment 495ms)
 red_exit_code=1   # 独立行捕获（不写进命令替换同一行）
 
 ─── [5] 还原（/tmp 备份 + cmp + sha256；禁用 git checkout——CRLF 工作树会被改写 EOL）───
@@ -93,11 +93,11 @@ $ sha256(after) = 2fd76a1df2a7954dcefa94c4a3e4a73a50c3392ee76043e547e330ec0c5154
   - import "./vite.config" without a file extension (vitest.config.ts:4:24). Add the file extension
 Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
  RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas
- ✓ tests/asset-insert-normalize.test.tsx (28 tests) 238ms
+ ✓ tests/asset-insert-normalize.test.tsx (28 tests) 319ms
  Test Files  1 passed (1)
       Tests  28 passed (28)
-   Start at  23:39:22
-   Duration  1.94s (transform 940ms, setup 0ms, import 1.21s, tests 238ms, environment 393ms)
+   Start at  04:28:29
+   Duration  3.63s (transform 1.90s, setup 0ms, import 2.32s, tests 319ms, environment 753ms)
 green_exit_code=0
 
 ══════════════════════════════════════════════════════════════════

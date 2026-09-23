@@ -1,5 +1,5 @@
 ══════════════════════════════════════════════════════════════════
-NC-R1-2b @ 2026-09-23 23:39:53
+NC-R1-2b @ 2026-09-24 04:28:47
 判别目标: resolveAssetState
 cwd route: packages/react (run tests inside the package; wrong cwd yields a fake red)
 ══════════════════════════════════════════════════════════════════
@@ -15,11 +15,11 @@ $ sha256(before) = d7a7334a4eb5efce4b4368cbfc4e6b003bfd900b978c3893a0307567bcef7
 
 ─── [2] 基线（未变异：全绿）───
  RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/packages/react
- ✓ tests/nodeg-asset.test.tsx (21 tests) 146ms
+ ✓ tests/nodeg-asset.test.tsx (21 tests) 170ms
  Test Files  1 passed (1)
       Tests  21 passed (21)
-   Start at  23:39:53
-   Duration  1.51s (transform 548ms, setup 0ms, import 752ms, tests 146ms, environment 515ms)
+   Start at  04:28:48
+   Duration  3.41s (transform 1.18s, setup 0ms, import 1.61s, tests 170ms, environment 1.41s)
 baseline_exit_code=0
 
 ─── [3] 备份 + 变异（只动生产代码，观测用例一并备份只读）───
@@ -84,8 +84,8 @@ AssertionError: expected [ Array(1) ] to include 'data:image/svg+xml;utf8,%3Csvg
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
  Test Files  1 failed (1)
       Tests  5 failed | 16 passed (21)
-   Start at  23:39:55
-   Duration  1.26s (transform 493ms, setup 0ms, import 653ms, tests 138ms, environment 371ms)
+   Start at  04:28:51
+   Duration  3.53s (transform 2.25s, setup 0ms, import 2.74s, tests 203ms, environment 473ms)
 red_exit_code=1   # 独立行捕获（不写进命令替换同一行）
 
 ─── [5] 还原（/tmp 备份 + cmp + sha256；禁用 git checkout——CRLF 工作树会被改写 EOL）───
@@ -96,11 +96,11 @@ $ sha256(after) = d7a7334a4eb5efce4b4368cbfc4e6b003bfd900b978c3893a0307567bcef76
 
 ─── [6] 回绿（passed 数）───
  RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/packages/react
- ✓ tests/nodeg-asset.test.tsx (21 tests) 149ms
+ ✓ tests/nodeg-asset.test.tsx (21 tests) 213ms
  Test Files  1 passed (1)
       Tests  21 passed (21)
-   Start at  23:39:56
-   Duration  1.38s (transform 530ms, setup 0ms, import 710ms, tests 149ms, environment 426ms)
+   Start at  04:28:55
+   Duration  3.47s (transform 1.66s, setup 0ms, import 1.98s, tests 213ms, environment 889ms)
 green_exit_code=0
 
 ══════════════════════════════════════════════════════════════════

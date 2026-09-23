@@ -1,5 +1,5 @@
 ══════════════════════════════════════════════════════════════════
-NC-R1-1 @ 2026-09-23 23:37:35
+NC-R1-1 @ 2026-09-24 04:28:17
 判别目标: origin === 'browser-idb'
 cwd route: packages/react (run tests inside the package; wrong cwd yields a fake red)
 ══════════════════════════════════════════════════════════════════
@@ -12,11 +12,11 @@ $ sha256(before) = 82b916c865ea5ac2c4709eb4095a80b133f0f7dc4198ff6c3b417b04b3ea7
 
 ─── [2] 基线（未变异：全绿）───
  RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/packages/react
- ✓ tests/workspace-asset-host.test.ts (44 tests) 12ms
+ ✓ tests/workspace-asset-host.test.ts (44 tests) 21ms
  Test Files  1 passed (1)
       Tests  44 passed (44)
-   Start at  23:37:35
-   Duration  674ms (transform 57ms, setup 0ms, import 70ms, tests 12ms, environment 483ms)
+   Start at  04:28:17
+   Duration  1.37s (transform 112ms, setup 0ms, import 128ms, tests 21ms, environment 1.02s)
 baseline_exit_code=0
 
 ─── [3] 备份 + 变异（只动生产代码，观测用例一并备份只读）───
@@ -31,12 +31,12 @@ nc_marker_count=1
      ✓ 已挂载 → written + store=workspace-assets + bytes（且 refId 是相对路径） 0ms
      ✓ 未挂载 → session-only（**不是** written：没有写入任何持久存储） 0ms
      ✓ 落盘抛错 → failed + E-IO（不再静默返回一个 item） 0ms
-     ✓ uploadAsset 薄包装：成功返回 item（既有调用方零改动），失败抛出 1ms
+     ✓ uploadAsset 薄包装：成功返回 item（既有调用方零改动），失败抛出 5ms
      ✓ 同名且未给 bytesEqual → 默认「保留两份」：新文件另存，原文件**逐字节不变** 1ms
-     ✓ 显式 replace → 覆盖原名（引用解析到新内容） 1ms
-     ✓ 取消 → **零写入**，清单不变，失败码是 E-ABORT 0ms
-     ✓ N2 负控锚点：同名同大小同时间戳但字节不同 → **仍然进三选**（不得静默替换） 0ms
-     ✓ 只有**显式** bytesEqual=true 才跳过三选（§4.5.2 允许的唯一「同内容」情形） 0ms
+     ✓ 显式 replace → 覆盖原名（引用解析到新内容） 9ms
+     ✓ 取消 → **零写入**，清单不变，失败码是 E-ABORT 1ms
+     ✓ N2 负控锚点：同名同大小同时间戳但字节不同 → **仍然进三选**（不得静默替换） 1ms
+     ✓ 只有**显式** bytesEqual=true 才跳过三选（§4.5.2 允许的唯一「同内容」情形） 1ms
      ✓ bytesEqual=false（本会话比对过且不同）→ 仍走保留两份 0ms
      ✓ 已挂载且已缓存 → resolved 0ms
      ✓ 未挂载 + assets/ 引用 → unresolved(no-scope)（**不是** missing，也不是站点根 URL） 0ms
@@ -48,19 +48,19 @@ nc_marker_count=1
      ✓ isCurrent：epoch 变化即不当前（这是「迟到结果被丢弃」的判据） 0ms
      ✓ R-07：同一 id 在两个作用域下缓存互不覆盖 0ms
      ✓ disposeScope 只释放该作用域的 URL，不影响其他作用域 0ms
-     ✓ disposeAll 归零（组件卸载路径） 0ms
+     ✓ disposeAll 归零（组件卸载路径） 3ms
      ✓ 同名替换 revoke 旧 URL（既有行为保留） 0ms
-     ✓ 磁盘有 assets/a.png（红）+ 浏览器库有 assets/a.png（蓝）→ 两条都在，id 相同但来源不同 0ms
+     ✓ 磁盘有 assets/a.png（红）+ 浏览器库有 assets/a.png（蓝）→ 两条都在，id 相同但来源不同 1ms
      ✓ 磁盘扫描项被标注 origin=workspace-assets（**读侧**标注，无需迁移） 0ms
      ✓ 未挂载工作区 → 退回 fallback 清单（浏览器库项仍在，来源保留） 0ms
-     × 浏览器库项（id 形如 assets/a.png）→ 委托 fallback 取字节，**不吃**磁盘 scope 缓存 3ms
-     ✓ 未标 origin 的项维持旧前缀判据（兼容面不变：未挂载 + assets/ → no-scope） 0ms
-     ✓ originOfItem / assetEntryKey：builtin 前缀与 assets/ 形态各归其位，其余**不猜** 0ms
-     ✓ 写进磁盘的文件名 → 预热后 resolveAssetState 立刻 resolved（不依赖 listAssets） 0ms
-     ✓ 幂等：重复预热不泄漏（同键先 revoke 旧值） 0ms
-     ✓ 无工作区 → false（**不抛**：磁盘事实成立，不得据此改判插入失败） 0ms
+     × 浏览器库项（id 形如 assets/a.png）→ 委托 fallback 取字节，**不吃**磁盘 scope 缓存 17ms
+     ✓ 未标 origin 的项维持旧前缀判据（兼容面不变：未挂载 + assets/ → no-scope） 3ms
+     ✓ originOfItem / assetEntryKey：builtin 前缀与 assets/ 形态各归其位，其余**不猜** 1ms
+     ✓ 写进磁盘的文件名 → 预热后 resolveAssetState 立刻 resolved（不依赖 listAssets） 3ms
+     ✓ 幂等：重复预热不泄漏（同键先 revoke 旧值） 1ms
+     ✓ 无工作区 → false（**不抛**：磁盘事实成立，不得据此改判插入失败） 1ms
      ✓ 磁盘上没有该文件 → false（不抛） 0ms
-     ✓ 读盘抛错 → false（不抛：预热是增强，不是插入的前置） 0ms
+     ✓ 读盘抛错 → false（不抛：预热是增强，不是插入的前置） 1ms
 ⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
  FAIL  tests/workspace-asset-host.test.ts > R1-1(b)(c)(d)：解析按**来源**路由，不按 id 前缀 > 浏览器库项（id 形如 assets/a.png）→ 委托 fallback 取字节，**不吃**磁盘 scope 缓存
 AssertionError: expected { kind: 'resolved', …(1) } to deeply equal { kind: 'resolved', …(1) }
@@ -81,8 +81,8 @@ AssertionError: expected { kind: 'resolved', …(1) } to deeply equal { kind: 'r
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
  Test Files  1 failed (1)
       Tests  1 failed | 43 passed (44)
-   Start at  23:37:36
-   Duration  525ms (transform 49ms, setup 0ms, import 69ms, tests 23ms, environment 340ms)
+   Start at  04:28:19
+   Duration  1.00s (transform 159ms, setup 0ms, import 193ms, tests 70ms, environment 523ms)
 red_exit_code=1   # 独立行捕获（不写进命令替换同一行）
 
 ─── [5] 还原（/tmp 备份 + cmp + sha256；禁用 git checkout——CRLF 工作树会被改写 EOL）───
@@ -96,8 +96,8 @@ $ sha256(after) = 82b916c865ea5ac2c4709eb4095a80b133f0f7dc4198ff6c3b417b04b3ea78
  ✓ tests/workspace-asset-host.test.ts (44 tests) 13ms
  Test Files  1 passed (1)
       Tests  44 passed (44)
-   Start at  23:37:37
-   Duration  511ms (transform 47ms, setup 0ms, import 61ms, tests 13ms, environment 335ms)
+   Start at  04:28:20
+   Duration  947ms (transform 111ms, setup 0ms, import 127ms, tests 13ms, environment 635ms)
 green_exit_code=0
 
 ══════════════════════════════════════════════════════════════════

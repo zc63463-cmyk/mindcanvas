@@ -1,24 +1,24 @@
 ══════════════════════════════════════════════════════════════════
-NC-R1-3 @ 2026-09-24 01:32:32
+NC-R1-3 @ 2026-09-24 04:27:21
 判别目标: syncedSourceRef.current = next.source
 cwd route: apps/canvas (run tests inside the package; wrong cwd yields a fake red)
 ══════════════════════════════════════════════════════════════════
 
 ─── [1] 定位（变异对象 = 生产代码；期望断言一字不改）───
 $ grep -n "syncedSourceRef.current = next.source" apps/canvas/src/hooks/useDocumentActions.ts   # (repo root)
-154:        syncedSourceRef.current = next.source;
-$ sha256(before) = 63d7bc782553467af55413e438ad4ff18d76ce61455127f98bea2a0f1f87eeb3
+182:        syncedSourceRef.current = next.source;
+$ sha256(before) = 04e8eaedfab8b92817d9dc4eea5f0b5a6324fc468f08a06213c081a7615ad6fe
 
 ─── [2] 基线（未变异：全绿）───
 (!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
   - import "./vite.config" without a file extension (vitest.config.ts:4:24). Add the file extension
 Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
  RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas
- ✓ tests/s2g-zero-window.test.tsx (5 tests) 17ms
+ ✓ tests/s2g-zero-window.test.tsx (5 tests) 29ms
  Test Files  1 passed (1)
       Tests  5 passed (5)
-   Start at  01:32:33
-   Duration  1.87s (transform 879ms, setup 0ms, import 1.16s, tests 17ms, environment 573ms)
+   Start at  04:27:21
+   Duration  3.25s (transform 2.16s, setup 0ms, import 2.55s, tests 29ms, environment 535ms)
 baseline_exit_code=0
 
 ─── [3] 备份 + 变异（只动生产代码，观测用例一并备份只读）───
@@ -83,25 +83,25 @@ null
 ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
  Test Files  1 failed (1)
       Tests  4 failed | 1 passed (5)
-   Start at  01:32:35
-   Duration  1.68s (transform 946ms, setup 0ms, import 1.21s, tests 30ms, environment 348ms)
+   Start at  04:27:25
+   Duration  2.52s (transform 1.49s, setup 0ms, import 1.84s, tests 37ms, environment 484ms)
 red_exit_code=1   # 独立行捕获（不写进命令替换同一行）
 
 ─── [5] 还原（/tmp 备份 + cmp + sha256；禁用 git checkout——CRLF 工作树会被改写 EOL）───
 prod_cmp_exit=0
 observed_test_cmp_exit=0
 nc_marker_after_restore=0
-$ sha256(after) = 63d7bc782553467af55413e438ad4ff18d76ce61455127f98bea2a0f1f87eeb3
+$ sha256(after) = 04e8eaedfab8b92817d9dc4eea5f0b5a6324fc468f08a06213c081a7615ad6fe
 
 ─── [6] 回绿（passed 数）───
   - import "./vite.config" without a file extension (vitest.config.ts:4:24). Add the file extension
 Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
  RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas
- ✓ tests/s2g-zero-window.test.tsx (5 tests) 20ms
+ ✓ tests/s2g-zero-window.test.tsx (5 tests) 31ms
  Test Files  1 passed (1)
       Tests  5 passed (5)
-   Start at  01:32:37
-   Duration  1.88s (transform 941ms, setup 0ms, import 1.22s, tests 20ms, environment 509ms)
+   Start at  04:27:28
+   Duration  2.93s (transform 1.83s, setup 0ms, import 2.20s, tests 31ms, environment 573ms)
 green_exit_code=0
 
 ══════════════════════════════════════════════════════════════════
