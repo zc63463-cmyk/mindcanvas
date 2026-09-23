@@ -36,8 +36,10 @@ import {
 import { runMigration } from './docIndexMigrate.js';
 import {
   type RelocateInput,
+  clearPartialSource,
   defaultIndexStore,
   defaultLineageId,
+  notePartialSource,
   relocateEntries,
   stripEphemeral,
 } from './docIndexSupport.js';
@@ -73,7 +75,6 @@ export class DocIndex {
   wrote = false;
   /** 最近一次投影写入失败（§6.3：该次变更不可回退，必须可查） */
   projectionFailed = false;
-  /** 已证明存在、且句柄可取的旧 `docId`（M9 双写的写侧输入） */
   /**
    * 惰性迁移进度：旧键 → **已处理过的条目标识集合**（随索引一起写盘）。
    *
@@ -375,6 +376,19 @@ export class DocIndex {
     this.history = this.history.filter((h) => h.key !== legacyKey);
   }
 
+  // F3：部分成功的源键登记。登记 → 投影逐行跳过该键（它是「仍在磁盘上的源文件」
+  // 在降级视图里的唯一代表，裁定 §3）；消费者的四条出路处理完那对文件后消解。
+  // 走公开存储端口 + `docIndexSupport.ts` 的公开纯函数，绕不过 N-1 回读校验。
+  notePartialSource(relPath: string): void {
+    notePartialSource(this.store, relPath);
+    this.project(true);
+  }
+
+  clearPartialSource(relPath: string): void {
+    clearPartialSource(this.store, relPath);
+    this.project(true);
+  }
+
   // ---------------------------------------------------------------- 迁移（M4–M9；M11 只衔接）
 
   /**
@@ -580,5 +594,3 @@ export class DocIndex {
       : [];
   }
 }
-
-

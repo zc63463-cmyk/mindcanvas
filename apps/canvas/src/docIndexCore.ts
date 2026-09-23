@@ -158,6 +158,58 @@ export function appendUnique(list: string[], v: string): string[] {
   return list.includes(v) ? list : [...list, v];
 }
 
+// ============================================================ 认领的身份形态（DS-10）
+
+/**
+ * 旧库里的**两种认领形态**（DS-10 判据 (b') 的「双形态」）：
+ *
+ * - **明文形态**：旧库行的 `id` 本身就等于认领键。来源是本应用自己的改名/移动
+ *   （`relocateEntries:80-83` 把旧 `docKey` 与旧 `relPath` **明文**追加进 `legacyKeys`）。
+ * - **前缀形态**：认领键写成 `` `${库键}#${旧键}` ``。来源是 M5/M6 迁移
+ *   （`docIndexMigrate.ts:180,246`：`legacyKeys: ['mindcanvas.library.v1#'+key]`）。
+ *
+ * 为什么必须两种都认（实读实证，不是防御性编码）：`projectStarred` 原先只做明文查找，
+ * 于是「M5 迁入后取消收藏且从未改名」的旧键一律被**保守保留**——前缀形态永远不命中。
+ * 两个形态是同一件事的两种写法，认领助手必须同时表达，否则两条迁移路径的语义会分叉。
+ */
+export type ClaimForm = { kind: 'plain'; value: string } | { kind: 'prefixed'; prefix: string; value: string };
+
+/** 把「库键 + 旧键」的两种形态展平成一维待查列表（前缀形态在前，命中即短路） */
+export function claimForms(prefix: string, value: string): string[] {
+  return [`${prefix}#${value}`, value];
+}
+
+/**
+ * 这个旧键是否被任一认证形态认领过？
+ *
+ * `legacyKeys` 是只追加的（`appendUnique` 纪律），故这里只做「包含」判定，
+ * 不解释顺序、不做前缀解析——形态由调用方显式给出（见 `ClaimForm`）。
+ */
+export function isClaimed(legacyKeys: readonly string[], forms: readonly string[]): boolean {
+  return forms.some((f) => legacyKeys.includes(f));
+}
+
+/** 一条旧库行是否**已被某索引条目认领**（双形态；`prefix` = 该行所属旧库的键） */
+export function rowClaimed(
+  docs: ReadonlyArray<{ legacyKeys: readonly string[] }>,
+  prefix: string,
+  rowKey: string,
+): boolean {
+  const forms = claimForms(prefix, rowKey);
+  return docs.some((e) => isClaimed(e.legacyKeys, forms));
+}
+
+/**
+ * 前缀形态的旧键还原成明文（`mindcanvas.library.v1#研发/架构.mm.md` → `研发/架构.mm.md`）。
+ *
+ * 只切**第一个** `#`：旧库键自身不含 `#`，而旧键（相对路径 / 文件名）可以含。
+ * 不匹配前缀时返回 `null`（调用方据此知道这不是本库的认领键）。
+ */
+export function stripClaimPrefix(prefix: string, key: string): string | null {
+  const head = `${prefix}#`;
+  return key.startsWith(head) ? key.slice(head.length) : null;
+}
+
 /** 主键 → 显示名（末段文件名） */
 export function nameOf(docKey: string): string {
   const idx = docKey.lastIndexOf('::');

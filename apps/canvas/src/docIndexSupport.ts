@@ -111,3 +111,62 @@ export function relocateEntries(
 function appendUnique(list: readonly string[], value: string): string[] {
   return list.includes(value) ? [...list] : [...list, value];
 }
+
+// ============================================================ F3 未消解 partial 源键（DS-10 §3）
+
+/**
+ * 索引层的**读写存储端口**（生产 = localStorage；测试可注入故障）。
+ * 与 `docIndexCore.IndexStore` 同形——这里独立声明是为了让本模块
+ * （以及消费它的投影）不必反向依赖 core 的类型面。
+ */
+export interface PartialResolutionStore {
+  get(key: string): string | null;
+  set(key: string, value: string): void;
+}
+
+/**
+ * 未消解的 partial 源键存放的键。
+ *
+ * 与 `DOC_INDEX_KEY` 同为**索引键**（不是旧库键）——故投影**不**重写它、
+ * N-1 回读校验也不必为它加单独口径；它是「编排层已知事实」的持久化，
+ * 而不是降级视图的一部分。
+ */
+export const PARTIAL_SOURCES_KEY = 'mindcanvas.docindex.partial-sources';
+
+/** 读出全部未消解的 partial 源键（读不出/损坏 → 空，不猜） */
+export function unresolvedPartialSources(storage: PartialResolutionStore): string[] {
+  try {
+    const raw = storage.get(PARTIAL_SOURCES_KEY);
+    if (raw === null) return [];
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((k): k is string => typeof k === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+/** 登记一个未消解的 partial 源键（幂等；形态 = 旧库行的 `id`，即 `relPath`） */
+export function notePartialSource(storage: PartialResolutionStore, key: string): void {
+  const cur = unresolvedPartialSources(storage);
+  if (cur.includes(key)) return;
+  try {
+    storage.set(PARTIAL_SOURCES_KEY, JSON.stringify([...cur, key]));
+  } catch {
+    // 写失败 → 退化为「未登记」。方向如实记：不登记则投影不为它保留代表，
+    // 但也不误删磁盘数据（(b') 只回收旧库行，不动磁盘）。
+  }
+}
+
+/** 消解一个 partial 源键（消费者处理完那一对文件后调用） */
+export function clearPartialSource(storage: PartialResolutionStore, key: string): void {
+  const cur = unresolvedPartialSources(storage);
+  if (!cur.includes(key)) return;
+  try {
+    storage.set(
+      PARTIAL_SOURCES_KEY,
+      JSON.stringify(cur.filter((k) => k !== key)),
+    );
+  } catch {
+    // 同上：写失败则保持「未消解」，偏向保留代表。
+  }
+}
