@@ -185,16 +185,12 @@ function mountOrchestration(host: SafeWorkspaceHost, overrides?: {
       session,
       host,
       readDoc: () => ({ ...state }),
+      // 注意：本回调**不**自己重绑目的地 —— 重绑是编排层（`useFileOpOrchestration.finish`）
+      // 的职责。生产接线里 Stage 只在这里同步 `doc.handle` 与 `workspacePath`（三落点中的两个），
+      // 会话目的地那一路由编排层直接调用 `session.rebindDestination`。
+      // 这样「目的地是否真的换到新路径」才是被实现保护的事实（NC3 的可转红点）。
       onRebound: (file) => {
         rebound.push(file.path);
-        // 生产接线：Stage 在此处同步 session 目的地 + doc.handle + workspacePath（见 MindmapStage）
-        session.rebindDestination({
-          kind: 'disk',
-          scopeId: 'ws:test',
-          relPath: file.path,
-          name: file.name,
-          handle: file.handle,
-        });
       },
       onAfterRelease: () => {
         afterRelease += 1;
@@ -241,6 +237,22 @@ describe('F1 · 当前文档改名编排', () => {
     expect(h.rebound).toEqual(['架构设计.mm.md']);
     // 目的地已换：后续保存不会写回旧名字
     const info = h.session.getDestinationInfo();
+    expect(info.relPath).toBe('架构设计.mm.md');
+    expect(info.name).toBe('架构设计.mm.md');
+    expect(h.session.getDestination()?.name).toBe('架构设计.mm.md');
+  });
+
+  it('★F1 负控①：目的地**必须**由编排层重绑（不是靠 Stage 顺手做的）', async () => {
+    // 这条是本负控的可转红点：把编排层 `finish` 里的 `session.rebindDestination`
+    // 去掉后，下面的断言必须失败（旧实现 R-01 = 目的地仍指旧句柄）。
+    // 关键：夹具的 `onRebound` **不**自己重绑 —— 那样断言就只能观察到夹具行为，
+    // 实现被中性化也不会转红（第一轮 NC3 实测 exit 0 就是这个原因）。
+    const host = makeFakeWorkspace([{ name: '架构.mm.md', content: '# 正文' }]);
+    const h = mountOrchestration(host);
+    await h.view.result.current.renameCurrent(host.fileAt('架构.mm.md'), '架构设计.mm.md');
+    // 会话目的地已换：后续保存不会写回旧名字
+    const info = h.session.getDestinationInfo();
+    expect(info.kind).toBe('disk');
     expect(info.relPath).toBe('架构设计.mm.md');
     expect(info.name).toBe('架构设计.mm.md');
     expect(h.session.getDestination()?.name).toBe('架构设计.mm.md');

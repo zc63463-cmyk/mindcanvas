@@ -145,16 +145,9 @@ function mountController(
       session,
       host,
       readDoc: () => ({ durable: true, current: true, dirty: state.dirty }),
+      // 不自己重绑目的地（那是编排层的职责）；只同步 Stage 侧的 `workspacePath`。
+      // 不更新它，`copyHasNewChanges` 就永远看到旧路径 —— L3 保护判据会静默失效。
       onRebound: (file) => {
-        session.rebindDestination({
-          kind: 'disk',
-          scopeId: 'ws:test',
-          relPath: file.path,
-          name: file.name,
-          handle: file.handle,
-        });
-        // 生产接线：Stage 在此同步 `workspacePath`（当前文档的路径随重绑一起更新）。
-        // 不更新它，`copyHasNewChanges` 就永远看到旧路径 —— L3 保护判据会静默失效。
         state.currentPath = file.path;
       },
       onAfterRelease: () => {
