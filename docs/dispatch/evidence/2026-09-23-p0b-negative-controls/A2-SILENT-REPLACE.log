@@ -1,7 +1,7 @@
 
  RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/packages/react
 
- ❯ tests/workspace-asset-host.test.ts (33 tests | 4 failed) 11ms
+ ❯ tests/workspace-asset-host.test.ts (33 tests | 4 failed) 10ms
      ✓ 位图 → 落盘 1ms
      ✓ 超过 15KB 的 SVG → 落盘 0ms
      ✓ 小 SVG → 不落盘（保留内联，可自包含写进 .mm.md） 0ms
@@ -16,7 +16,7 @@
      ✓ 已挂载 → written + store=workspace-assets + bytes（且 refId 是相对路径） 0ms
      ✓ 未挂载 → session-only（**不是** written：没有写入任何持久存储） 0ms
      ✓ 落盘抛错 → failed + E-IO（不再静默返回一个 item） 0ms
-     ✓ uploadAsset 薄包装：成功返回 item（既有调用方零改动），失败抛出 1ms
+     ✓ uploadAsset 薄包装：成功返回 item（既有调用方零改动），失败抛出 0ms
      × 同名且未给 bytesEqual → 默认「保留两份」：新文件另存，原文件**逐字节不变** 3ms
      ✓ 显式 replace → 覆盖原名（引用解析到新内容） 0ms
      × 取消 → **零写入**，清单不变，失败码是 E-ABORT 1ms
@@ -105,6 +105,6 @@ Received: "assets/a.png"
 
  Test Files  1 failed (1)
       Tests  4 failed | 29 passed (33)
-   Start at  15:45:17
-   Duration  425ms (transform 38ms, setup 0ms, import 48ms, tests 11ms, environment 279ms)
+   Start at  16:23:38
+   Duration  376ms (transform 31ms, setup 0ms, import 40ms, tests 10ms, environment 256ms)
 

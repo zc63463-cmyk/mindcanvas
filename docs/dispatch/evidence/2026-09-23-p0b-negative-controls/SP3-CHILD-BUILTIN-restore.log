@@ -4,10 +4,10 @@ Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
 
  RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas
 
- ✓ tests/asset-insert-normalize.test.tsx (20 tests) 141ms
+ ✓ tests/asset-insert-normalize.test.tsx (20 tests) 132ms
 
  Test Files  1 passed (1)
       Tests  20 passed (20)
-   Start at  15:45:28
-   Duration  1.14s (transform 491ms, setup 0ms, import 638ms, tests 141ms, environment 303ms)
+   Start at  16:23:49
+   Duration  1.16s (transform 521ms, setup 0ms, import 672ms, tests 132ms, environment 282ms)
 

@@ -5,6 +5,6 @@
 
  Test Files  1 passed (1)
       Tests  33 passed (33)
-   Start at  15:45:14
-   Duration  464ms (transform 43ms, setup 0ms, import 53ms, tests 7ms, environment 327ms)
+   Start at  16:23:36
+   Duration  383ms (transform 33ms, setup 0ms, import 42ms, tests 7ms, environment 259ms)
 

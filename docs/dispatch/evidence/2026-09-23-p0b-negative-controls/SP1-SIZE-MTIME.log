@@ -57,6 +57,6 @@ Received: "assets/a.png"
 
  Test Files  1 failed (1)
       Tests  1 failed | 32 passed (33)
-   Start at  15:45:22
-   Duration  406ms (transform 33ms, setup 0ms, import 43ms, tests 9ms, environment 270ms)
+   Start at  16:23:43
+   Duration  391ms (transform 33ms, setup 0ms, import 42ms, tests 9ms, environment 266ms)
 

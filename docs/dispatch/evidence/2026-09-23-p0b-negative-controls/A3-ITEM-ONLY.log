@@ -1,15 +1,15 @@
 
  RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/packages/react
 
- ❯ tests/idb-asset-host.test.ts (15 tests | 1 failed) 12ms
-     ✓ uploadAsset → 清单含新项 + resolveAsset 返回 blob URL（会话内） 4ms
+ ❯ tests/idb-asset-host.test.ts (15 tests | 1 failed) 11ms
+     ✓ uploadAsset → 清单含新项 + resolveAsset 返回 blob URL（会话内） 3ms
      ✓ 持久化：新实例（同 DB）listAssets 仍含上传资产，resolveAsset 同步可解析 1ms
      ✓ 同名上传 → 替换语义（清单不重复，resolve 指向新内容） 1ms
      ✓ listAssets 幂等：重复调用不重复预热/不重复合并静态清单 0ms
      ✓ hasAsset：未知 id → false 0ms
-     ✓ 小 SVG 上传 → item.svg 带源码；新实例 listAssets 仍能取回（跨会话） 0ms
+     ✓ 小 SVG 上传 → item.svg 带源码；新实例 listAssets 仍能取回（跨会话） 1ms
      ✓ 位图（png）不存 svg 源码（避免库膨胀 + 它当不了 currentColor 图标） 0ms
-     ✓ 超过 15KB 的 SVG 不存源码（体积门槛） 0ms
+     ✓ 超过 15KB 的 SVG 不存源码（体积门槛） 1ms
      ✓ 小 SVG 上传 → item.svg 有源码（换宿主不丢内联能力） 0ms
      ✓ 写入成功 → written + store=browser-idb + bytes + refId 0ms
      × putRecord 失败 → session-only/idb-failed（**不是**静默的成功 item） 3ms
@@ -39,6 +39,6 @@ Received: "written"
 
  Test Files  1 failed (1)
       Tests  1 failed | 14 passed (15)
-   Start at  15:45:18
-   Duration  413ms (transform 36ms, setup 0ms, import 62ms, tests 12ms, environment 269ms)
+   Start at  16:23:40
+   Duration  392ms (transform 36ms, setup 0ms, import 57ms, tests 11ms, environment 257ms)
 

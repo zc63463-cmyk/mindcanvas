@@ -18,7 +18,7 @@
      ✓ 落盘抛错 → failed + E-IO（不再静默返回一个 item） 0ms
      ✓ uploadAsset 薄包装：成功返回 item（既有调用方零改动），失败抛出 0ms
      ✓ 同名且未给 bytesEqual → 默认「保留两份」：新文件另存，原文件**逐字节不变** 0ms
-     ✓ 显式 replace → 覆盖原名（引用解析到新内容） 0ms
+     ✓ 显式 replace → 覆盖原名（引用解析到新内容） 1ms
      ✓ 取消 → **零写入**，清单不变，失败码是 E-ABORT 0ms
      ✓ N2 负控锚点：同名同大小同时间戳但字节不同 → **仍然进三选**（不得静默替换） 0ms
      ✓ 只有**显式** bytesEqual=true 才跳过三选（§4.5.2 允许的唯一「同内容」情形） 0ms
@@ -60,6 +60,6 @@ AssertionError: expected true to be false // Object.is equality
 
  Test Files  1 failed (1)
       Tests  1 failed | 32 passed (33)
-   Start at  15:45:13
-   Duration  576ms (transform 52ms, setup 0ms, import 65ms, tests 10ms, environment 416ms)
+   Start at  16:23:35
+   Duration  388ms (transform 37ms, setup 0ms, import 49ms, tests 10ms, environment 256ms)
 

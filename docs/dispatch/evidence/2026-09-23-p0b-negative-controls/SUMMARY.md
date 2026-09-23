@@ -12,7 +12,7 @@
 | # | 编号 | 中性化了什么 | 落盘校验 | 转红退出码 | 转红读数 | 回绿读数 | 还原 sha256 |
 |---|---|---|---|---|---|---|---|
 | 1 | A1-LATE | 去掉「迟到结果」的 epoch/scope 校验（`isCurrent` 恒 `true`） | `NEUTRALIZED(A1-LATE` ×1 | **1** | 1 failed / 32 passed (33) | 33 passed | `5dd03724` |
-| 2 | A1-CACHEKEY | 缓存键退回只有 `id`（R-07 旧实现，无作用域前缀） | `NEUTRALIZED(A1-CACHEKEY` ×1 | **1** | 2 failed / 31 passed (33) | 33 passed | `2d3a6898` |
+| 2 | A1-CACHEKEY | 缓存键退回只有 `id`（R-07 旧实现，无作用域前缀） | `NEUTRALIZED(A1-CACHEKEY` ×1 | **1** | 2 failed / 31 passed (33) | 33 passed | `8f3b331c` |
 | 3 | A2-SILENT-REPLACE | 同名静默替换（删掉整个三选分支，直接按原名覆盖） | `NEUTRALIZED(A2-SILENT-REPLACE` ×1 | **1** | 4 failed / 29 passed (33) | 33 passed | `5dd03724` |
 | 4 | A3-ITEM-ONLY | 沿用「只返回 `AssetItem`」的现状接口（IDB 写失败也报 `written`） | `NEUTRALIZED(A3-ITEM-ONLY` ×1 | **1** | 1 failed / 14 passed (15) | 15 passed | `d461b20f` |
 | 5 | A3-SESSION-AS-SAVED | 把 `session-only` 显示为「已保存」 | `NEUTRALIZED(A3-SESSION-AS-SAVED` ×1 | **1** | 1 failed / 19 passed (20) | 20 passed | `d8f27b35` |
@@ -45,3 +45,11 @@
 - 退出码单独一行捕获（`code=$?`，不与命令替换混写 —— 本机 bash 3.2 会污染 `$?`）；
 - 还原用备份 + `cmp` 字节校验，记录还原后 sha256 与回绿 passed 数；
 - **负控与正例使用同一份正确期望**：每条只改生产实现，测试文件的期望一字未动。
+
+## 重跑记录（源码改动后）
+
+施工后期定位 mode-guard 调度脆弱性时，曾误用 `git checkout` 回滚 `SidePanels.tsx` /
+`MindmapStage.tsx`，随后逐项恢复（见提交 `fc13822`）。**源码改动后本目录全部 8 条重跑**，
+读数与上表一致（转红退出码均 1、回绿均 0）；A1-CACHEKEY 的还原 sha256 因
+`assetHost.ts` 追加了 `BROWSER_SCOPE_KEY` 常量而从 `2d3a6898` 变为 `8f3b331c`，
+其余 7 条 sha256 不变。上表为**重跑后**的最终读数。
