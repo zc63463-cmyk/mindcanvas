@@ -1,6 +1,6 @@
-[snapshot] 产物构建于 2026-09-24 01:35:00 · 引用的入口 = main-CdbTS2qe.js
-[snapshot] 最新源码 2026-09-24 01:32:54 · HEAD 提交 2026-09-23 22:21:20
-[snapshot] 页面实际加载 = main-CdbTS2qe.js
+[snapshot] 产物构建于 2026-09-24 04:21:41 · 引用的入口 = main-DMVIuY4l.js
+[snapshot] 最新源码 2026-09-24 04:12:30 · HEAD 提交 2026-09-24 04:21:22
+[snapshot] 页面实际加载 = main-DMVIuY4l.js
 {
   "script": "verify-f1f2-browser",
   "base": "http://localhost:5175",
@@ -50,8 +50,8 @@
     "F1③.5 租约期间**零新增写入**（Ctrl+S 未触发任何写盘；旧文件内容不变）": {
       "ok": true,
       "detail": {
-        "writesAtLeaseStart": 2,
-        "duringWrites": 2,
+        "writesAtLeaseStart": 3,
+        "duringWrites": 3,
         "sameText": true,
         "note": "基线在点「保留两份」之后、第 1 次 Ctrl+S 之前采样：此时改名的「写目标/删源」尚被 5s 延迟挂起，故该窗口内任何写入都只能来自 Ctrl+S。"
       }
@@ -128,8 +128,8 @@
   "dirtyDuring": false,
   "stateAtLeaseStart": "✓ 已保存",
   "dirtyAtLeaseStart": false,
-  "writesAtLeaseStart": 2,
-  "duringWrites": 2,
+  "writesAtLeaseStart": 3,
+  "duringWrites": 3,
   "textAtLeaseStart": "# F1 根节点\n\n## 甲\n\n## 乙\n",
   "listAfterRename": [
     "f1-renamed.mm.md"
@@ -159,7 +159,7 @@
     "hasFm": true,
     "hasFmConfirm": false,
     "hasConflict": false,
-    "bodySnippet": " mindcanvas·经典贴纸玻璃◆ 插件已载✓ 已保存适配视图图库关系○ 浏览模式↶↷保存zhong甲乙帧 epoch2节点3 / 3连线2LODfull后端svg裁剪计算0.10 ms● 调度：dirty-flag 单帧（空闲零 rAF）f2.mm.md●新建打开最近保存另存为导出导出 PNG文件管理FLIPCARD点击画布节点查看笔记正面：节点摘要NOTE（该节点无笔记） .ring { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 60; } /* ② 二级环：子环在外圈（z 58 = 主环之下），一级降透明（非当前级） */ .sub-ring { z-index: 58; } .ring-dim { opacity: .3; } .ring-in {"
+    "bodySnippet": " mindcanvas·经典贴纸玻璃◆ 插件已载✓ 已保存适配视图图库关系○ 浏览模式↶↷保存zhong甲乙帧 epoch2节点3 / 3连线2LODfull后端svg裁剪计算0.00 ms● 调度：dirty-flag 单帧（空闲零 rAF）f2.mm.md●新建打开最近保存另存为导出导出 PNG文件管理FLIPCARD点击画布节点查看笔记正面：节点摘要NOTE（该节点无笔记） .ring { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 60; } /* ② 二级环：子环在外圈（z 58 = 主环之下），一级降透明（非当前级） */ .sub-ring { z-index: 58; } .ring-dim { opacity: .3; } .ring-in {"
   },
   "dialogs": [],
   "result": "PASS",

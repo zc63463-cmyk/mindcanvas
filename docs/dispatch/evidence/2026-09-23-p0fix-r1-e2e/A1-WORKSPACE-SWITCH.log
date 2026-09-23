@@ -1,6 +1,6 @@
-[snapshot] 产物构建于 2026-09-24 01:35:00 · 引用的入口 = main-CdbTS2qe.js
-[snapshot] 最新源码 2026-09-24 01:32:54 · HEAD 提交 2026-09-23 22:21:20
-[snapshot] 页面实际加载 = main-CdbTS2qe.js
+[snapshot] 产物构建于 2026-09-24 04:21:41 · 引用的入口 = main-DMVIuY4l.js
+[snapshot] 最新源码 2026-09-24 04:12:30 · HEAD 提交 2026-09-24 04:21:22
+[snapshot] 页面实际加载 = main-DMVIuY4l.js
 {
   "script": "verify-a1-workspace-switch",
   "base": "http://localhost:5175",
@@ -20,7 +20,7 @@
         "card": {
           "name": "a.png",
           "store": "workspace-assets",
-          "src": "blob:http://localhost:5175/7424e216-9a55-4745-a5e7-b68d36598ead",
+          "src": "blob:http://localhost:5175/a19f213c-f6d2-4943-b2b3-27971446542c",
           "naturalWidth": 1
         }
       }
@@ -36,7 +36,7 @@
           "b": 0,
           "w": 1,
           "h": 1,
-          "src": "blob:http://localhost:5175/7424e216-9a55-4745-a5e7-b68d36598ead"
+          "src": "blob:http://localhost:5175/a19f213c-f6d2-4943-b2b3-27971446542c"
         }
       }
     },
@@ -51,14 +51,14 @@
           "b": 0,
           "w": 1,
           "h": 1,
-          "src": "blob:http://localhost:5175/7424e216-9a55-4745-a5e7-b68d36598ead"
+          "src": "blob:http://localhost:5175/a19f213c-f6d2-4943-b2b3-27971446542c"
         }
       }
     },
     "A1.4 挂载 A：src 是作用域内 blob URL": {
       "ok": true,
       "detail": {
-        "srcA": "blob:http://localhost:5175/7424e216-9a55-4745-a5e7-b68d36598ead"
+        "srcA": "blob:http://localhost:5175/a19f213c-f6d2-4943-b2b3-27971446542c"
       }
     },
     "A1.5 工作区 B 磁盘含 assets/a.png（同名不同工作区）": {
@@ -76,7 +76,7 @@
         "card": {
           "name": "a.png",
           "store": "workspace-assets",
-          "src": "blob:http://localhost:5175/63abb505-5c21-4103-aa58-1cb229604249",
+          "src": "blob:http://localhost:5175/96ab2b5f-77de-4371-a10d-2f703b006626",
           "naturalWidth": 1
         }
       }
@@ -92,7 +92,7 @@
           "b": 255,
           "w": 1,
           "h": 1,
-          "src": "blob:http://localhost:5175/63abb505-5c21-4103-aa58-1cb229604249"
+          "src": "blob:http://localhost:5175/96ab2b5f-77de-4371-a10d-2f703b006626"
         }
       }
     },
@@ -107,22 +107,22 @@
           "b": 255,
           "w": 1,
           "h": 1,
-          "src": "blob:http://localhost:5175/63abb505-5c21-4103-aa58-1cb229604249"
+          "src": "blob:http://localhost:5175/96ab2b5f-77de-4371-a10d-2f703b006626"
         }
       }
     },
     "A1.9 切到 B：同名 a.png 的解析 URL 与 A 的**不同**（作用域不互相覆盖，R-07）": {
       "ok": true,
       "detail": {
-        "srcA": "blob:http://localhost:5175/7424e216-9a55-4745-a5e7-b68d36598ead",
-        "srcB": "blob:http://localhost:5175/63abb505-5c21-4103-aa58-1cb229604249"
+        "srcA": "blob:http://localhost:5175/a19f213c-f6d2-4943-b2b3-27971446542c",
+        "srcB": "blob:http://localhost:5175/96ab2b5f-77de-4371-a10d-2f703b006626"
       }
     },
     "A1.10 切回 A：解析 URL 不是 B 的（B 的迟到/陈旧结果未回填错图）": {
       "ok": true,
       "detail": {
-        "backSrc": "blob:http://localhost:5175/b9e1e7b1-017b-4acf-b073-15ad5771e594",
-        "srcB": "blob:http://localhost:5175/63abb505-5c21-4103-aa58-1cb229604249"
+        "backSrc": "blob:http://localhost:5175/e36edda1-967c-4232-a4a3-1bfc65990e25",
+        "srcB": "blob:http://localhost:5175/96ab2b5f-77de-4371-a10d-2f703b006626"
       }
     },
     "A1.11 切回 A：像素**不等于蓝色**（没有把 B 的蓝图当成本作用域的图）": {
@@ -136,7 +136,7 @@
           "b": 142,
           "w": 1,
           "h": 1,
-          "src": "blob:http://localhost:5175/b9e1e7b1-017b-4acf-b073-15ad5771e594"
+          "src": "blob:http://localhost:5175/e36edda1-967c-4232-a4a3-1bfc65990e25"
         }
       }
     },
@@ -178,7 +178,7 @@
     "card": {
       "name": "a.png",
       "store": "workspace-assets",
-      "src": "blob:http://localhost:5175/7424e216-9a55-4745-a5e7-b68d36598ead",
+      "src": "blob:http://localhost:5175/a19f213c-f6d2-4943-b2b3-27971446542c",
       "naturalWidth": 1
     },
     "probe": {
@@ -189,14 +189,14 @@
       "b": 0,
       "w": 1,
       "h": 1,
-      "src": "blob:http://localhost:5175/7424e216-9a55-4745-a5e7-b68d36598ead"
+      "src": "blob:http://localhost:5175/a19f213c-f6d2-4943-b2b3-27971446542c"
     }
   },
   "inB": {
     "card": {
       "name": "a.png",
       "store": "workspace-assets",
-      "src": "blob:http://localhost:5175/63abb505-5c21-4103-aa58-1cb229604249",
+      "src": "blob:http://localhost:5175/96ab2b5f-77de-4371-a10d-2f703b006626",
       "naturalWidth": 1
     },
     "probe": {
@@ -207,16 +207,16 @@
       "b": 255,
       "w": 1,
       "h": 1,
-      "src": "blob:http://localhost:5175/63abb505-5c21-4103-aa58-1cb229604249"
+      "src": "blob:http://localhost:5175/96ab2b5f-77de-4371-a10d-2f703b006626"
     }
   },
-  "srcA": "blob:http://localhost:5175/7424e216-9a55-4745-a5e7-b68d36598ead",
-  "srcB": "blob:http://localhost:5175/63abb505-5c21-4103-aa58-1cb229604249",
+  "srcA": "blob:http://localhost:5175/a19f213c-f6d2-4943-b2b3-27971446542c",
+  "srcB": "blob:http://localhost:5175/96ab2b5f-77de-4371-a10d-2f703b006626",
   "backInA": {
     "card": {
       "name": "a.png",
       "store": "workspace-assets",
-      "src": "blob:http://localhost:5175/b9e1e7b1-017b-4acf-b073-15ad5771e594",
+      "src": "blob:http://localhost:5175/e36edda1-967c-4232-a4a3-1bfc65990e25",
       "naturalWidth": 1
     },
     "probe": {
@@ -227,7 +227,7 @@
       "b": 142,
       "w": 1,
       "h": 1,
-      "src": "blob:http://localhost:5175/b9e1e7b1-017b-4acf-b073-15ad5771e594"
+      "src": "blob:http://localhost:5175/e36edda1-967c-4232-a4a3-1bfc65990e25"
     }
   },
   "storesSeen": [
