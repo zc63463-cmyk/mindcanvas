@@ -1,0 +1,105 @@
+══════════════════════════════════════════════════════════════════
+NC-R1-1 @ 2026-09-23 23:37:35
+判别目标: origin === 'browser-idb'
+cwd route: packages/react (run tests inside the package; wrong cwd yields a fake red)
+══════════════════════════════════════════════════════════════════
+
+─── [1] 定位（变异对象 = 生产代码；期望断言一字不改）───
+$ grep -n "origin === 'browser-idb'" packages/react/src/chrome/workspaceAssetHost.ts   # (repo root)
+186:   * `origin === 'browser-idb'` 的项即使 id 是 `assets/` 形态，字节也在浏览器素材库里
+196:    if (origin === 'browser-idb') return this.originatedBy('browser-idb', item);
+$ sha256(before) = 82b916c865ea5ac2c4709eb4095a80b133f0f7dc4198ff6c3b417b04b3ea7833
+
+─── [2] 基线（未变异：全绿）───
+ RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/packages/react
+ ✓ tests/workspace-asset-host.test.ts (44 tests) 12ms
+ Test Files  1 passed (1)
+      Tests  44 passed (44)
+   Start at  23:37:35
+   Duration  674ms (transform 57ms, setup 0ms, import 70ms, tests 12ms, environment 483ms)
+baseline_exit_code=0
+
+─── [3] 备份 + 变异（只动生产代码，观测用例一并备份只读）───
+$ cp -p /tmp/p0fixr1-pristine/packages/react/src/chrome/workspaceAssetHost.ts /tmp/p0fixr1-nc/NC-R1-1/workspaceAssetHost.ts.bak   # 备份取自 pristine 快照
+$ cp -p packages/react/tests/workspace-asset-host.test.ts /tmp/p0fixr1-nc/NC-R1-1/workspace-asset-host.test.ts.obs.bak
+$ python3 /tmp/p0fixr1-nc/mut/nc-r1-1.py
+mutated: origin routing disabled
+$ grep -c 'NC-' packages/react/src/chrome/workspaceAssetHost.ts   # 落盘硬校验：计数须 = 1，否则本次无效重来
+nc_marker_count=1
+
+─── [4] 转红（断言期望值一字未改）───
+     ✓ 已挂载 → written + store=workspace-assets + bytes（且 refId 是相对路径） 0ms
+     ✓ 未挂载 → session-only（**不是** written：没有写入任何持久存储） 0ms
+     ✓ 落盘抛错 → failed + E-IO（不再静默返回一个 item） 0ms
+     ✓ uploadAsset 薄包装：成功返回 item（既有调用方零改动），失败抛出 1ms
+     ✓ 同名且未给 bytesEqual → 默认「保留两份」：新文件另存，原文件**逐字节不变** 1ms
+     ✓ 显式 replace → 覆盖原名（引用解析到新内容） 1ms
+     ✓ 取消 → **零写入**，清单不变，失败码是 E-ABORT 0ms
+     ✓ N2 负控锚点：同名同大小同时间戳但字节不同 → **仍然进三选**（不得静默替换） 0ms
+     ✓ 只有**显式** bytesEqual=true 才跳过三选（§4.5.2 允许的唯一「同内容」情形） 0ms
+     ✓ bytesEqual=false（本会话比对过且不同）→ 仍走保留两份 0ms
+     ✓ 已挂载且已缓存 → resolved 0ms
+     ✓ 未挂载 + assets/ 引用 → unresolved(no-scope)（**不是** missing，也不是站点根 URL） 0ms
+     ✓ 已挂载但清单里没有该文件 → unresolved(missing) 0ms
+     ✓ external：http(s)/../ → unresolved(external)，且**不**回落站点根 0ms
+     ✓ data: 自包含 → resolved 为自身（脱离宿主也显示） 0ms
+     ✓ 五态枚举都在（wrong-scope / unavailable 是 P1-B 的接线面，此处只锁类型可达） 0ms
+     ✓ scopeMark 读 getter 的**当前**值（挂载发生在宿主创建之后） 0ms
+     ✓ isCurrent：epoch 变化即不当前（这是「迟到结果被丢弃」的判据） 0ms
+     ✓ R-07：同一 id 在两个作用域下缓存互不覆盖 0ms
+     ✓ disposeScope 只释放该作用域的 URL，不影响其他作用域 0ms
+     ✓ disposeAll 归零（组件卸载路径） 0ms
+     ✓ 同名替换 revoke 旧 URL（既有行为保留） 0ms
+     ✓ 磁盘有 assets/a.png（红）+ 浏览器库有 assets/a.png（蓝）→ 两条都在，id 相同但来源不同 0ms
+     ✓ 磁盘扫描项被标注 origin=workspace-assets（**读侧**标注，无需迁移） 0ms
+     ✓ 未挂载工作区 → 退回 fallback 清单（浏览器库项仍在，来源保留） 0ms
+     × 浏览器库项（id 形如 assets/a.png）→ 委托 fallback 取字节，**不吃**磁盘 scope 缓存 3ms
+     ✓ 未标 origin 的项维持旧前缀判据（兼容面不变：未挂载 + assets/ → no-scope） 0ms
+     ✓ originOfItem / assetEntryKey：builtin 前缀与 assets/ 形态各归其位，其余**不猜** 0ms
+     ✓ 写进磁盘的文件名 → 预热后 resolveAssetState 立刻 resolved（不依赖 listAssets） 0ms
+     ✓ 幂等：重复预热不泄漏（同键先 revoke 旧值） 0ms
+     ✓ 无工作区 → false（**不抛**：磁盘事实成立，不得据此改判插入失败） 0ms
+     ✓ 磁盘上没有该文件 → false（不抛） 0ms
+     ✓ 读盘抛错 → false（不抛：预热是增强，不是插入的前置） 0ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  tests/workspace-asset-host.test.ts > R1-1(b)(c)(d)：解析按**来源**路由，不按 id 前缀 > 浏览器库项（id 形如 assets/a.png）→ 委托 fallback 取字节，**不吃**磁盘 scope 缓存
+AssertionError: expected { kind: 'resolved', …(1) } to deeply equal { kind: 'resolved', …(1) }
+- Expected
++ Received
+  {
+    "kind": "resolved",
+-   "url": "blob:browser-BLUE",
++   "url": "blob:fake-1-3",
+  }
+ ❯ tests/workspace-asset-host.test.ts:585:18
+    583|
+    584|     // 蓝图字节必须来自 fallback（浏览器素材库），不是磁盘缓存
+    585|     expect(blue).toEqual({ kind: 'resolved', url: 'blob:browser-BLUE' …
+       |                  ^
+    586|     // 磁盘项走本宿主缓存 → 是预热进来的那张（红）——两条路径**不再互相冒充**
+    587|     expect(red.kind).toBe('resolved');
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+ Test Files  1 failed (1)
+      Tests  1 failed | 43 passed (44)
+   Start at  23:37:36
+   Duration  525ms (transform 49ms, setup 0ms, import 69ms, tests 23ms, environment 340ms)
+red_exit_code=1   # 独立行捕获（不写进命令替换同一行）
+
+─── [5] 还原（/tmp 备份 + cmp + sha256；禁用 git checkout——CRLF 工作树会被改写 EOL）───
+prod_cmp_exit=0
+observed_test_cmp_exit=0
+nc_marker_after_restore=0
+$ sha256(after) = 82b916c865ea5ac2c4709eb4095a80b133f0f7dc4198ff6c3b417b04b3ea7833
+
+─── [6] 回绿（passed 数）───
+ RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/packages/react
+ ✓ tests/workspace-asset-host.test.ts (44 tests) 13ms
+ Test Files  1 passed (1)
+      Tests  44 passed (44)
+   Start at  23:37:37
+   Duration  511ms (transform 47ms, setup 0ms, import 61ms, tests 13ms, environment 335ms)
+green_exit_code=0
+
+══════════════════════════════════════════════════════════════════
+NC-R1-1 SUMMARY: baseline_exit=0 red_exit_code=1 green_exit_code=0
+══════════════════════════════════════════════════════════════════

@@ -1,0 +1,108 @@
+══════════════════════════════════════════════════════════════════
+NC-R1-2b @ 2026-09-23 23:39:53
+判别目标: resolveAssetState
+cwd route: packages/react (run tests inside the package; wrong cwd yields a fake red)
+══════════════════════════════════════════════════════════════════
+
+─── [1] 定位（变异对象 = 生产代码；期望断言一字不改）───
+$ grep -n "resolveAssetState" packages/react/src/render/NodeG.tsx   # (repo root)
+58:   * 五态解析（P0-FIX-R1 R1-2）：宿主 `resolveAssetState` 的**判别式结果**。
+72:  resolveAssetState?: (ref: { kind: string; id: string }) => AssetResolution | undefined;
+104:  resolveAssetState,
+134:  // 但只有 `unresolved` 画 ✕ —— 见 NodeGProps.resolveAssetState 的说明。
+135:  const entityState = assetKind && ref ? resolveAssetState?.(ref) : undefined;
+$ sha256(before) = d7a7334a4eb5efce4b4368cbfc4e6b003bfd900b978c3893a0307567bcef760e
+
+─── [2] 基线（未变异：全绿）───
+ RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/packages/react
+ ✓ tests/nodeg-asset.test.tsx (21 tests) 146ms
+ Test Files  1 passed (1)
+      Tests  21 passed (21)
+   Start at  23:39:53
+   Duration  1.51s (transform 548ms, setup 0ms, import 752ms, tests 146ms, environment 515ms)
+baseline_exit_code=0
+
+─── [3] 备份 + 变异（只动生产代码，观测用例一并备份只读）───
+$ cp -p /tmp/p0fixr1-pristine/packages/react/src/render/NodeG.tsx /tmp/p0fixr1-nc/NC-R1-2b/NodeG.tsx.bak   # 备份取自 pristine 快照
+$ cp -p packages/react/tests/nodeg-asset.test.tsx /tmp/p0fixr1-nc/NC-R1-2b/nodeg-asset.test.tsx.obs.bak
+$ python3 /tmp/p0fixr1-nc/mut/nc-r1-2b.py
+mutated: five-state render reverted to string contract
+$ grep -c 'NC-' packages/react/src/render/NodeG.tsx   # 落盘硬校验：计数须 = 1，否则本次无效重来
+nc_marker_count=1
+
+─── [4] 转红（断言期望值一字未改）───
+    292|     expect(hrefsOf(container)).toContain('blob:primed-a2');
+       |                                ^
+    293|   });
+    294|
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+ FAIL  tests/nodeg-asset.test.tsx > NodeG：五态解析（R1-2） > pending → **不出图**：既没有 <image>，也没有 ✕ 断图占位
+AssertionError: expected [ '/assets/a 2.png' ] to deeply equal []
+- Expected
++ Received
+- []
++ [
++   "/assets/a 2.png",
++ ]
+ ❯ tests/nodeg-asset.test.tsx:309:32
+    307|     );
+    308|     // 不出图
+    309|     expect(hrefsOf(container)).toEqual([]);
+       |                                ^
+    310|     // 也不画断图（这正是「加载中」与「真缺失」必须分开的理由）
+    311|     expect(container.querySelector('[data-asset-broken]')).toBeNull();
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+ FAIL  tests/nodeg-asset.test.tsx > NodeG：五态解析（R1-2） > unresolved(missing) → **保留 ✕ 资产缺失信号**，且不发起必然 404 的加载
+AssertionError: expected null not to be null
+ ❯ tests/nodeg-asset.test.tsx:330:64
+    328|     );
+    329|     // 用户信号不得因「隐藏 404」而消失
+    330|     expect(container.querySelector('[data-asset-broken]')).not.toBeNul…
+       |                                                                ^
+    331|     // 没有 <image> → 也就没有那次必然失败的请求
+    332|     expect(hrefsOf(container)).toEqual([]);
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+ FAIL  tests/nodeg-asset.test.tsx > NodeG：五态解析（R1-2） > unresolved(no-scope) → 同样保留 ✕（未挂载不是「没有这张图」，但信号一致）
+AssertionError: expected null not to be null
+ ❯ tests/nodeg-asset.test.tsx:349:64
+    347|       </ThemeProvider>,
+    348|     );
+    349|     expect(container.querySelector('[data-asset-broken]')).not.toBeNul…
+       |                                                                ^
+    350|     expect(hrefsOf(container)).toEqual([]);
+    351|   });
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+ FAIL  tests/nodeg-asset.test.tsx > NodeG：五态解析（R1-2） > N4 同根：`@draw:data:` 自包含引用在未接五态时也能出图（data: 特判不靠宿主）
+AssertionError: expected [ Array(1) ] to include 'data:image/svg+xml;utf8,%3Csvg%20xmln…'
+ ❯ tests/nodeg-asset.test.tsx:370:32
+    368|       </ThemeProvider>,
+    369|     );
+    370|     expect(hrefsOf(container)).toContain(dataUrl);
+       |                                ^
+    371|     expect(container.querySelector('[data-asset-broken]')).toBeNull();
+    372|   });
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+ Test Files  1 failed (1)
+      Tests  5 failed | 16 passed (21)
+   Start at  23:39:55
+   Duration  1.26s (transform 493ms, setup 0ms, import 653ms, tests 138ms, environment 371ms)
+red_exit_code=1   # 独立行捕获（不写进命令替换同一行）
+
+─── [5] 还原（/tmp 备份 + cmp + sha256；禁用 git checkout——CRLF 工作树会被改写 EOL）───
+prod_cmp_exit=0
+observed_test_cmp_exit=0
+nc_marker_after_restore=0
+$ sha256(after) = d7a7334a4eb5efce4b4368cbfc4e6b003bfd900b978c3893a0307567bcef760e
+
+─── [6] 回绿（passed 数）───
+ RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/packages/react
+ ✓ tests/nodeg-asset.test.tsx (21 tests) 149ms
+ Test Files  1 passed (1)
+      Tests  21 passed (21)
+   Start at  23:39:56
+   Duration  1.38s (transform 530ms, setup 0ms, import 710ms, tests 149ms, environment 426ms)
+green_exit_code=0
+
+══════════════════════════════════════════════════════════════════
+NC-R1-2b SUMMARY: baseline_exit=0 red_exit_code=1 green_exit_code=0
+══════════════════════════════════════════════════════════════════

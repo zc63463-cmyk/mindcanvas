@@ -1,0 +1,111 @@
+══════════════════════════════════════════════════════════════════
+NC-R1-3b @ 2026-09-24 01:32:54
+判别目标: handleSaveRef.current
+cwd route: apps/canvas (run tests inside the package; wrong cwd yields a fake red)
+══════════════════════════════════════════════════════════════════
+
+─── [1] 定位（变异对象 = 生产代码；期望断言一字不改）───
+$ grep -n "handleSaveRef.current" apps/canvas/src/MindmapStage.tsx   # (repo root)
+580:  handleSaveRef.current = handleSave;
+1812:          void handleSaveRef.current();
+$ sha256(before) = 8cc4c93db88ab5a9d3ff37f2a7b2732f5093d1a7b79bea507b7d01bdc87d2a44
+
+─── [2] 基线（未变异：全绿）───
+  - import "./vite.config" without a file extension (vitest.config.ts:4:24). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+ RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas
+stderr | tests/stage-render.test.tsx > R1-3：Ctrl+S 不得被陈旧闭包拦下 > Ctrl+N 换文档后 Ctrl+S → 不出现「已阻止保存」（守卫读实时 source）
+Cannot update a component (`StageInner`) while rendering a different component (`StageContent`). To locate the bad setState() call inside `StageContent`, follow the stack trace as described in https://react.dev/link/setstate-in-render
+ ✓ tests/stage-render.test.tsx (6 tests) 528ms
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  01:32:54
+   Duration  3.11s (transform 1.55s, setup 0ms, import 1.94s, tests 528ms, environment 508ms)
+baseline_exit_code=0
+
+─── [3] 备份 + 变异（只动生产代码，观测用例一并备份只读）───
+$ cp -p /tmp/p0fixr1-pristine/apps/canvas/src/MindmapStage.tsx /tmp/p0fixr1-nc/NC-R1-3b/MindmapStage.tsx.bak   # 备份取自 pristine 快照
+$ cp -p apps/canvas/tests/stage-render.test.tsx /tmp/p0fixr1-nc/NC-R1-3b/stage-render.test.tsx.obs.bak
+$ python3 /tmp/p0fixr1-nc/mut/nc-r1-3b.py
+mutated: keydown reverted to direct closure capture
+$ grep -c 'NC-' apps/canvas/src/MindmapStage.tsx   # 落盘硬校验：计数须 = 1，否则本次无效重来
+nc_marker_count=1
+
+─── [4] 转红（断言期望值一字未改）───
++ @keyframes ring-in { from { opacity: 0; transform: scale(.84); } to { opacity: 1; transform: scale(1); } }
++ .ring path { transition: stroke .12s ease, stroke-width .12s ease, filter .12s ease, opacity .12s ease; }
++ .gap-hint { stroke: rgba(255,255,255,.12); stroke-width: 1; stroke-dasharray: 2 6; fill: none; }
++
++ .float-label { position: fixed; transform: translate(-50%,-50%); display: flex; align-items: center; gap: 7px;
++   padding: 7px 12px 7px 10px; border-radius: 10px; z-index: 61;
++   background: rgba(13,19,21,.78); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
++   border: 1px solid rgba(255,255,255,.12);
++   box-shadow: 0 8px 26px rgba(0,0,0,.5), 0 1px 0 rgba(255,255,255,.05) inset;
++   white-space: nowrap; pointer-events: none; animation: label-in .12s ease-out both; }
++ @keyframes label-in { from { opacity: 0; transform: translate(-50%,-50%) scale(.94); } to { opacity: 1; transform: translate(-50%,-50%) scale(1); } }
++ .float-label .fl-ico { display: block; flex: none; }
++ .float-label b { font-size: 13px; font-weight: 600; letter-spacing: .2px; }
++ .float-label kbd { color: #9fb4b8; font: 11px/1.4 ui-monospace, Consolas, monospace;
++   border: 1px solid rgba(255,255,255,.16); border-bottom-width: 2px; border-radius: 5px; padding: 1px 6px;
++   background: rgba(255,255,255,.05); }
++
++ .dead-hint { position: fixed; transform: translate(-50%,-50%); padding: 3px 9px; border-radius: 7px; z-index: 61;
++   color: #9fb4b8; font-size: 11.5px; letter-spacing: .4px; background: rgba(13,19,21,.6);
++   border: 1px solid rgba(255,255,255,.1); pointer-events: none; animation: label-in .12s ease-out both; }
++
++ .confirm-chip { position: fixed; transform: translate(-50%, 0); display: flex; align-items: center; gap: 8px; z-index: 62;
++   padding: 8px 10px 8px 12px; border-radius: 11px; color: #ffd9d4;
++   background: rgba(38,16,16,.82); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
++   border: 1px solid rgba(255,107,107,.4); box-shadow: 0 10px 30px rgba(0,0,0,.5);
++   animation: label-in .12s ease-out both; white-space: nowrap; }
++ .confirm-chip span { font-size: 12.5px; }
++ .confirm-chip button { cursor: pointer; font: inherit; font-size: 12px; color: #fff;
++   border: 1px solid rgba(255,107,107,.6); border-radius: 7px; padding: 3px 10px;
++   background: rgba(255,107,107,.28); }
++ .confirm-chip button.ghost { border-color: rgba(255,255,255,.18); background: rgba(255,255,255,.06); color: #d7c8c6; }
++ .confirm-chip button:hover { filter: brightness(1.15); }
++
++ /* ① 幽灵预览 / 删除预告（v1.8.0 Phase 3；z-index 59——在环 60 之下、画布之上） */
++ .ghost-node { position: fixed; z-index: 59; pointer-events: none; box-sizing: border-box;
++   display: flex; align-items: center; justify-content: center;
++   border: 1.5px dashed rgba(61,211,160,.6); border-radius: 12px; background: rgba(61,211,160,.06);
++   animation: ghost-in .16s ease-out both; }
++ .ghost-node span { font-size: 13px; color: rgba(190,235,220,.55); }
++ @keyframes ghost-in { from { opacity: 0; transform: translateY(-3px) scale(.97); } to { opacity: 1; transform: none; } }
++ .danger-box { position: fixed; z-index: 59; pointer-events: none; box-sizing: border-box;
++   border: 1.5px dashed rgba(255,107,107,.75); border-radius: 12px; background: rgba(255,107,107,.08); }
++
+ ❯ tests/stage-render.test.tsx:109:45
+    107|     await new Promise((r) => setTimeout(r, 0));
+    108|
+    109|     expect(container.textContent ?? '').not.toContain('已阻止保存');
+       |                                             ^
+    110|   });
+    111|
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+ Test Files  1 failed (1)
+      Tests  1 failed | 5 passed (6)
+   Start at  01:32:58
+   Duration  2.93s (transform 1.46s, setup 0ms, import 1.84s, tests 454ms, environment 527ms)
+red_exit_code=1   # 独立行捕获（不写进命令替换同一行）
+
+─── [5] 还原（/tmp 备份 + cmp + sha256；禁用 git checkout——CRLF 工作树会被改写 EOL）───
+prod_cmp_exit=0
+observed_test_cmp_exit=0
+nc_marker_after_restore=0
+$ sha256(after) = 8cc4c93db88ab5a9d3ff37f2a7b2732f5093d1a7b79bea507b7d01bdc87d2a44
+
+─── [6] 回绿（passed 数）───
+ RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas
+stderr | tests/stage-render.test.tsx > R1-3：Ctrl+S 不得被陈旧闭包拦下 > Ctrl+N 换文档后 Ctrl+S → 不出现「已阻止保存」（守卫读实时 source）
+Cannot update a component (`StageInner`) while rendering a different component (`StageContent`). To locate the bad setState() call inside `StageContent`, follow the stack trace as described in https://react.dev/link/setstate-in-render
+ ✓ tests/stage-render.test.tsx (6 tests) 426ms
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  01:33:01
+   Duration  2.56s (transform 1.30s, setup 0ms, import 1.62s, tests 426ms, environment 417ms)
+green_exit_code=0
+
+══════════════════════════════════════════════════════════════════
+NC-R1-3b SUMMARY: baseline_exit=0 red_exit_code=1 green_exit_code=0
+══════════════════════════════════════════════════════════════════

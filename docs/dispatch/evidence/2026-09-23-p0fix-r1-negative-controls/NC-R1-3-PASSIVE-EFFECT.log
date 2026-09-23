@@ -1,0 +1,109 @@
+══════════════════════════════════════════════════════════════════
+NC-R1-3 @ 2026-09-24 01:32:32
+判别目标: syncedSourceRef.current = next.source
+cwd route: apps/canvas (run tests inside the package; wrong cwd yields a fake red)
+══════════════════════════════════════════════════════════════════
+
+─── [1] 定位（变异对象 = 生产代码；期望断言一字不改）───
+$ grep -n "syncedSourceRef.current = next.source" apps/canvas/src/hooks/useDocumentActions.ts   # (repo root)
+154:        syncedSourceRef.current = next.source;
+$ sha256(before) = 63d7bc782553467af55413e438ad4ff18d76ce61455127f98bea2a0f1f87eeb3
+
+─── [2] 基线（未变异：全绿）───
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./vite.config" without a file extension (vitest.config.ts:4:24). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+ RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas
+ ✓ tests/s2g-zero-window.test.tsx (5 tests) 17ms
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Start at  01:32:33
+   Duration  1.87s (transform 879ms, setup 0ms, import 1.16s, tests 17ms, environment 573ms)
+baseline_exit_code=0
+
+─── [3] 备份 + 变异（只动生产代码，观测用例一并备份只读）───
+$ cp -p /tmp/p0fixr1-pristine/apps/canvas/src/hooks/useDocumentActions.ts /tmp/p0fixr1-nc/NC-R1-3/useDocumentActions.ts.bak   # 备份取自 pristine 快照
+$ cp -p apps/canvas/tests/s2g-zero-window.test.tsx /tmp/p0fixr1-nc/NC-R1-3/s2g-zero-window.test.tsx.obs.bak
+$ python3 /tmp/p0fixr1-nc/mut/nc-r1-3.py
+mutated: synchronous parse/reset/placement removed
+$ grep -c 'NC-' apps/canvas/src/hooks/useDocumentActions.ts   # 落盘硬校验：计数须 = 1，否则本次无效重来
+nc_marker_count=1
+
+─── [4] 转红（断言期望值一字未改）───
+    110|     expect(syncedSourceRef.current).toBe(next.source);
+       |                                     ^
+    111|     // ② 守卫放行（这是「窗口归零」的可判定形式）
+    112|     expect(canWriteDoc(syncedSourceRef.current, next.source)).toBe(tru…
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/4]⎯
+ FAIL  tests/s2g-zero-window.test.tsx > R1-3(m)：applyDoc 返回 true 的同一时刻，三条事实同时成立（不 flush 任何 effect） > 判别性：首棵树的内容不得残留（只前移置位、不 reset 的假修在此转红）
+AssertionError: expected '# 旧\n' to contain '全新'
+- Expected
++ Received
+- 全新
++ # 旧
++
+ ❯ tests/s2g-zero-window.test.tsx:129:18
+    127|
+    128|     const text = controller.serialize().replace(/\\n/g, '\n');
+    129|     expect(text).toContain('全新');
+       |                  ^
+    130|     expect(text).not.toContain('旧');
+    131|   });
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/4]⎯
+ FAIL  tests/s2g-zero-window.test.tsx > R1-3(n)：同内容替换（source 逐字相同）后树同样属于新文档 > source 不变但换了文档 → 树被换成新解析的树，旧草稿不残留
+AssertionError: expected '# 改过的旧内容\n' not to contain '改过的旧内容'
+- Expected
++ Received
+- 改过的旧内容
++ # 改过的旧内容
++
+ ❯ tests/s2g-zero-window.test.tsx:151:40
+    149|
+    150|     // 树必须回到该 source 的解析结果 —— 编辑草稿不得活到新文档上
+    151|     expect(controller.serialize()).not.toContain('改过的旧内容');
+       |                                        ^
+    152|     expect(controller.serialize()).toContain('旧');
+    153|     // 同步标记仍与新 source 一致
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/4]⎯
+ FAIL  tests/s2g-zero-window.test.tsx > R1-3：解析失败时 fail-closed（不置位，守卫继续拦） > next.source 解析不出树 → syncedSourceRef 置 null，canWriteDoc 为 false
+AssertionError: expected '# 甲\n- 旧\n' to be null
+- Expected:
+null
++ Received:
+"# 甲
+- 旧
+"
+ ❯ tests/s2g-zero-window.test.tsx:166:37
+    164|     });
+    165|     // 树没能换 → 宁可拒写，也不让旧内容写进新文件
+    166|     expect(syncedSourceRef.current).toBeNull();
+       |                                     ^
+    167|     expect(canWriteDoc(syncedSourceRef.current, '')).toBe(false);
+    168|   });
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/4]⎯
+ Test Files  1 failed (1)
+      Tests  4 failed | 1 passed (5)
+   Start at  01:32:35
+   Duration  1.68s (transform 946ms, setup 0ms, import 1.21s, tests 30ms, environment 348ms)
+red_exit_code=1   # 独立行捕获（不写进命令替换同一行）
+
+─── [5] 还原（/tmp 备份 + cmp + sha256；禁用 git checkout——CRLF 工作树会被改写 EOL）───
+prod_cmp_exit=0
+observed_test_cmp_exit=0
+nc_marker_after_restore=0
+$ sha256(after) = 63d7bc782553467af55413e438ad4ff18d76ce61455127f98bea2a0f1f87eeb3
+
+─── [6] 回绿（passed 数）───
+  - import "./vite.config" without a file extension (vitest.config.ts:4:24). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+ RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas
+ ✓ tests/s2g-zero-window.test.tsx (5 tests) 20ms
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Start at  01:32:37
+   Duration  1.88s (transform 941ms, setup 0ms, import 1.22s, tests 20ms, environment 509ms)
+green_exit_code=0
+
+══════════════════════════════════════════════════════════════════
+NC-R1-3 SUMMARY: baseline_exit=0 red_exit_code=1 green_exit_code=0
+══════════════════════════════════════════════════════════════════

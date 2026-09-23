@@ -266,7 +266,12 @@ try {
   // F1-RENAME-SPURIOUS-CONFLICT：改到一个空闲名字也会弹，且候选名是把序号算到 999）。
   // 点「保留两份」才真正开始一次**持有租约**的改名。
   await startRename(RENAMED);
-  await page.waitForSelector('[data-fm-conflict]', { timeout: 8000 }).catch(() => undefined);
+  // P0-FIX-R1：改名到空闲名字本是**正常路径**（不弹冲突三选）。此前这里用
+  // `waitForSelector(..., 8000)` 等一个 **F1-RENAME-SPURIOUS-CONFLICT** 造成的假冲突框：
+  // 它是「空等 8s 超时」—— 8s 远超下面 removeEntry 的 5s 延迟，于是等它结束时改名**早已完成**、
+  // 租约**早已释放**，随后的 3 次 Ctrl+S 根本不在租约窗口内（F1③.5 因此变成恒红/恒绿的假判据）。
+  // 现在只做一次**短**探测（冲突框若真是产品行为，300ms 内必已出现），不再吃掉租约窗口。
+  await page.waitForSelector('[data-fm-conflict]', { timeout: 300 }).catch(() => undefined);
   const conflictShown = (await page.locator('[data-fm-conflict]').count()) > 0;
   const conflictText = conflictShown
     ? await page.locator('[data-fm-conflict]').first().textContent()
