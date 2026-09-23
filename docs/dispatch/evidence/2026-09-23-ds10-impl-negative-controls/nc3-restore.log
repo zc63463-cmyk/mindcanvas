@@ -1,0 +1,17 @@
+=== DS-10 NC NC3 · 回绿态 ===
+restored sha256: dea33fb41b1f4825e187e211bee780afed7272b880df660f597af54aea6a57fb
+--- vitest ---
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./vite.config" without a file extension (vitest.config.ts:4:24). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas
+
+ ✓ tests/doc-index.test.ts (75 tests) 22ms
+
+ Test Files  1 passed (1)
+      Tests  75 passed (75)
+   Start at  13:10:45
+   Duration  2.84s (transform 1.95s, setup 0ms, import 2.30s, tests 22ms, environment 416ms)
+
+code=0

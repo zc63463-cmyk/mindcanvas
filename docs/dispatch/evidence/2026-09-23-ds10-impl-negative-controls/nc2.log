@@ -1,0 +1,180 @@
+=== DS-10 NC NC2 · 转红态 ===
+marker: NEUTRALIZED(NC2) x1
+--- vitest ---
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./vite.config" without a file extension (vitest.config.ts:4:24). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v4.1.11 /Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas
+
+ ❯ tests/doc-index.test.ts (75 tests | 5 failed) 47ms
+     ✓ 打开推进 openedAt，保存不推进；保存只推进 savedAt 5ms
+     ✓ 「最近」按 openedAt 降序：保存更晚但打开更早的文档仍排后面 1ms
+     ✓ openedAt === null 排末尾且显示「未记录打开时间」（不回落 mtime） 2ms
+     ✓ `formatRecentWhen`：只有 `null` 是「未记录打开时间」，`0` 是真实时间戳 0ms
+     ✓ compareRecent 的 null 分支按 savedAt 降序稳定排列 0ms
+     ✓ 索引键本身损坏时不抛错、退回空索引 1ms
+     ✓ 索引条目形状非法时被过滤，合法的仍保留（与 docLibrary 同规） 3ms
+     ✓ 旧库键无法解析时迁移不崩：不删旧键、不误报成功 0ms
+     ✓ 旧库键可解析但形状非法时整批记为未迁移 0ms
+     ✓ 旧库数组里混入非法条目时只跳过那一条 0ms
+     ✓ 同一旧键迁移两次结果一致（条目、时间、legacyKeys 全不动） 0ms
+     ✓ 第一批未处理完的旧键在后续调用时补齐（可中断续跑） 0ms
+     ✓ 续跑不依赖内存状态：新实例（模拟刷新）重跑得到同样结果且不重复 1ms
+     ✓ M5：他区同名条目不被他区旧库键认领（existing 查找须限定当前作用域） 2ms
+     ✓ M5：浏览器身份条目仍可被同 relPath 的旧库键认领（兼容模式打开过它） 0ms
+     ✓ M5：唯一同名 + 无既有条目：不建条目进历史池（凭文件名不能造 ws: 身份） 0ms
+     ✓ M5：本区有证据但索引里没有这条文档 → 不凭空造 `ws:` 条目（旧库 id 只是文件名） 0ms
+     ✓ M5：本区「有既有条目但无历史证据」→ 不得认领，进历史池（归属证据位最具判别力的场景） 1ms
+     ✓ M5：既有条目带 `ephemeral`（上次会话身份已失效）→ 不得认领，进历史池 1ms
+     ✓ M5：本区有证据 + 既有条目 → 正常认领（新守卫不得把合法迁移一并拦掉） 3ms
+     ✓ 投影不得抹掉尚未迁移的畸形旧行（`null` / 缺 id） 0ms
+     ✓ 有 isSameEntry 证据的作用域下，精确 relPath 命中才迁移 0ms
+     ✓ 用户显式「关联到此工作区」后才绑定，并留下 relinkEvidence 0ms
+     ✓ relink 拒绝跨作用域目标（不伪造归属证据） 0ms
+     ✓ relink 拒绝不存在的目标（不允许凭一次点击凭空造身份） 0ms
+     ✓ 忽略只从呈现移除，不改索引、不删旧键 0ms
+     ✓ ephemeral（上次会话的 disk-session）作用域的旧条目进历史池，不自动绑定 0ms
+     ✓ hasOwnershipEvidence：无 relPath / 未持久 / 无证据 一律 false 0ms
+     ✓ M11 衔接：legacy adoption（session-only）不算证据，isSameEntry 才算 0ms
+     ✓ migrateContextOf：browser 唯一作用域可直迁；disk-session 不持久 0ms
+     ✓ 升级后**新增收藏**出现在旧结构（mindcanvas.library.v1 / starred.v1）里 0ms
+     ✓ ts = max(openedAt, savedAt)：保存更晚时投影取 savedAt 0ms
+     × 投影保 source 只留 8 条，且不同旧 id 的既有快照不串源 7ms
+     ✓ 取消收藏会同步从旧收藏键移除（投影是当前状态的镜像，不是只增） 0ms
+     ✓ 投影写入失败时主流程不中断，但该次变更标为不可回退且可查 1ms
+     ✓ 索引键写失败也如实返回（不伪报成功） 0ms
+     ✓ 仅 library 投影键写失败时也标为不可回退（回读校验，不谎报成功） 0ms
+     ✓ 仅 library 投影键写失败：starred 那一路仍正常（失败被判在正确的键上） 0ms
+     ✓ library 投影写成功后回读校验通过（回读校验本身不误报失败） 0ms
+     ✓ 回读校验覆盖**畸形旧行**：library 写丢畸形行时也判失败（不只是索引条目） 0ms
+     ✓ M6：索引里存在**其他作用域**的同名条目 → 不认领，进历史池 0ms
+     ✓ M6：证据充分但命中条目属于**别的**作用域 → 仍不认领（作用域是本条硬条件） 0ms
+     ✓ M6：证据充分但命中条目是 `ephemeral` → 仍不认领（作用域已失效） 0ms
+     ✓ M6：索引里的 `ephemeral` 条目不被旧收藏键认领（§6.2.1 第 5 行） 0ms
+     ✓ M6：同作用域且有证据时，精确命中才认领为收藏 0ms
+     ✓ M7：`assets/<rel>` 项在有证据作用域下迁移为 (scopeId, relPath)，前缀不进入 assetKey 0ms
+     ✓ M7：无证据作用域下 `assets/<rel>` 项进历史池（唯一同名也不认领） 0ms
+     ✓ M7：他区已有同 assetKey 条目 → 不得复用（`ownScope` 的「他区不得复用」语义） 0ms
+     ✓ M7：他区条目存在时仍为本区新建条目（`ownScope` 只隔离他区，不阻断本区合法迁移） 0ms
+     ✓ M7：`draw:` 前缀（SVG）按同一规则处理 0ms
+     ✓ M7：`builtin:` 与 data: 是自包含引用，不属于任何作用域，可直接迁移（I-5） 0ms
+     ✓ M7：无法切出合法 `kind:` 的键记为未迁移，不猜归属 0ms
+     ✓ M8：自由画布最近并入索引且**不改写**该旧键 0ms
+     ✓ M8：单条损坏跳过，合法条目仍迁入 0ms
+     ✓ M9 写侧**未实现**：迁移全程不触碰 `mindcanvas-handles` 0ms
+     ✓ 旧键一律不删除（DS-10 由主控决定） 0ms
+     ✓ 收藏跟稳定身份走：relPath 改了收藏不丢 0ms
+     ✓ 未知字段在读写往返中保留（前向兼容） 0ms
+     ✓ 缺失字段被补齐而不丢条目（后向兼容） 0ms
+     ✓ listDocs 可容忍非数组索引键 0ms
+     ✓ ★改名后收藏仍在（跟在同一个逻辑文档上，不是新增一条） 0ms
+     ✓ ★lineageId 随行（血统不断：收藏/最近按它迁移） 0ms
+     ✓ ★旧键进 legacyKeys（投影据此认领，不是凭同名猜测） 0ms
+     ✓ 移动（换目录）同样随行：收藏与血统都不丢 0ms
+     ✓ ★旧条目不存在（从未登记）→ 退化为首次登记，不制造假血统 0ms
+     ✓ ★连续两次改名：收藏不丢、不产生第二条条目 0ms
+     ✓ ★F5：两个同名不同目录的文档是两条独立条目，各自收藏互不串（改名只影响自己） 0ms
+     ✓ 不变量 5：改名后旧行被回收，降级视图回到「一行一文档」 0ms
+     × 不变量 1：孤儿行（从未被认领）一律保留 6ms
+     × 不变量 3：尚未迁移的旧键不被投影破坏（未被认领 ⇒ 不删） 1ms
+     × 不变量 4：幂等——投影连续两次行集一致，且纯 migrate() 不碰旧库 2ms
+     ✓ 不变量 2：畸形行保留（(b') 不碰 opaque 行，:236 的 failed 断言不受影响） 1ms
+     ✓ ★双形态认领：前缀形态（M5 迁移）同样触发回收 0ms
+     × ★不变量 6（F3-部分成功）：未消解的源行保留，消解后才回收 1ms
+     ✓ ★starred 侧前缀不对称已消除（裁定 §5 附带项） 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/doc-index.test.ts > DocIndex · 降级投影（§6.3 / NC-4 期望） > 投影保 source 只留 8 条，且不同旧 id 的既有快照不串源
+AssertionError: expected 11 to be 12 // Object.is equality
+
+- Expected
++ Received
+
+- 12
++ 11
+
+ ❯ tests/doc-index.test.ts:828:24
+    826|       source?: string;
+    827|     }>;
+    828|     expect(lib.length).toBe(12); // 11 条索引 + 1 条旧库孤儿（d11）
+       |                        ^
+    829|     expect(lib.slice(0, 8).every((e) => typeof e.source === 'string'))…
+    830|     expect(lib.slice(8).every((e) => e.source === undefined)).toBe(tru…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  tests/doc-index.test.ts > DS-10 · 旧库旧键逐行回收（判据 (b')） > 不变量 1：孤儿行（从未被认领）一律保留
+AssertionError: expected [ '新名.mm.md' ] to include '孤儿.mm.md'
+ ❯ tests/doc-index.test.ts:1715:17
+    1713|     expect(ids).toContain('新名.mm.md');
+    1714|     // 孤儿行**不得**被连带回收（它从未被任何条目认领）
+    1715|     expect(ids).toContain('孤儿.mm.md');
+       |                 ^
+    1716|     expect(ids).not.toContain('旧名.mm.md');
+    1717|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  tests/doc-index.test.ts > DS-10 · 旧库旧键逐行回收（判据 (b')） > 不变量 3：尚未迁移的旧键不被投影破坏（未被认领 ⇒ 不删）
+AssertionError: expected [ '别的.mm.md' ] to include '未迁移.mm.md'
+ ❯ tests/doc-index.test.ts:1729:40
+    1727|
+    1728|     // 投影不得删掉迁移自己的输入
+    1729|     expect(readLib().map((r) => r.id)).toContain('未迁移.mm.md');
+       |                                        ^
+    1730|     // 也不得凭空给它建条目
+    1731|     expect(d.getDoc(wsDocKey(SCOPE, '未迁移.mm.md'))).toBeUndefined();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  tests/doc-index.test.ts > DS-10 · 旧库旧键逐行回收（判据 (b')） > 不变量 4：幂等——投影连续两次行集一致，且纯 migrate() 不碰旧库
+AssertionError: expected [ '新名.mm.md' ] to deeply equal [ '新名.mm.md', '孤儿.mm.md' ]
+
+- Expected
++ Received
+
+  [
+    "新名.mm.md",
+-   "孤儿.mm.md",
+  ]
+
+ ❯ tests/doc-index.test.ts:1752:27
+    1750|     expect(readLib().map((r) => r.id)).toEqual(idsAfterFirst); // 第二次投…
+    1751|     // 首次清理后稳定：旧行不会「复活」
+    1752|     expect(idsAfterFirst).toEqual(['新名.mm.md', '孤儿.mm.md']);
+       |                           ^
+    1753|
+    1754|     // 纯 migrate() 前后旧库逐字节不变（migrate 不改写旧库）
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ FAIL  tests/doc-index.test.ts > DS-10 · 旧库旧键逐行回收（判据 (b')） > ★不变量 6（F3-部分成功）：未消解的源行保留，消解后才回收
+AssertionError: expected [ '目标.mm.md' ] to deeply equal [ '目标.mm.md', '孤儿.mm.md' ]
+
+- Expected
++ Received
+
+  [
+    "目标.mm.md",
+-   "孤儿.mm.md",
+  ]
+
+ ❯ tests/doc-index.test.ts:1834:40
+    1832|     afterRename(d, '源.mm.md', '目标.mm.md');
+    1833|     // 基线：没有 partial 登记时，源行**会**被回收（证明这一行确实满足 (b')）
+    1834|     expect(readLib().map((r) => r.id)).toEqual(['目标.mm.md', '孤儿.mm.md'…
+       |                                        ^
+    1835|
+    1836|     // 现在把「源」登记为未消解的 partial 源，并重放被取代状态：
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/5]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 70 passed (75)
+   Start at  13:10:31
+   Duration  3.04s (transform 1.94s, setup 0ms, import 2.30s, tests 47ms, environment 497ms)
+
+code=1
