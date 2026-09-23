@@ -446,3 +446,250 @@ N-1 修复 +4 条（§3.3 表）、T2 负控 +3 条（§4.1 两条 + §4.3 存�
 - **零新依赖、零 DDL、零新端点**；未启动 P0-A。
 - **未改任何 `shared-contracts.md`**（契约勘误属规格侧）。
 - 发现矛盾按边界第 7 条**停工待裁**，未自行择一（§5）。
+
+---
+---
+
+# 附录 A · 裁决后收尾轮（RunId `2026-09-23-P0-D-fix-2`）
+
+> 上文 §1–§11 是**裁决前**的记录，保持原样不修改（含 §4.3「负控 (b) 未完成」与 §5 的停工待裁）。
+> 本节记录主控裁决后的处置：**M5 必须调用归属证据位**。
+
+## A.1 基准锚定
+
+```
+开工：
+$ git rev-parse HEAD          → 96496f0d08b71e356818a09752e66a208c12d93e
+$ git rev-parse HEAD:packages → c771dd3bc061b917a195ecf03ac73129c431df71   ← 与派单期望一致
+$ git status --porcelain -- apps packages → （空）
+
+收工：
+$ git rev-parse HEAD          → 0af4e2616415ac0fc4e194a3822b7f67dacdb94c
+$ git rev-parse HEAD:apps     → 61d46757fbf5eb6cbd3c5b213294f4c4beae7369
+$ git rev-parse HEAD:packages → c771dd3bc061b917a195ecf03ac73129c431df71   ← **未变**
+$ git status --porcelain -- apps packages → （空）
+```
+
+**`HEAD:packages` 开工收工同为 `c771dd3` → `packages/react` 继续零改动**（硬证据）。
+
+## A.2 本轮 commit
+
+| commit | 类型 | `--stat` |
+|---|---|---|
+| `780cda8` | `fix(p0-d):` | `docIndexMigrate.ts` +51/-…、`doc-index.test.ts` → **2 files, 145 insertions(+), 42 deletions(-)** |
+| `0af4e26` | `test(p0-d):` | `doc-index.test.ts` → **1 file, 20 insertions(+), 2 deletions(-)** |
+
+`96496f0` 是本轮开工时的 HEAD（上一轮回执），非本轮产生。
+
+## A.3 T1 · M5 证据位修复（`780cda8`）
+
+### A.3.1 改动原文
+
+`apps/canvas/src/docIndexMigrate.ts`，M5 的 `existing` 命中路径，`adoptDoc` 之前插入：
+
+```ts
+const bound =
+  existing !== undefined &&
+  existing.ephemeral !== true &&
+  hasOwnershipEvidence(ctx, existing.relPath ?? key);
+if (!bound) {
+  pool.push({
+    key, kind: 'library', name,
+    openedAt: null, savedAt: ts,
+    reason: /* 见 A.3.3 */,
+    legacyKeys: [`${LEGACY_LIBRARY_KEY}#${key}`],
+  });
+  continue;
+}
+// ↓ 只有 bound 时可达
+const outcome = index.adoptDoc({ docKey: existing.docKey, /* … */ });
+```
+
+`adoptDoc` 现在**只在 `bound` 为真时可达**；`existing` 从「充分条件」降为「必要条件」。
+
+### A.3.2 守卫形状的理由（派单要求实读两个兄弟后决定）
+
+- **照 M6 的 `bound` 形状**（`docIndexMigrate.ts:228-230`）：
+  `hit !== undefined && hit.ephemeral !== true` 再 `&& hasOwnershipEvidence(...)`。
+  M7 的形状是「先 `ownScope` 找 existing，命中即复用，无证据检查在**新建**分支」
+  （`:296-308`）——那是因为 M7 的「复用他区条目」由 `ownScope` 负责，
+  与 M5 的「既有条目也是证据吗」不是同一个问题。故 M5 取 M6 形状，含 `ephemeral` 一道。
+- **browser / 自包含作用域：不做迁移层旁路。** 实读结论：
+  `migrateContextOf`（`docIndexCore.ts:368-376`）对 `scope.kind === 'browser'`
+  直接给 `persisted: true, hasHistoryEvidence: true`（浏览器素材库作用域唯一，
+  无「猜归属」问题——与 M7 放行 `builtin:`/`data:` 自包含引用同源，契约 M7 行明文）。
+  故兼容模式那一路**天然通过** `hasOwnershipEvidence`；既有用例
+  `M5：浏览器身份条目仍可被同 relPath 的旧库键认领（兼容模式打开过它）`
+  **一行未改、实测仍绿**。若再加一条 `ctx.scopeId === BROWSER_SCOPE_ID` 旁路，
+  等于把上下文层的保证复制进迁移层，与 M6/M7「迁移层不特判作用域」的既有形状不一致。
+
+### A.3.3 `reason` 三分支必须重排（修复中发现的连带缺陷）
+
+旧三分支假定「无证据」只在 `existing === undefined` 时出现：
+```
+!ctx.persisted ? 'ephemeral-scope'
+  : existing === undefined && !ctx.hasHistoryEvidence ? 'no-evidence'
+  : 'no-existing-entry'
+```
+补证据位后「**有既有条目 + 无证据**」也会落到这里，按旧式会被标成 `no-existing-entry`
+→ 用户看到「当前工作区里找不到这份文档」（`formatHistoryReason`），**而文档明明在**，
+属错误文案。已改为按真实原因分流：作用域未持久/条目 `ephemeral` → `ephemeral-scope`；
+无历史证据（含本类）→ `no-evidence`；有证据但确无条目 → `no-existing-entry`。
+（修复经一次实测纠偏：首版仍写 `existing === undefined && !ctx.hasHistoryEvidence`，
+新用例立即转红 `expected 'no-existing-entry' to be 'no-evidence'`，据实改正。）
+
+### A.3.4 回归结果（派单 T1 的强制验证）
+
+修码后跑既有套件：**唯一转红的是上一轮我自己留下的「矛盾存档」用例**
+（它断言的正是修复前的认领行为），**不是编码了违规行为的既有测试**。
+仓库原有的 M5/M6/M7 用例**全部保持绿**，包括：
+`M5：浏览器身份条目仍可被同 relPath 的旧库键认领`、
+`M5：他区同名条目不被他区旧库键认领`、
+`M5：本区有证据但索引里没有这条文档 → 不凭空造 ws: 条目`、
+以及全部 M6/M7 用例。**未改任何既有断言去迁就实现。**
+该存档用例已按裁决改写为正式负控（A.4）。
+
+## A.4 T2 · 负控 (b) 与分辨力自证（`780cda8` + `0af4e26`）
+
+### A.4.1 用例
+
+| 用例 | 作用 |
+|---|---|
+| `M5：本区「有既有条目但无历史证据」→ 不得认领，进历史池（归属证据位最具判别力的场景）` | **负控 (b) 本体** |
+| `M5：既有条目带 ephemeral（上次会话身份已失效）→ 不得认领，进历史池` | 新守卫的另一半（§6.2.1 第 5 行）；作用域**有证据**以排除退路，只有 `ephemeral` 能拦住 |
+| `M5：本区有证据 + 既有条目 → 正常认领` | 对照：守卫不得把合法迁移一并拦掉 |
+
+负控 (b) 断言（全部按派单要求）：`migrated === 0`、`legacyKeys` 不含该键且为空、
+`listDocs()` 逐字未动（`JSON.stringify` 前后相同）、`historyPool()` 含该 key、
+`reason === 'no-evidence'`、旧键保留。
+既有条目由**直接写 `DOC_INDEX_KEY`** 造出（「先前会话留下的」），
+**不用 `registerDoc`**——后者本身代表「目录已证明」，会把 ctx 证据位与条目来源混为一谈。
+
+### A.4.2 分辨力自证
+
+- **中性化内容**：新守卫 `bound` → `const bound = existing !== undefined;`
+  （退回「命中既有条目即认领」）。
+  - 落盘校验：`grep -n "NC-B 中性化"` 命中 1 处；
+    `grep -c "hasOwnershipEvidence(ctx,"` → **2**（只剩 M6/M7，M5 的调用已消失）。
+- **命令与退出码**：`cd apps/canvas && ./node_modules/.bin/vitest run tests/doc-index.test.ts`
+  → **`NC_B_EXIT=1`**，`Test Files 1 failed (1)`、`Tests 2 failed | 58 passed (60)`。
+- **转红用例名与断言**：
+  ```
+  FAIL … > M5：本区「有既有条目但无历史证据」→ 不得认领，进历史池（归属证据位最具判别力的场景）
+  AssertionError: expected [ 'mindcanvas.library.v1#研发/架构.mm.md' ] to not include '…'
+   ❯ tests/doc-index.test.ts:514:62
+
+  FAIL … > M5：既有条目带 `ephemeral`（上次会话身份已失效）→ 不得认领，进历史池
+  AssertionError: expected 1 to be +0
+   ❯ tests/doc-index.test.ts:562:24
+  ```
+- **还原校验**：`cp` 回填 → sha256 `6530bbc1298dcc23c43b138c81472112db5d724de1927e6a39ee78485cd28115`
+  （与备份逐字节相同）→ `cmp` identical → `grep -c "NC-B 中性化"` → 0 → 重跑 **`60 passed`、exit 0**。
+- 隔离副本 `/tmp/p0dfix2-iso`（`git archive HEAD` 展开 + 软链 node_modules），
+  **先验证副本为绿**（`60 passed`）后才中性化。副本与临时文件**已删除**。
+
+### A.4.3 附加证据：证据位本身现已被钉住（NC-B2）
+
+把 `hasOwnershipEvidence` **本体**中性化成恒 `true`（`docIndexCore.ts:328-332`）后：
+
+```
+NC_B2_EXIT=1
+ Test Files  1 failed (1)
+      Tests  4 failed | 56 passed (60)
+ × M5：本区「有既有条目但无历史证据」→ 不得认领，进历史池
+ × hasOwnershipEvidence：无 relPath / 未持久 / 无证据 一律 false
+ × M7：无证据作用域下 `assets/<rel>` 项进历史池（唯一同名也不认领）
+ × M7：他区已有同 assetKey 条目 → 不得复用
+```
+
+还原：sha256 `fe522b043e0dab325e65a44e402f886b50223f18d0516290976039a561932326`、
+`cmp` identical、残留 0、重跑 `60 passed`。
+对比复核当时的 NC-3 结果（**2 条红**、且 `:422` 不在其中），现在 M5 那条也在红名单里。
+
+## A.5 T3 · N-4 收口：选了 **①**（改名），并说明为何推翻 ②
+
+**选择的依据来自实测，不是偏好。** NC-B2（A.4.3）显示：把 `hasOwnershipEvidence`
+中性化成恒 `true` 后，`:422`（原名「唯一同名命中不自动绑定，进历史池」）**仍然通过**
+（4 条红里没有它）。原因：该场景**没有既有条目**，M5 在查证据位**之前**就落进
+「无 existing → 历史池」那一支（`docIndexMigrate.ts:139-172`），证据位根本不被消费。
+
+因此主控裁决后选项 ②（「由 T2 的新用例补齐 `:422` 名字所指的守点」）**在事实上不成立**：
+负控 (b) 补的是**另一个**守点（`existing` 命中 + 无证据），不是 `:422` 名字所指的那个。
+按主控授权「若 T1 后发现名字仍有偏差（如实评估），可改为 ①」，**改名**：
+
+```
+- it('唯一同名命中不自动绑定，进历史池', …)
++ it('M5：唯一同名 + 无既有条目：不建条目进历史池（凭文件名不能造 ws: 身份）', …)
+```
+
+组头注释同步收敛（不再自称「NC-3：唯一同名命中」，改为「归属证据（§6.2.1；原 NC-3…）」，
+并注明实测脱节的原因）。
+
+**`：236` 那一半**已在上一轮补齐（补 `expect(r.failed).toBeGreaterThan(0)` 并自证转红），
+名实相符，本轮未动。
+
+## A.6 门禁逐数（裁决前 → 本轮）
+
+| # | 命令 | 上一轮 | 本轮 | 本轮实测（原文） | 判定 |
+|---|---|---|---|---|---|
+| 1 | `pnpm gate:fast` | 0 | **0** | depcruise `✔ no dependency violations found (575 modules, 1735 dependencies cruised)`；lint `Checked 582 files in 490ms` / `Found 1541 warnings.` / `Found 48 infos.`；budget `✅ 全部指标在预算内（债务未增长）` | ✅ 逐数相符 |
+| 2 | `pnpm build` | 0 | **0** | `✓ 260 modules transformed.` / `main-BY8AkXt1.js 471.45 kB │ gzip: 152.85 kB` / `✓ built in 206ms` / `Done` | ✅ |
+| 3 | `node scripts/check-code-budget.mjs` | 0 | **0** | 八项见下 | ✅ 未放宽 |
+| 4 | `apps/canvas` 全量 `pnpm test` | 49 files / 463 | **49 files / 465** | `Test Files 49 passed (49)` / `Tests 465 passed (465)` | ✅ 只增不减（+2） |
+
+budget 八项：`any 0/0`、`tsIgnore 0/0`、`bang 89/90 ↓1`、`asCast 31/31`、`console 4/4`、
+`todo 1/1`、`defaultExport 2/2`、`bigFiles 4/4` —— **全部持平或优于，零上升**。
+lint `1541 / 48 / 582` 与冻结基线**逐数相同**。
+
+测试净增说明：`doc-index.test.ts` 上一轮 58 → 本轮 **60**（+2：三条负控用例中两条为新增，
+原「矛盾存档」用例改写替换）。全量 `463 → 465`，与之一致。
+**既有 58 条零删除零弱化**；未用 `it.fails` / 反转断言 / `catch` 后报 PASS / 宽泛 `skip`。
+
+## A.7 自复核发现（本轮新增，分级 + verified/unconfirmed）
+
+**verified（有命令 / 退出码）**
+
+| 级 | 发现 |
+|---|---|
+| low | `reason` 三分支在补证据位后**必须重排**，否则「有既有条目 + 无证据」被误标 `no-existing-entry`（用户语言「找不到这份文档」而文档明明在）。首版即踩中，被新用例实测抓出（A.3.3） |
+| low | 主控/复核给的**选项 ② 在事实上不成立**：`:422` 的绿色与证据位无关（NC-B2 实证），故改 ①（A.5）。这同时**修正了复核 §3.2 末段的归因** |
+
+**unconfirmed（未核实，如实列出）**
+
+| # | 事项 | 为什么未核 |
+|---|---|---|
+| 1 | 真实生产路径下「legacy adoption + 既有条目」的实际出现频率 | 需真实工作区挂载/目录身份解析（P0-0 侧），本机不具备 |
+| 2 | `packages/react` 全量测试 | 本轮仍未跑（派单 T4 指定的是 `apps/canvas` 全量）；本轮**零改 `packages`**，`HEAD:packages` 未变 |
+| 3 | 真实浏览器 localStorage 配额 / playwright 验收 / 真实 IDB | 同上一轮（本机无 playwright；jsdom 无真实配额与 `indexedDB`） |
+| 4 | `mode-guard.test.tsx` 的 flaky 根因 | 本轮全量一次全绿，未复现 |
+
+## A.8 未做清单（本轮）
+
+1. **契约勘误**（两个 `AssetIndexEntry` / `kind` 取值域）——规格侧，派单明确不动。
+2. **DS-10**（旧键删除时机）——仍由主控决定，本轮未动。
+3. **P0-A** ——未启动（派单要求）。
+4. **`packages/react` 全量测试** ——未跑（A.7 unconfirmed #2）。
+5. `mode-guard.test.tsx` flaky 定位 ——未做。
+
+## A.9 边界与合规声明（本轮）
+
+- **未 push / 未 merge / 未 deploy / 未发布**；只在本地 `main` 提交 2 个产品 commit + 本回执追加。
+- **`packages/react` 零改动**：`HEAD:packages` 开工收工同为 `c771dd3`。
+- 改动文件**仅** `apps/canvas/src/docIndexMigrate.ts` 与 `apps/canvas/tests/doc-index.test.ts`
+  （+ 本回执）；`routes.ts` 等一律未碰；**未改任何 `shared-contracts.md`**。
+- 负控自证在隔离副本 `/tmp/p0dfix2-iso` 执行，`sha256` + `cmp` **逐字节还原**并重跑回绿；
+  副本与全部临时探针文件**已删除**。
+- 被审仓库收工 `git status --porcelain -- apps packages` **空输出**。
+- 未引入 `it.fails` / 反转断言 / `catch` 后报 PASS / 宽泛 `skip`；
+  未为凑绿而改动任何既有断言。
+- **零新依赖、零 DDL、零新端点**；未启动 P0-A。
+
+## A.10 延续声明（裁决后更新）
+
+> **M5 修复后迁移行为变更**：原先「同作用域既有条目 + 无历史证据 / 条目失效」
+> 这两类旧库键会被**认领**到既有条目上；修复后一律进**历史池**，由用户显式
+> 「关联到此工作区」（`relink`）后才绑定。这是 **§6.2.1 合规**的行为变化
+> （契约 §6.2 M5 行 + §6.2.1 第 2/5 行），代价是这两类用户需要一次显式确认动作。
+>
+> **P0-D 仍未完全闭环**：契约缺口（两个 `AssetIndexEntry` / `kind` 取值域，
+> 属规格侧）与 **DS-10**（旧键删除时机）**仍开放**；A.7 的 unconfirmed 项未核。
