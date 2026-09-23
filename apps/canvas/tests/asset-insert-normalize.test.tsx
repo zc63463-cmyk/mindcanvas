@@ -20,10 +20,15 @@
  * 层：U（归一化纯函数）+ C（调用点）。**真实重开（M）未由本机验证**（无真实浏览器），
  * 这里用「归一化产物的引用在重新解析时确实指向蓝图字节」替代 —— 覆盖到 ③④ 的逻辑层。
  */
+
+import type { AssetHost, AssetItem, WorkspaceWriter } from '@mindcanvas/react';
+import {
+  builtinInlineRef,
+  fileNameOfAsset,
+  inlineRefOf,
+  normalizeForInsert,
+} from '@mindcanvas/react';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { WorkspaceWriter } from '@mindcanvas/react';
-import { normalizeForInsert, inlineRefOf, builtinInlineRef, fileNameOfAsset } from '@mindcanvas/react';
-import type { AssetHost, AssetItem } from '@mindcanvas/react';
 
 /** 内存工作区：记录磁盘内容，供「原文件字节不变」与「重开读到蓝图」断言 */
 function disk(initial: Record<string, string> = {}): {
@@ -114,10 +119,10 @@ describe('N1：已挂载工作区 → 字节落 assets/，同名走「保留两�
     const { w, files } = disk({ 'a.png': 'RED' });
     const before = new Map(files);
     const result = await normalizeForInsert(
-        browserBlueprint('a.png'),
-        { workspace: w, conflict: 'cancel' },
-        blueHost,
-      );
+      browserBlueprint('a.png'),
+      { workspace: w, conflict: 'cancel' },
+      blueHost,
+    );
     expect(result.kind).toBe('refused');
     expect([...files.entries()]).toEqual([...before.entries()]);
   });
@@ -125,10 +130,10 @@ describe('N1：已挂载工作区 → 字节落 assets/，同名走「保留两�
   it('同名冲突显式「替换」→ 写原名（引用解析到新内容）', async () => {
     const { w, files } = disk({ 'a.png': 'RED' });
     const result = await normalizeForInsert(
-        browserBlueprint('a.png'),
-        { workspace: w, conflict: 'replace' },
-        blueHost,
-      );
+      browserBlueprint('a.png'),
+      { workspace: w, conflict: 'replace' },
+      blueHost,
+    );
     if (result.kind !== 'normalized') throw new Error('unreachable');
     expect(result.refId).toBe('assets/a.png');
     expect(files.get('a.png')).not.toBe('RED');
@@ -148,7 +153,11 @@ describe('N1：已挂载工作区 → 字节落 assets/，同名走「保留两�
 
   it('未占用同名 → 直接用原名，不产生多余副本', async () => {
     const { w, files } = disk({});
-    const result = await normalizeForInsert(browserBlueprint('fresh.png'), { workspace: w }, blueHost);
+    const result = await normalizeForInsert(
+      browserBlueprint('fresh.png'),
+      { workspace: w },
+      blueHost,
+    );
     if (result.kind !== 'normalized') throw new Error('unreachable');
     expect(result.refId).toBe('assets/fresh.png');
     expect(result.renamed).toBe(false);
@@ -203,7 +212,11 @@ describe('N1：已挂载工作区 → 字节落 assets/，同名走「保留两�
 
 describe('N1 ⑤：未挂载工作区 → 只有小 SVG 能内联，其余拒绝', () => {
   it('位图（无源码）+ 无工作区 → refused(no-workspace)，**不写任何新形态引用**', async () => {
-    const result = await normalizeForInsert(browserBlueprint('big.png'), { workspace: null }, blueHost);
+    const result = await normalizeForInsert(
+      browserBlueprint('big.png'),
+      { workspace: null },
+      blueHost,
+    );
     expect(result).toEqual({ kind: 'refused', reason: 'no-workspace' });
   });
 
@@ -293,8 +306,12 @@ describe('N4：内置图标以 child 语义插入 → 内联，而不是 builtin
 
 describe('归一化纯函数面（I-10 的输入输出契约）', () => {
   it('fileNameOfAsset：assets/<rel> 取末段，其余取 name', () => {
-    expect(fileNameOfAsset({ kind: 'img', id: 'assets/sub/a.png', name: 'whatever', type: 'png' })).toBe('a.png');
-    expect(fileNameOfAsset({ kind: 'img', id: 'builtin:star', name: '星标', type: 'svg' })).toBe('星标');
+    expect(
+      fileNameOfAsset({ kind: 'img', id: 'assets/sub/a.png', name: 'whatever', type: 'png' }),
+    ).toBe('a.png');
+    expect(fileNameOfAsset({ kind: 'img', id: 'builtin:star', name: '星标', type: 'svg' })).toBe(
+      '星标',
+    );
   });
 
   it('inlineRefOf：非 SVG 源码 → null（调用方按不支持处置）', () => {
@@ -344,6 +361,7 @@ describe('归一化纯函数面（I-10 的输入输出契约）', () => {
   });
 });
 
+import { BUILTIN_ASSET_ITEMS } from '@mindcanvas/react';
 /**
  * N4 · 渲染层：**面板的 child 分支**不得写 `builtin:` 引用（CE-05 的真正接线面）。
  *
@@ -355,9 +373,8 @@ describe('归一化纯函数面（I-10 的输入输出契约）', () => {
  * 这里驱动真实组件：点内置图标 + 选「子分支」语义 → 读 controller 收到的引用 id。
  * 断言「收到的 id 不是 builtin:」，因此中性化 child 分支即转红。
  */
-import { render, cleanup, fireEvent } from '@testing-library/react';
+import { cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach } from 'vitest';
-import { BUILTIN_ASSET_ITEMS } from '@mindcanvas/react';
 import { SidePanels } from '../src/SidePanels';
 
 afterEach(cleanup);
@@ -383,9 +400,22 @@ function recordingController() {
   return { controller, added, notes };
 }
 
+/** 收窄助手：断言「此处必非空」（语义与 `!` 相同，但不触发 noNonNullAssertion） */
+function must<T>(v: T | null | undefined): T {
+  if (v === null || v === undefined) throw new Error('expected non-null');
+  return v;
+}
+
+/** 按文本找元素（面板 Tab 的唯一选择口径） */
+function byText(nodes: NodeListOf<Element>, text: string): Element {
+  const hit = Array.from(nodes).find((el) => el.textContent?.includes(text));
+  if (hit === undefined) throw new Error(`no element containing ${text}`);
+  return hit;
+}
+
 const PANEL_STUBS = {
   assetList: [],
-  assetHost: { baseUrl: '/', resolveAsset: (i: { id: string }) => '/' + i.id } as never,
+  assetHost: { baseUrl: '/', resolveAsset: (i: { id: string }) => `/${i.id}` } as never,
   setEntities: () => undefined,
   relations: [],
   activeRefKey: null,
@@ -398,26 +428,22 @@ const PANEL_STUBS = {
 describe('N4（渲染层）：面板 child 分支必须走归一化，不得写 builtin:（CE-05）', () => {
   it('内置图标 + 子分支 → controller 收到的是 data: URL，不是 builtin:<id>', async () => {
     const { controller, added } = recordingController();
-    const builtin = BUILTIN_ASSET_ITEMS[0]!;
+    const builtin = must(BUILTIN_ASSET_ITEMS[0]);
     const { container } = render(
       <SidePanels panel="assets" controller={controller as never} {...PANEL_STUBS} />,
     );
 
     // 切到「内置图标」Tab，选中「子分支」语义，点第一张卡片
-    fireEvent.click(
-      Array.from(container.querySelectorAll('[data-asset-tab]')).find((el) =>
-        el.textContent?.includes('内置图标'),
-      )!,
-    );
-    fireEvent.click(container.querySelector('[data-asset-action="child"]')!);
-    fireEvent.click(container.querySelector('[data-asset-item]')!);
+    fireEvent.click(byText(container.querySelectorAll('[data-asset-tab]'), '内置图标'));
+    fireEvent.click(must(container.querySelector('[data-asset-action="child"]')));
+    fireEvent.click(must(container.querySelector('[data-asset-item]')));
     await new Promise((r) => setTimeout(r, 0));
 
     expect(added).toHaveLength(1);
     // CE-05 的核心断言：文档里绝不能出现 builtin: 引用
-    expect(added[0]!.id.startsWith('builtin:')).toBe(false);
+    expect(must(added[0]).id.startsWith('builtin:')).toBe(false);
     expect(builtin.id.startsWith('builtin:')).toBe(true); // 前提：内置项的 id 确实是 builtin: 形态
-    expect(added[0]!.id.startsWith('data:')).toBe(true);
+    expect(must(added[0]).id.startsWith('data:')).toBe(true);
   });
 
   it('icon 语义同样内联（child 与 icon 同口径，不自相矛盾）', async () => {
@@ -425,16 +451,12 @@ describe('N4（渲染层）：面板 child 分支必须走归一化，不得写 
     const { container } = render(
       <SidePanels panel="assets" controller={controller as never} {...PANEL_STUBS} />,
     );
-    fireEvent.click(
-      Array.from(container.querySelectorAll('[data-asset-tab]')).find((el) =>
-        el.textContent?.includes('内置图标'),
-      )!,
-    );
-    fireEvent.click(container.querySelector('[data-asset-action="icon"]')!);
-    fireEvent.click(container.querySelector('[data-asset-item]')!);
+    fireEvent.click(byText(container.querySelectorAll('[data-asset-tab]'), '内置图标'));
+    fireEvent.click(must(container.querySelector('[data-asset-action="icon"]')));
+    fireEvent.click(must(container.querySelector('[data-asset-item]')));
     await new Promise((r) => setTimeout(r, 0));
 
     expect(notes).toHaveLength(1);
-    expect(String(notes[0]!.icon).startsWith('draw:data:')).toBe(true);
+    expect(String(must(notes[0]).icon).startsWith('draw:data:')).toBe(true);
   });
 });

@@ -129,7 +129,7 @@ describe('已挂载工作区：写入 ./assets/', () => {
     const fallback = fakeFallback();
     const host = new WorkspaceAssetHost(fallback, () => w);
 
-    const big = await host.uploadAsset(svgFile('big.svg', INLINE_SVG_LIMIT + 50));
+    const _big = await host.uploadAsset(svgFile('big.svg', INLINE_SVG_LIMIT + 50));
     expect(disk.has('big.svg')).toBe(true);
 
     const small = await host.uploadAsset(svgFile('small.svg', 200));

@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render } from '@testing-library/react';
+
+/** 收窄助手：断言「此处必非空」（语义与 `!` 相同，但不触发 noNonNullAssertion） */
+function must<T>(v: T | null | undefined): T {
+  if (v === null || v === undefined) throw new Error('expected non-null');
+  return v;
+}
 import { AssetPanel, type AssetItem } from '../src/chrome/AssetPanel.js';
 import {
   badgesFor,
@@ -39,7 +45,7 @@ describe('AssetPanel：图库侧栏', () => {
   it('点击关闭 → onClose', () => {
     const close = vi.fn();
     const { container } = render(<AssetPanel assets={ASSETS} onInsert={vi.fn()} onClose={close} />);
-    fireEvent.click(container.querySelector('[data-asset-close]')!);
+    fireEvent.click(must(container.querySelector('[data-asset-close]')));
     expect(close).toHaveBeenCalled();
   });
 
@@ -68,7 +74,7 @@ describe('AssetPanel：上传入口（P1-1）', () => {
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
     expect(input).not.toBeNull();
     const clickSpy = vi.spyOn(input, 'click');
-    fireEvent.click(btn!);
+    fireEvent.click(must(btn));
     expect(clickSpy).toHaveBeenCalled();
   });
 
@@ -88,7 +94,7 @@ describe('AssetPanel：上传入口（P1-1）', () => {
     const { container } = render(
       <AssetPanel assets={ASSETS} onInsert={vi.fn()} onClose={vi.fn()} onUpload={onUpload} />,
     );
-    const panel = container.querySelector('[data-asset-panel]')!;
+    const panel = must(container.querySelector('[data-asset-panel]'));
     const dt = { files: FILES };
     const dropEvent = fireEvent.drop(panel, { dataTransfer: dt, bubbles: true });
     expect(dropEvent).toBe(false); // fireEvent 返回 false = preventDefault 已被调用
@@ -99,7 +105,7 @@ describe('AssetPanel：上传入口（P1-1）', () => {
     const { container } = render(<AssetPanel assets={ASSETS} onInsert={vi.fn()} onClose={vi.fn()} />);
     expect(container.querySelector('[data-asset-upload]')).toBeNull();
     expect(() => {
-      fireEvent.drop(container.querySelector('[data-asset-panel]')!, {
+      fireEvent.drop(must(container.querySelector('[data-asset-panel]')), {
         dataTransfer: { files: FILES },
         bubbles: true,
       });
@@ -162,7 +168,7 @@ describe('P0-B：落点徽章（AssetPanel.storeOf 通道）', () => {
         storeOf={(a) => (a.source === 'builtin' ? 'builtin' : null)}
       />,
     );
-    fireEvent.click(container.querySelector('[data-asset-tab]:nth-child(3)')!);
+    fireEvent.click(must(container.querySelector('[data-asset-tab]:nth-child(3)')));
     expect(container.textContent).toContain('🎨 内置');
   });
 

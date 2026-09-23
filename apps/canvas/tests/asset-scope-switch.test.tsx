@@ -119,6 +119,8 @@ describe('A1 ②：迟到结果被丢弃但**仍然记账**（I-22）', () => {
     // 写入过程中切到 B
     switchTo({ scopeId: 'ws:B', scopeEpoch: 2, writer: diskOf({}) });
     const result = await host.uploadAssetDetailed(new File(['RED'], 'late.png', { type: 'image/png' }));
+    // `failed` 无 `item`（判别联合）→ 先窄化，符合三态契约的用法
+    if (result.kind === 'failed') throw new Error(`上传不应失败：${result.error.code}`);
 
     // 写入确实发生在当前（B）磁盘上 —— 用捕获值判定归属仍是 A
     const confirmed = isWriteConfirmed(captured, host.scopeMark());

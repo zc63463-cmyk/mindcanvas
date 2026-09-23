@@ -22,7 +22,6 @@ import { findNode, getNode, LayoutCache, REGISTERED_KINDS, refKey } from '@mindc
 // L1：文本区域链接跳转（锚解析 + 三态）
 import { parseLinkAnchor, resolveLinkAnchor } from '@mindcanvas/kernel';
 import type {
-  AssetHost,
   AssetItem,
   AssetInsertAction,
   Center,
@@ -2976,13 +2975,7 @@ function StageContent({
         normalizeInsert={async (item, action: AssetInsertAction) => {
           const result = await normalizeForInsert(
             item,
-            {
-              workspace: workspaceReady ? workspace : null,
-              // 「已在本工作区磁盘上」由账本给出（**不**用 id 前缀推断：
-              // 素材库项的 id 同样是 assets/<name>，推断会把冲突误判成复用）
-              alreadyInWorkspace:
-                storeOf(item) === 'workspace-assets' && workspaceReady,
-            },
+            { workspace: workspaceReady ? workspace : null },
             assetHost,
           );
           if (result.kind === 'refused') {

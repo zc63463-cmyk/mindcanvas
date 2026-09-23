@@ -8,11 +8,16 @@
  *  3. 点击素材可自由选择「节点图标 / 节点插图 / 子分支」——
  *     不再无差别新建子节点（旧行为由 onInsert 兜底，仍可用）。
  */
-import { afterEach, describe, expect, it, vi } from 'vitest';
+
 import { cleanup, fireEvent, render } from '@testing-library/react';
-import { AssetWriteLedger, isWriteConfirmed, readAssetLedger } from '../src/chrome/assetWriteLedger.js';
-import { ASSET_ACTION_LABEL, AssetPanel, type AssetItem } from '../src/chrome/AssetPanel.js';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ASSET_ACTION_LABEL, type AssetItem, AssetPanel } from '../src/chrome/AssetPanel.js';
 import { BUILTIN_ICONS } from '../src/chrome/assetIcons.js';
+import {
+  AssetWriteLedger,
+  isWriteConfirmed,
+  readAssetLedger,
+} from '../src/chrome/assetWriteLedger.js';
 
 // vitest 未开 globals，@testing-library/react 不会自动清理 DOM；显式 afterEach(cleanup) 避免用例间泄漏
 afterEach(() => {
@@ -257,9 +262,15 @@ describe('P0-B：AssetWriteLedger（记账 / 重发现 / 诊断）', () => {
   };
 
   it('isWriteConfirmed：同 scopeKey 且同 epoch → 确认；任一不同 → 不确认', () => {
-    expect(isWriteConfirmed({ scopeKey: 'ws:A', epoch: 1 }, { scopeKey: 'ws:A', epoch: 1 })).toBe(true);
-    expect(isWriteConfirmed({ scopeKey: 'ws:A', epoch: 1 }, { scopeKey: 'ws:A', epoch: 2 })).toBe(false);
-    expect(isWriteConfirmed({ scopeKey: 'ws:A', epoch: 1 }, { scopeKey: 'ws:B', epoch: 1 })).toBe(false);
+    expect(isWriteConfirmed({ scopeKey: 'ws:A', epoch: 1 }, { scopeKey: 'ws:A', epoch: 1 })).toBe(
+      true,
+    );
+    expect(isWriteConfirmed({ scopeKey: 'ws:A', epoch: 1 }, { scopeKey: 'ws:A', epoch: 2 })).toBe(
+      false,
+    );
+    expect(isWriteConfirmed({ scopeKey: 'ws:A', epoch: 1 }, { scopeKey: 'ws:B', epoch: 1 })).toBe(
+      false,
+    );
   });
 
   it('作用域已切换 → 条目标 unconfirmed（属于**捕获时**的 scope，I-22）', () => {

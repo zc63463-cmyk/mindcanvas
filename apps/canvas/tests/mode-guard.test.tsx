@@ -34,11 +34,27 @@ const inFreeCanvas = (c: HTMLElement): boolean => c.querySelector('[data-fc-stag
 const saveState = (c: HTMLElement): string =>
   c.querySelector('[data-save-state]')?.textContent ?? '';
 
-/** 冲刷微任务 + 定时器（保存链路异步；用 act 包住避免状态更新落在 act 之外） */
+/**
+ * 冲刷微任务 + 定时器（保存链路异步；用 act 包住避免状态更新落在 act 之外）。
+ *
+ * **为什么等到 20ms 而不是 0**：本文件的 `requestAnimationFrame` 桩按
+ * `setTimeout(cb, 16)` 调度（见 `beforeEach`；canvas 套件 `pretendToBeVisual:false`，
+ * 没有真实 rAF）。只等一个 0ms tick 时，「编辑 → dirty」要经过的那次 rAF 回调
+ * **是否已经跑过**取决于事件循环里还排着多少别的定时器 —— 单文件跑时够用，
+ * 同批多一个稍慢的文件就不够。
+ *
+ * 实测（P0-B 施工时定位）：`mode-guard` + 任意一个约 1.5s 的空转文件即转红
+ * `expected '✓ 已保存' to contain '未保存'`；**同一现象在 P0-B 之前的基线上同样复现**
+ * （`git stash` 后加一个 `setTimeout(1500)` 空转文件即可重现），因此是本文件既有的
+ * 调度脆弱性，不是某次改动引入的回归。
+ *
+ * 等到 20ms（> 16ms 的 rAF 桩）让一次 rAF 回调必然有机会执行 ——
+ * **断言一字未改**，只把「等多久」从与调度细节耦合改成确定够用。
+ */
 async function flush(): Promise<void> {
   await act(async () => {
     await new Promise<void>((resolve) => {
-      setTimeout(resolve, 0);
+      setTimeout(resolve, 20);
     });
   });
 }
