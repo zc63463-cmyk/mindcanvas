@@ -34,6 +34,15 @@ export interface DocumentSwitchOptions {
   /** S2G：同步标记（写点：首挂同源跳过 / reset 后置位；供保存侧守卫读） */
   syncedSourceRef: RefObject<string | null>;
   /**
+   * 「该 source 的树已由 `performApplyDoc` 同步 reset 过」的交接位（读端）。
+   *
+   * 为什么不能靠 `controller.root === editable` 判：两边的树来自**两处独立解析**
+   * （applyDoc 自己 parse 一份；渲染侧 `useMemo(buildEditable)` 再 parse 一份），
+   * 对象实例必然不同 → 引用判据永不成立 → 本 effect 会重复 reset 一遍。
+   * 改读这个**按 source 等值**的交接位：相等即「已是新树」，跳过 reset。
+   */
+  resetSourceRef?: RefObject<string | null>;
+  /**
    * SAVE-LIFECYCLE：保存会话（可选）。`doc.source` 变化（= 显式文档替换）时兜底推进会话
    * 令牌 —— 主入口是 `applyDoc` 的同步推进；此处覆盖不经 applyDoc 的替换路径。
    */
@@ -52,6 +61,7 @@ export function useDocumentSwitch({
   gatewayTitles,
   controllerRef,
   syncedSourceRef,
+  resetSourceRef,
   session,
   setEntities,
   setExpandedQaId,
@@ -108,7 +118,16 @@ export function useDocumentSwitch({
     // `root === editable` 成立，这里**不重复** reset（幂等，也避免把刚清干净的
     // history/折叠态再清一遍）。而「挂载前就换好 doc」的 S2F 路径 root 仍是旧树，
     // 这里必须补做 —— 这条分支就是它存在的理由。
-    if (controllerRef.current?.root !== editable) {
+    // R1-3：applyDoc 已在替换的同事务里同步 reset 过该 source 的树 → 本 effect 跳过。
+    //
+    // 判据用**交接位按 source 等值**，不用 `root === editable`：两处解析出的是不同
+    // 对象实例，引用判据永不成立，于是会重复 reset（白清 history/折叠态 + 多一次重渲染，
+    // 真机表现为 `summary-two-hop-host` 的真实挂载用例超时）。
+    //
+    // 交接位在**消费后立即清空**：否则它会对后续所有切换永久生效，把本该补做的 reset 也吞掉。
+    const alreadyReset = resetSourceRef?.current === doc.source;
+    if (resetSourceRef !== undefined) resetSourceRef.current = null;
+    if (!alreadyReset && controllerRef.current?.root !== editable) {
       controllerRef.current?.reset(editable);
     }
     syncedSourceRef.current = doc.source; // S2G 写点③：树 = 该文档 → 置位（幂等）

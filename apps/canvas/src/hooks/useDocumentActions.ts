@@ -25,6 +25,7 @@
 import { useCallback } from 'react';
 import type { Dispatch, RefObject, SetStateAction } from 'react';
 import type { DocumentHost, EditorController, FsFileHandle, MindDoc } from '@mindcanvas/react';
+import type { DemoSource } from '@mindcanvas/react';
 import { buildEditable, getFileHandle, setFileHandle, verifyPermission } from '@mindcanvas/react';
 import {
   SAVE_BUSY_NOTICE,
@@ -49,6 +50,31 @@ export interface DocumentActionsOptions {
   session: DocumentSaveSession;
   /** S2G：同步标记（读点②：handleSave 任务开头判定；三写点见 useDocumentSwitch / MindmapStage） */
   syncedSourceRef: RefObject<string | null>;
+  /**
+   * 「这棵树已由 `performApplyDoc` 同步 reset 过」的交接位（写端在这里，读端在
+   * `useDocumentSwitch`）。
+   *
+   * 为什么需要它：`performApplyDoc` 里 reset 用的树是本 hook **自己**解析出来的，
+   * 而渲染侧 `editable` 来自组件另一处 `useMemo(buildEditable(doc.source))` ——
+   * 两个**不同对象实例**，拿引用相等去判「是否已换树」永远不成立，于是
+   * `useDocumentSwitch` 会**再 reset 一遍**（白清一次 history/折叠态，且多一次重渲染）。
+   * 这里把「已经reset过 + 对应哪个 source」显式交接，读端据 source 等值跳过冗余 reset。
+   */
+  resetSourceRef?: RefObject<string | null>;
+  /**
+   * 已解析树的**交接位**（`performApplyDoc` 写、渲染侧的数据管线读）。
+   *
+   * **为什么必需**（真机实测的真 bug）：`astToEditable` 每次解析都会 `newId()`
+   * **重新生成全部节点 id**（`kernel/tree/treeOps.ts:41`）。若 `performApplyDoc`
+   * 自己 parse 一棵树交给 `controller.reset`，而渲染侧 `useMemo(buildEditable)` 又
+   * parse 一棵 —— 两棵树的 **id 空间不同**。后果：任何**按 id 记录**的会话态
+   * （摘要两跳草稿 `fromId`、note 面板路径、编辑中 id……）在 reset 之后指向不存在的节点
+   * → 第二跳被判非法/草稿丢失（`summary-two-hop-host` ①b/⑪ 偶发失败的真因）。
+   *
+   * 交接方式：`performApplyDoc` 把 `{source, editable}` 存进来；渲染侧的数据管线
+   * 在同 source 时**直接取用**（一次解析、一处 id 空间），随后清空。
+   */
+  parsedHandoffRef?: RefObject<{ source: string; parsed: DemoSource } | null>;
   /**
    * R2：文档会话令牌的推进口（`hooks/useDocumentToken.ts`）。
    *
@@ -99,6 +125,8 @@ export function useDocumentActions({
   autoSaveTimer,
   session,
   syncedSourceRef,
+  resetSourceRef,
+  parsedHandoffRef,
   onDocumentReplaced,
   onBlockedSave,
   onSaveWarning,
@@ -152,9 +180,15 @@ export function useDocumentActions({
       if (parsed.editable !== null) {
         controller.reset(parsed.editable);
         syncedSourceRef.current = next.source;
+        // 把这棵树交接给渲染侧（同 source 时复用 → **一次解析、一处 id 空间**）
+        if (parsedHandoffRef !== undefined) {
+          parsedHandoffRef.current = { source: next.source, parsed };
+        }
+        if (resetSourceRef !== undefined) resetSourceRef.current = next.source;
       } else {
         // 解析不出树 → 树与任何 source 都不同步；显式置 null 使守卫拒写（fail-closed）
         syncedSourceRef.current = null;
+        if (resetSourceRef !== undefined) resetSourceRef.current = null;
       }
       setDoc(next);
       docHost.remember(next);
@@ -167,7 +201,16 @@ export function useDocumentActions({
         }
       });
     },
-    [controller, session, setDoc, docHost, onDocumentReplaced, syncedSourceRef],
+    [
+      controller,
+      session,
+      setDoc,
+      docHost,
+      onDocumentReplaced,
+      syncedSourceRef,
+      resetSourceRef,
+      parsedHandoffRef,
+    ],
   );
 
   const applyDoc = useCallback(

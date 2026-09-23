@@ -241,10 +241,24 @@ function StageInner({ onOpenFreeCanvas, requestLeave, registerLeavePort }: Mindm
   }));
   const [docMenuOpen, setDocMenuOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // R1-3：applyDoc 已解析好的树交给渲染侧复用（同 source 时），保证只有一处 id 空间
+  const parsedHandoffRef = useRef<{ source: string; parsed: EditableData } | null>(null);
 
   // 数据管线：parseMm → astToEditable → entities（T3；B1：随当前文档 source 重解析）
   // entities 为 state：图库插入 @img/@draw 引用后动态扩展（key = `${kind}:${id}`）
-  const data = useMemo(() => buildEditable(doc.source), [doc.source]);
+  //
+  // R1-3：`applyDoc` 为了「树属于新文档」的**同步事实**必须先 parse 一次；而
+  // `astToEditable` 每次都 `newId()`，两次解析会得到**两个 id 空间** —— 于是按 id
+  // 记录的会话态（摘要两跳草稿 `fromId` 等）会指向不存在的节点。这里**复用**交接过来的
+  // 那棵树：同 source 即取用并清空，保证 controller 与渲染看到的是同一份对象。
+  const data = useMemo(() => {
+    const handoff = parsedHandoffRef.current;
+    if (handoff !== null && handoff.source === doc.source) {
+      parsedHandoffRef.current = null;
+      return handoff.parsed;
+    }
+    return buildEditable(doc.source);
+  }, [doc.source]);
   const { editable, refs } = data;
   const [entities, setEntities] = useState<Map<string, Entity>>(() =>
     buildEntities(refs, GATEWAY_TITLES),
@@ -259,6 +273,8 @@ function StageInner({ onOpenFreeCanvas, requestLeave, registerLeavePort }: Mindm
   const controllerRef = useRef<EditorController | null>(null);
   // S2G：保存侧同步守卫的同步标记（写点①：下方 controller 创建处；其余写点见 useDocumentSwitch）
   const syncedSourceRef = useRef<string | null>(null);
+  // S2G/R1-3：applyDoc ↔ useDocumentSwitch 的「树已同步 reset」交接位（见 useDocumentSwitch 选项注释）
+  const resetSourceRef = useRef<string | null>(null);
   if (controllerRef.current === null && editable) {
     controllerRef.current = new EditorController(editable, {
       // R1-4：管线内锚迁移冲突（apply 路径）→ 命令告警条；applyTransaction 路径
@@ -380,6 +396,8 @@ function StageInner({ onOpenFreeCanvas, requestLeave, registerLeavePort }: Mindm
       setEntities={setEntities}
       controllerRef={controllerRef}
       syncedSourceRef={syncedSourceRef}
+      resetSourceRef={resetSourceRef}
+      parsedHandoffRef={parsedHandoffRef}
       controller={controller}
       commandNotice={commandNotice}
       setCommandNotice={setCommandNotice}
@@ -412,6 +430,10 @@ interface StageContentProps {
   controllerRef: RefObject<EditorController | null>;
   /** S2G：保存侧同步守卫的同步标记（三写点：创建处 / switch 两分支） */
   syncedSourceRef: RefObject<string | null>;
+  /** R1-3：applyDoc ↔ useDocumentSwitch 的「树已同步 reset」交接位 */
+  resetSourceRef: RefObject<string | null>;
+  /** R1-3：applyDoc 已解析好的树（同 source 复用，保证只有一处节点 id 空间） */
+  parsedHandoffRef: RefObject<{ source: string; parsed: EditableData } | null>;
   /** 非 null —— 由 StageInner 早退保证 */
   controller: EditorController;
   /** A5 命令告警（R1-4 状态提升至 StageInner：锚迁移冲突回调在 controller 构造处闭包） */
@@ -449,6 +471,8 @@ function StageContent({
   setEntities,
   controllerRef,
   syncedSourceRef,
+  resetSourceRef,
+  parsedHandoffRef,
   controller,
   commandNotice,
   setCommandNotice,
@@ -495,6 +519,7 @@ function StageContent({
     gatewayTitles: GATEWAY_TITLES,
     controllerRef,
     syncedSourceRef,
+    resetSourceRef,
     session: saveSession,
     setEntities,
     setExpandedQaId,
@@ -550,6 +575,8 @@ function StageContent({
     autoSaveTimer,
     session: saveSession,
     syncedSourceRef,
+    resetSourceRef,
+    parsedHandoffRef,
     // R2：显式文档替换（打开/新建/最近/文件库/工作区/拖入）都要让会话态草稿失效。
     // 放在**替换动作发生处**（performApplyDoc）而不是只听 `doc.source` 变化：
     // 同内容替换（重开同一文件）source 逐字相同，靠 source 判据会漏掉。
