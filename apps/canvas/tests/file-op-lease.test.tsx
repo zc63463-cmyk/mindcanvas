@@ -145,6 +145,40 @@ describe('租约 · 授予与拒绝（I-16 / I-17）', () => {
     void pending;
   });
 
+  it('★★跨会话物理写：切文档后旧会话的写入仍在途 → 仍须 busy-physical（I-17 的真正边界）', async () => {
+    // 这条是本负控的核心：`waitForIdle()` 只看**当前会话**，被替换会话已发出的物理写
+    // 不在其范围内却仍在动磁盘。若把判据写成 `isSaving()`（即「当会话有活动任务」），
+    // 切文档后计数会被绕过 —— 于是「等待空闲 → 新保存进入 → rename 复制旧快照 → 删源」
+    // 的竞态重新成立。physicalWritesInFlight 不随 token 推进归零，正是为了覆盖这一段。
+    const session = new DocumentSaveSession({ readContent: () => null });
+    const gate = deferred<SaveOutcome>();
+    const pending = session.submit({
+      intent: 'auto',
+      capture: () => ({ source: '# 旧会话\n', content: {} }),
+      write: () => gate.promise,
+      commit: () => {},
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(session.physicalWritesInFlight).toBe(1);
+
+    // 用户切到另一篇文档：会话令牌推进，旧会话的任务不再是「当前会话的活动任务」
+    session.beginDocument(HANDLE);
+    expect(session.isSaving()).toBe(false); // ← waitForIdle 在这一刻就返回了
+    // 但磁盘上的写还没结束，故租约必须仍被拒
+    expect(session.physicalWritesInFlight).toBe(1);
+    expect(session.beginExclusiveOp('rename')).toEqual({
+      kind: 'refused',
+      reason: 'busy-physical',
+    });
+
+    // 旧 I/O 收束后计数回落 → 可授予（不永久卡住）
+    gate.resolve({ result: 'fs', handle: HANDLE });
+    await pending;
+    expect(session.physicalWritesInFlight).toBe(0);
+    expect(session.beginExclusiveOp('rename').kind).toBe('granted');
+  });
+
   it('物理写计数在写入失败时同样回落（否则永久卡住 beginExclusiveOp）', async () => {
     const session = new DocumentSaveSession({ readContent: () => null });
     const done = session.submit({
