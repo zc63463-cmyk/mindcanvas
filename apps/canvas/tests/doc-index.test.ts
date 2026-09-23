@@ -1639,3 +1639,253 @@ describe('P0-A F5 · 改名/移动后的身份随行（relocateDoc）', () => {
     expect(d.getDoc(geren)).toBeTruthy();
   });
 });
+
+// ---------------------------------------------------------------- DS-10：旧库旧键逐行回收（判据 (b')）
+
+/**
+ * DS-10 实施批（裁定 `docs/dispatch/2026-09-23-ds10-rejudgement.md`）。
+ *
+ * 判据 (b')：在 `projectLibrary` 的行集构建里移除满足**全部三条**的旧库行——
+ *   ① 已被某条目认领（**双形态**：明文 `X`，或 `mindcanvas.library.v1#X`）；
+ *   ② 不是任何条目的当前投影 id（`X ∉ { legacyIdOf(e) : e ∈ docs }`）；
+ *   ③ 行本身可解析（有非空字符串 `id`，即落在 `byId` 内，非 opaque）。
+ * 外加 F3-部分成功的源行排除（裁定 §3）。
+ *
+ * 本组六条用例对应裁定 §4 的**六条不变量**（逐条一一对应，命名即为不变量编号）。
+ */
+describe('DS-10 · 旧库旧键逐行回收（判据 (b\')）', () => {
+  const SCOPE = 'ws:aaaa';
+
+  /**
+   * 造一条「改名后」的索引状态（最典型的被取代行来源）：
+   * 旧行 `旧名.mm.md` 在旧库里，条目已改名到 `新名.mm.md`，
+   * `relocateEntries` 把旧键以**明文形态**写进 `legacyKeys`。
+   *
+   * 注意 `relocateDoc` 只 `persist()`（写索引）**不投影**（`docIndex.ts:264`）——
+   * 生产里下一次索引写（打开/保存/迁移）才触发投影。故这里跟一次 `saveDoc`
+   * 把投影跑出来，正是生产时序。返回值是那次投影后的旧库内容。
+   */
+  function afterRename(d: DocIndex, from: string, to: string): void {
+    d.relocateDoc({
+      fromDocKey: wsDocKey(SCOPE, from),
+      docKey: wsDocKey(SCOPE, to),
+      relPath: to,
+      name: to,
+      scopeId: SCOPE,
+      persisted: true,
+      sourceRef: { kind: 'disk-handle' },
+    });
+    d.saveDoc({ docKey: wsDocKey(SCOPE, to), relPath: to, name: to }, 2_000);
+  }
+
+  it('不变量 5：改名后旧行被回收，降级视图回到「一行一文档」', () => {
+    // 旧库里已有「旧名.mm.md」一行；索引侧已改名到「新名.mm.md」。
+    localStorage.setItem(
+      LEGACY_LIBRARY_KEY,
+      JSON.stringify([{ id: '旧名.mm.md', name: '旧名.mm.md', ts: 10, folder: '', tags: [] }]),
+    );
+    const d = idx(diskCtx(SCOPE));
+    seedRegistered(d, '旧名.mm.md', SCOPE);
+    // 注册时投影已跑过一次：旧行此刻**仍在**（还没被认领，是「尚未迁移」）
+    expect(readLib().map((r) => r.id)).toEqual(['旧名.mm.md']);
+
+    afterRename(d, '旧名.mm.md', '新名.mm.md');
+
+    // 改名认领了旧键（明文形态）→ 旧行被回收，视图只剩当前那一行
+    expect(readLib().map((r) => r.id)).toEqual(['新名.mm.md']);
+    // **同一逻辑文档不再两行**（不变量 5 的正面陈述）
+    expect(readLib()).toHaveLength(1);
+  });
+
+  it('不变量 1：孤儿行（从未被认领）一律保留', () => {
+    localStorage.setItem(
+      LEGACY_LIBRARY_KEY,
+      JSON.stringify([
+        { id: '旧名.mm.md', name: '旧名.mm.md', ts: 10, folder: '', tags: [] },
+        { id: '孤儿.mm.md', name: '孤儿.mm.md', ts: 5, folder: '', tags: [] },
+      ]),
+    );
+    const d = idx(diskCtx(SCOPE));
+    seedRegistered(d, '旧名.mm.md', SCOPE);
+    afterRename(d, '旧名.mm.md', '新名.mm.md');
+
+    const ids = readLib().map((r) => r.id);
+    expect(ids).toContain('新名.mm.md');
+    // 孤儿行**不得**被连带回收（它从未被任何条目认领）
+    expect(ids).toContain('孤儿.mm.md');
+    expect(ids).not.toContain('旧名.mm.md');
+  });
+
+  it('不变量 3：尚未迁移的旧键不被投影破坏（未被认领 ⇒ 不删）', () => {
+    // 索引里既没这条文档、也没有任何条目认领过它 → 属于「还没迁移」。
+    localStorage.setItem(
+      LEGACY_LIBRARY_KEY,
+      JSON.stringify([{ id: '未迁移.mm.md', name: '未迁移.mm.md', ts: 7, folder: '', tags: [] }]),
+    );
+    const d = idx(diskCtx(SCOPE));
+    seedRegistered(d, '别的.mm.md', SCOPE); // 触发一次投影
+
+    // 投影不得删掉迁移自己的输入
+    expect(readLib().map((r) => r.id)).toContain('未迁移.mm.md');
+    // 也不得凭空给它建条目
+    expect(d.getDoc(wsDocKey(SCOPE, '未迁移.mm.md'))).toBeUndefined();
+  });
+
+  it('不变量 4：幂等——投影连续两次行集一致，且纯 migrate() 不碰旧库', () => {
+    localStorage.setItem(
+      LEGACY_LIBRARY_KEY,
+      JSON.stringify([
+        { id: '旧名.mm.md', name: '旧名.mm.md', ts: 10, folder: '', tags: [] },
+        { id: '孤儿.mm.md', name: '孤儿.mm.md', ts: 5, folder: '', tags: [] },
+      ]),
+    );
+    const d = idx(diskCtx(SCOPE));
+    seedRegistered(d, '旧名.mm.md', SCOPE);
+    afterRename(d, '旧名.mm.md', '新名.mm.md');
+
+    // 幂等的正确口径：**行集合**（id 有序列表）稳定，而不是逐字节相同——
+    // `saveDoc` 会推进 `ts`，字节自然变；「行集一致」才是 (b') 幂等的判据。
+    const idsAfterFirst = readLib().map((r) => r.id);
+    d.saveDoc({ docKey: wsDocKey(SCOPE, '新名.mm.md'), relPath: '新名.mm.md', name: '新名.mm.md' }, 99);
+    expect(readLib().map((r) => r.id)).toEqual(idsAfterFirst); // 第二次投影行集一致
+    // 首次清理后稳定：旧行不会「复活」
+    expect(idsAfterFirst).toEqual(['新名.mm.md', '孤儿.mm.md']);
+
+    // 纯 migrate() 前后旧库逐字节不变（migrate 不改写旧库）
+    const beforeMigrate = localStorage.getItem(LEGACY_LIBRARY_KEY);
+    d.migrate();
+    expect(localStorage.getItem(LEGACY_LIBRARY_KEY)).toBe(beforeMigrate);
+  });
+
+  it('不变量 2：畸形行保留（(b\') 不碰 opaque 行，:236 的 failed 断言不受影响）', () => {
+    localStorage.setItem(
+      LEGACY_LIBRARY_KEY,
+      JSON.stringify([
+        { id: '旧名.mm.md', name: '旧名.mm.md', ts: 10 },
+        null,
+        { name: '缺 id' },
+      ]),
+    );
+    const d = idx(diskCtx(SCOPE));
+    seedRegistered(d, '旧名.mm.md', SCOPE);
+    afterRename(d, '旧名.mm.md', '新名.mm.md');
+
+    const kept = JSON.parse(localStorage.getItem(LEGACY_LIBRARY_KEY) ?? '[]') as unknown[];
+    // 合法旧行被回收，畸形行**一行没少**地附着在末尾
+    expect(kept).toHaveLength(3); // 新名行 + null + 缺 id
+    expect(kept[1]).toBeNull();
+    expect(kept[2]).toEqual({ name: '缺 id' });
+    // 迁移仍逐条判定畸形行（failed 口径不变）
+    const r = d.migrate();
+    expect(r.failed).toBeGreaterThan(0);
+  });
+
+  it('★双形态认领：前缀形态（M5 迁移）同样触发回收', () => {
+    // M5 的认领写成 `mindcanvas.library.v1#<key>`（docIndexMigrate.ts:180）。
+    // 造一条已迁移的旧库行：条目 relPath 是可解析的，但**当前投影 id 不是**这个旧键
+    // （模拟「M5 迁入后源文档被改名/移动」），于是该行是被取代行。
+    localStorage.setItem(
+      LEGACY_LIBRARY_KEY,
+      JSON.stringify([{ id: 'M5旧键.mm.md', name: 'M5旧键.mm.md', ts: 3, folder: '', tags: [] }]),
+    );
+    // 直接写索引：条目已在别处，legacyKeys 只有**前缀形态**的认领
+    localStorage.setItem(
+      DOC_INDEX_KEY,
+      JSON.stringify({
+        entries: [
+          {
+            docKey: wsDocKey(SCOPE, '现在.mm.md'),
+            scopeId: SCOPE,
+            relPath: '现在.mm.md',
+            lineageId: 'l1',
+            name: '现在.mm.md',
+            title: null,
+            openedAt: null,
+            savedAt: 3,
+            starred: false,
+            sourceRef: { kind: 'disk-handle' },
+            legacyKeys: [`${LEGACY_LIBRARY_KEY}#M5旧键.mm.md`],
+          },
+        ],
+      }),
+    );
+    const d = idx(diskCtx(SCOPE));
+    // 触发一次投影
+    d.saveDoc({ docKey: wsDocKey(SCOPE, '现在.mm.md'), relPath: '现在.mm.md', name: '现在.mm.md' }, 4);
+
+    // 前缀形态被认出 → 被取代行回收
+    expect(readLib().map((r) => r.id)).toEqual(['现在.mm.md']);
+  });
+
+  it('★不变量 6（F3-部分成功）：未消解的源行保留，消解后才回收', () => {
+    // 场景：move 目标已写、源删除失败 → 源键被 relocateDoc 认领（明文形态），
+    // 源文件**仍在盘上**。此刻它是那个源文件在降级视图里的唯一代表。
+    localStorage.setItem(
+      LEGACY_LIBRARY_KEY,
+      JSON.stringify([
+        { id: '源.mm.md', name: '源.mm.md', ts: 10, folder: '', tags: [] },
+        { id: '孤儿.mm.md', name: '孤儿.mm.md', ts: 5, folder: '', tags: [] },
+      ]),
+    );
+    const d = idx(diskCtx(SCOPE));
+    seedRegistered(d, '源.mm.md', SCOPE);
+    afterRename(d, '源.mm.md', '目标.mm.md');
+    // 基线：没有 partial 登记时，源行**会**被回收（证明这一行确实满足 (b')）
+    expect(readLib().map((r) => r.id)).toEqual(['目标.mm.md', '孤儿.mm.md']);
+
+    // 现在把「源」登记为未消解的 partial 源，并重放被取代状态：
+    // 先复位旧库到「两行都在」，再登记 partial，再认领一次（模拟编排层时序：
+    // `onPartialSource` 必须在 `onRebound`→`relocateDoc` 认领**之前**跑）
+    localStorage.setItem(
+      LEGACY_LIBRARY_KEY,
+      JSON.stringify([
+        { id: '源.mm.md', name: '源.mm.md', ts: 10, folder: '', tags: [] },
+        { id: '孤儿.mm.md', name: '孤儿.mm.md', ts: 5, folder: '', tags: [] },
+      ]),
+    );
+    d.notePartialSource('源.mm.md');
+    d.saveDoc({ docKey: wsDocKey(SCOPE, '目标.mm.md'), relPath: '目标.mm.md', name: '目标.mm.md' }, 11);
+
+    // ★ 源行被**显式跳过**——它是仍在盘上的源文件的唯一代表
+    expect(readLib().map((r) => r.id)).toContain('源.mm.md');
+    // 孤儿行照常保留
+    expect(readLib().map((r) => r.id)).toContain('孤儿.mm.md');
+
+    // 消费者处理完那一对文件 → 消解 → 源行变回普通被取代行，可被回收
+    d.clearPartialSource('源.mm.md');
+    expect(readLib().map((r) => r.id)).not.toContain('源.mm.md');
+  });
+
+  it('★starred 侧前缀不对称已消除（裁定 §5 附带项）', () => {
+    // 场景：M5/M6 迁入后用户取消收藏、且该键**从未**进过 library 的 legacyKeys。
+    // 旧实现只做明文查找 → 前缀形态命不中 → 旧收藏键被保守保留（残留星标）。
+    localStorage.setItem(LEGACY_STARRED_KEY, JSON.stringify(['旧收藏.mm.md']));
+    localStorage.setItem(
+      DOC_INDEX_KEY,
+      JSON.stringify({
+        entries: [
+          {
+            docKey: wsDocKey(SCOPE, '旧收藏.mm.md'),
+            scopeId: SCOPE,
+            relPath: '旧收藏.mm.md',
+            lineageId: 'l1',
+            name: '旧收藏.mm.md',
+            title: null,
+            openedAt: null,
+            savedAt: 1,
+            starred: false, // 用户已取消收藏
+            sourceRef: { kind: 'disk-handle' },
+            // 认领是**前缀形态**（M6 的写法），明文形态从未写过
+            legacyKeys: [`${LEGACY_STARRED_KEY}#旧收藏.mm.md`],
+          },
+        ],
+      }),
+    );
+    const d = idx(diskCtx(SCOPE));
+    d.saveDoc({ docKey: wsDocKey(SCOPE, '旧收藏.mm.md'), relPath: '旧收藏.mm.md', name: '旧收藏.mm.md' }, 2);
+
+    // 双形态认领命中 → 「用户取消收藏」被认出 → 旧键不再残留
+    expect(JSON.parse(localStorage.getItem(LEGACY_STARRED_KEY) ?? '[]')).toEqual([]);
+  });
+});
+
