@@ -52,6 +52,14 @@ export function FileManagerOpStack({
           sourcePath={currentDocOps.ui.partial.sourcePath}
           reason={currentDocOps.ui.partial.reason}
           copyHasNewChanges={currentDocOps.ui.partial.copyHasNewChanges}
+          /*
+            在途禁用判据：`useFileOpController` 的 `PartialPanelState.busy`。
+            **不得省略这一行** —— `PartialSuccessPanel` 的 `busy` 有 `= false` 默认值，
+            漏传会静默退化成「永不禁用」，`disabled={busy}` 变成常量 false，
+            连点两下就能对同一个源文件并发 `removeFileSafe`（提示条还会互相覆盖）。
+            这正是本轮修掉的那类「守卫在、判据不在」的空转。
+          */
+          busy={currentDocOps.ui.partial.busy}
           onChoose={currentDocOps.ui.partial.apply}
         />
       )}

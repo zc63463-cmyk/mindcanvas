@@ -25,6 +25,14 @@ export interface CurrentDocOps {
           sourcePath: string;
           reason: string;
           copyHasNewChanges: boolean;
+          /**
+           * 动作正在执行（**在途**禁用判据，真值来自 `useFileOpController` 的
+           * `PartialPanelState.busy`）。面板据此 `disabled` 三个写入类动作。
+           *
+           * 这里**必须**原样转发，不得省略、不得在渲染处现算 —— 面板拿不到
+           * 任何 in-flight 事实，判据的唯一来源就是状态机。
+           */
+          busy: boolean;
           apply: (choice: PartialChoice) => void;
         }
       | null;

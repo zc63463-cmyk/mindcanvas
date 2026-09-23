@@ -13,12 +13,11 @@
  * 面板状态里；用户点「重试删除原文件」时**重新读一次**再比对。
  * 绝不能拿同一个快照和自己比（那样永远「未变」，复查形同虚设）。
  */
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { FileOpOutcome, WorkspaceDir, WorkspaceFile, WorkspaceNode } from '@mindcanvas/react';
 import { statUnchanged, uniqueCopyName } from '@mindcanvas/react';
 import type { PartialChoice, RenameDirtyChoice } from './FileOpPanels.js';
 import {
-  FILE_OP_FAIL_NOTICE,
   type CurrentDocOpResult,
   type FileOpOrchestration,
   failNoticeOf,
@@ -57,6 +56,25 @@ export interface PartialPanelState {
    * （用户可能在应用外改过源文件，删掉会丢那些改动）。
    */
   sourceSnapshot: FileStatSnapshot | null;
+  /**
+   * 这一块面板的动作是否**正在执行**（在途禁用判据）。
+   *
+   * 为什么判据必须由本状态机给出、不能留给面板猜：`resolvePartial` 是 `async`
+   * 且**可重入** —— 「重试删除原文件」要 `await host.scan(true)` + `statFile`
+   * + `removeFileSafe` 三次 I/O，期间这块面板一直挂在屏幕上。用户连点两次，
+   * 两条流程会**并发**对同一个源文件 `removeFileSafe`，并在两次
+   * `onPartialResolved` 与两次 `close()` 上互相覆盖提示条（第二次还会对着
+   * 已删掉的源报「仍未成功」）。面板拿不到任何 in-flight 事实，
+   * 唯一能钉住它的地方是这里。此前 `busy` 只存在于面板 props 里、
+   * **全仓无一处传入**（`grep -rn "busy=" apps/canvas/src`），
+   * 于是 `disabled={busy}` 恒等于 `disabled={false}` —— 守卫在，判据不在。
+   *
+   * 语义边界：这是**在途**（in-flight）判据，与 `App.tsx:68` 的 `disabled={!ready}`、
+   * `useUnsavedTransition` 的 `busy` 同类；**不是**能力判据
+   * （`MindmapStage.tsx` 的 `canUndo/canRedo`：「现在能不能做」）。
+   * 两者不得共用同一个状态位，更不得合并判定。
+   */
+  busy: boolean;
   /** 面板动作入口（在状态里带上回调，避免渲染期再拼装） */
   apply(choice: PartialChoice): void;
 }
@@ -131,6 +149,39 @@ export function useFileOpController(options: FileOpControllerOptions): FileOpCon
   } = options;
   const [ui, setUi] = useState<FileOpUiState>({ dirtyChoice: null, partial: null, notice: null });
 
+  /**
+   * 面板动作的**在途标记**（`PartialPanelState.busy` 的真值来源）。
+   *
+   * 用 ref 而不是 state：这里读的是「现在这一刻有没有流程在跑」，用于**重入判定**，
+   * 必须在同一次 tick 内立刻可见（`setState` 是异步的，连点两下会在同一 tick
+   * 里都读到旧值 → 两道守卫形同虚设）。渲染用的 `busy` 走 `setPanelBusy`。
+   *
+   * 与 `App.tsx:125 busy={prompt?.busy ?? false}`（`useUnsavedTransition` 自己在
+   * hook 内判定）是**两套独立的判定**：离开决策器的在途态与文件操作的在途态
+   * 生命周期不同，本轮只统一**呈现**，**不合并判定**。
+   */
+  const panelBusyRef = useRef(false);
+  /**
+   * 渲染用的在途态。
+   *
+   * 只取 setter：真值一律从 `panelBusyRef` 经 `PartialPanelState.busy` 的 **getter**
+   * 读（见 `runMove` 里构造 `state` 处）。把值本身留在闭包里是上一版的错 ——
+   * `state` 只在面板打开时构造一次，取值会冻住那一帧的 `false`，
+   * `disabled={busy}` 就又变回常量。setter 的作用只是**触发一次重渲染**，
+   * 让 getter 有机会被重新读到。
+   */
+  const [, setPanelBusy] = useState(false);
+  const beginPanelBusy = useCallback((): boolean => {
+    if (panelBusyRef.current) return false; // 已有流程在跑 → 拒绝重入
+    panelBusyRef.current = true;
+    setPanelBusy(true);
+    return true;
+  }, []);
+  const endPanelBusy = useCallback((): void => {
+    panelBusyRef.current = false;
+    setPanelBusy(false);
+  }, []);
+
   const setNotice = useCallback((notice: string | null): void => {
     setUi((prev) => ({ ...prev, notice }));
   }, []);
@@ -163,7 +214,16 @@ export function useFileOpController(options: FileOpControllerOptions): FileOpCon
   // 定义在 `runMove` **之前**：后者构造面板状态时需要把 `resolvePartial` 包进 `apply`，
   // 而 `const` 不提升 —— 用 ref 转发会把依赖图搞脏，直接前置更清楚。
 
-  const resolvePartial = useCallback(
+  /**
+   * 面板动作的**顺序执行体**（无重入保护；闸门在 `resolvePartial`）。
+   *
+   * 拆出来的理由：`return` 散落在五个分支里（含两处 `await` 之后的早退），
+   * 用 `try/finally` 包整段才能保证**每条**出路都释放在途标记 ——
+   * 漏一条就会把面板永久钉死在 disabled 上。
+   *
+   * 定义在 `resolvePartial` **之前**：后者要在闭包里捕获它，而 `const` 不提升。
+   */
+  const resolvePartialInner = useCallback(
     async (choice: PartialChoice, state: PartialPanelState): Promise<void> => {
       const close = (notice: string | null): void => {
         setUi((prev) => ({ ...prev, partial: null, notice }));
@@ -210,7 +270,15 @@ export function useFileOpController(options: FileOpControllerOptions): FileOpCon
       if (source === null) {
         // 源已不在盘上（用户手动删了 / 外部删了）→ 代表不必再留
         onPartialResolved?.(state.sourcePath);
-        close(FILE_OP_FAIL_NOTICE['E-NOT-FOUND'] ?? '文件已不在磁盘上。');
+        /**
+         * P0-C ②：这里此前是 `FILE_OP_FAIL_NOTICE['E-NOT-FOUND'] ?? '文件已不在磁盘上。'`
+         * —— 同一错误码的**第二套说法**（兜底串与表内文案同码不同形）。
+         * 那个 `??` 分支其实**不可达**（`FILE_OP_FAIL_NOTICE` 是 `Record<string, string>`，
+         * 取键结果不会是 `undefined`），所以它一直是「看着像防护、实为死代码」的
+         * 分叉温床：谁哪天把表收窄成部分映射，用户就会突然看到第二句话。
+         * 现在直接查唯一事实源，兜底需求由 `failNoticeOf` 统一承担（它取 `E-UNKNOWN` 字节）。
+         */
+        close(failNoticeOf('E-NOT-FOUND'));
         await reload();
         return;
       }
@@ -236,6 +304,27 @@ export function useFileOpController(options: FileOpControllerOptions): FileOpCon
       await reload();
     },
     [host, suppressPendingAuto, onPartialResolved, reload],
+  );
+
+  /**
+   * 面板动作的**重入闸门**（在途禁用判据的执行侧）。
+   *
+   * 面板上 `disabled={busy}` 是**呈现侧**的防线：挡住「同一帧里连点两下」。
+   * 但 `busy` 从 `setState` 到重渲染之间隔着一个 tick，这期间第二次点击仍可能
+   * 落到同一个 handler 上；且面板已有的测试/其它代码可以直接调 `apply`。
+   * 所以判据必须在**这里**再钉一次 ——「呈现一致」与「行为安全」是两件事，
+   * 只有后者能保证不并发删同一个源文件。
+   */
+  const resolvePartial = useCallback(
+    async (choice: PartialChoice, state: PartialPanelState): Promise<void> => {
+      if (!beginPanelBusy()) return;
+      try {
+        await resolvePartialInner(choice, state);
+      } finally {
+        endPanelBusy();
+      }
+    },
+    [beginPanelBusy, endPanelBusy, resolvePartialInner],
   );
 
   // ---------------------------------------------------------------- 执行（dirty 决策之后）
@@ -265,6 +354,19 @@ export function useFileOpController(options: FileOpControllerOptions): FileOpCon
           // L3 保护判据：当前文档就是新副本**且**有未保存改动
           copyHasNewChanges: isDirty() && currentPath() === result.relPath,
           sourceSnapshot: snapshot ?? null,
+          /**
+           * 在途判据 —— **必须是 getter，不能在构造时取值**。
+           *
+           * 这里是本修复最容易写错的地方（第一版就错在这）：`state` 在
+           * **面板打开的那一刻**构造一次，而 `busy` 是在**动作执行期间**才变 true。
+           * 写成 `busy: panelBusy` 会把打开时那一帧的 `false` 冻进闭包，
+           * 于是 `disabled={busy}` 依旧是常量 false —— 换了个地方重现同一个空转。
+           * getter 每次读 `panelBusyRef`（ref 的读取在同 tick 内立即生效），
+           * 面板在途重渲染时就能看到 true。
+           */
+          get busy(): boolean {
+            return panelBusyRef.current;
+          },
           apply: (choice) => {
             void resolvePartial(choice, state);
           },
