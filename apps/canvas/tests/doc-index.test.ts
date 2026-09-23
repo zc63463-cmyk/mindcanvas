@@ -50,6 +50,15 @@ function must<T>(v: T | undefined): T {
   return v;
 }
 
+/** 读旧文档库投影（`mindcanvas.library.v1`）的当前内容——投影回读断言用 */
+function readLib(): Array<{ id: string; name: string; ts: number }> {
+  return JSON.parse(localStorage.getItem(LEGACY_LIBRARY_KEY) ?? '[]') as Array<{
+    id: string;
+    name: string;
+    ts: number;
+  }>;
+}
+
 function store(): IndexStore {
   return {
     get: (k) => localStorage.getItem(k),
@@ -748,6 +757,159 @@ describe('DocIndex · 降级投影（§6.3 / NC-4 期望）', () => {
     // 索引键写失败 → 投影也无从写出（`project(written=false)` 直接返回 false），
     // 状态如实记为「不可回退」，不伪报成功。
     expect(d.projectionStatus().projectionFailed).toBe(true);
+  });
+
+  /**
+   * **仅 library 投影键写失败**（复核回执 §7 N-1 的最小修复验收）。
+   *
+   * 与上一条的区别是**只让 `mindcanvas.library.v1` 失败**、`starred.v1` 正常，
+   * 且失败发生在**包侧 `DocLibrary.save` 内部**（真实配额路径的形状）：
+   * `Storage.prototype.setItem` 在目标键上抛 `QuotaExceededError` 时被
+   * `save` 的两层 try/catch **吞掉**，`replaceAll` 既不抛也不返回——
+   * 于是「外层 catch 抓到失败」这条路径根本不会发生，
+   * 唯一能发现失败的办法就是**写后回读**。
+   *
+   * 注入动作选 `saveDoc` 而不是 `setStarred`——这是本用例成立的前提，写在这里免得后人改错：
+   * 投影进 `library.v1` 的只有 `ts = max(openedAt, savedAt)`，而 `setStarred`
+   * **不推进任何时间**（收藏不是打开、也不是保存）。于是「写失败」与「写成功」
+   * 的 library 行**逐字节相同**，回读比对在逻辑上不可能区分二者（实测：
+   * `setStarred` 路径下 `projectionFailed` 保持 false，且回读值确实没变）。
+   * `saveDoc` 会推进 `savedAt` → 期望行真的变了 → 写没写进去才可判定。
+   * **这是可查性的一个真实边界**：一次只改收藏的变更若 library 写失败，
+   * 回读比对看不见（该次变更的 library 投影本就是空操作）。§6.3 要求的是
+   * 「该次变更不可回退时可查」——本用例覆盖「library 内容确有变化」的那一类。
+   *
+   * 判别力：把 `projectLibrary` 末尾的回读比对去掉（改回 `replaceAll` 后直接
+   * `return true`），本用例的 `projectionFailed === true` 与
+   * 「library 键值不符合预期」两条断言同时转红 —— 这正是 N-1 的原貌。
+   */
+  it('仅 library 投影键写失败时也标为不可回退（回读校验，不谎报成功）', () => {
+    let failLibrary = false;
+    let libraryWriteAttempts = 0;
+    const real = Storage.prototype.setItem;
+    Storage.prototype.setItem = function patched(key: string, value: string): void {
+      if (failLibrary && key === LEGACY_LIBRARY_KEY) {
+        libraryWriteAttempts += 1;
+        // 真实浏览器配额失败就是这个异常；`DocLibrary.save` 会把它吞掉
+        throw new DOMException('quota', 'QuotaExceededError');
+      }
+      real.call(this, key, value);
+    };
+    try {
+      const d = idx(diskCtx());
+      const key = wsDocKey('ws:aaaa', 'a.mm.md');
+      d.openDoc({ docKey: key, relPath: 'a.mm.md', name: 'a.mm.md' }, 1_111);
+      // 正常路径：library 投影真的写进去了（否则下面「值不符合预期」没有起点）
+      expect(d.projectionStatus().projectionFailed).toBe(false);
+      expect(first(readLib()).ts).toBe(1_111);
+
+      // 只让 library 键失败；starred 键照常可写
+      failLibrary = true;
+      d.saveDoc({ docKey: key, relPath: 'a.mm.md', name: 'a.mm.md' }, 1_200);
+
+      // ① 确实尝试过写、且真的抛了（失败被 `save` 吞掉，不是「压根没触发」）
+      expect(libraryWriteAttempts).toBeGreaterThan(0);
+      // ② library 键值**不符合预期**：整表没写进去，仍是上一次成功投影的内容。
+      //    期望 ts = max(openedAt, savedAt) = max(1111, 1200) = 1200，实际停在 1111。
+      expect(first(readLib()).ts).toBe(1_111);
+      expect(first(readLib()).ts).not.toBe(1_200);
+      // ③ 失败**必须可查**：§6.3「不可回退且可查」在 library 路径上也要成立，
+      //    否则 `FileManager.tsx:550` 的 `ProjectionFailureNotice` 永远不显示
+      expect(d.projectionStatus()).toEqual({ wroteNewData: true, projectionFailed: true });
+      // 索引侧不受影响（主流程不中断）
+      expect(d.getDoc(key)?.savedAt).toBe(1_200);
+    } finally {
+      Storage.prototype.setItem = real; // 打桩必须还原，否则污染同文件后续用例
+    }
+  });
+
+  it('仅 library 投影键写失败：starred 那一路仍正常（失败被判在正确的键上）', () => {
+    // 上一条的另一半：把「library 失败」与「投影整体坏掉」区分开——
+    // 只坏一个键时，另一个键的成功必须照常发生。
+    //
+    // 这里顺带钉住「回读校验」的**粒度边界**（诚实记录，不夸大）：`setStarred`
+    // 不推进任何时间，故 library 的期望行与已落盘行逐字节相同 → 回读**看不见**
+    // 这次 library 失败（`projectionFailed` 仍为 false）。这不是缺陷，是
+    // 「该次变更的 library 投影本就是空操作」的必然结果；§6.3 要查的是
+    // 「本次变更**不可回退**」——内容没变就不存在不可回退。
+    // 有内容变化的那一类由上面 `saveDoc` 的用例覆盖（那里必须是 true）。
+    let failLibrary = false;
+    const real = Storage.prototype.setItem;
+    Storage.prototype.setItem = function patched(key: string, value: string): void {
+      if (failLibrary && key === LEGACY_LIBRARY_KEY) {
+        throw new DOMException('quota', 'QuotaExceededError');
+      }
+      real.call(this, key, value);
+    };
+    try {
+      const d = idx(diskCtx());
+      const key = wsDocKey('ws:aaaa', 'a.mm.md');
+      d.openDoc({ docKey: key, relPath: 'a.mm.md', name: 'a.mm.md' }, 1_111);
+      failLibrary = true;
+      d.setStarred(key, true, 1_200);
+      // starred 键这一路成功落地（library 坏掉不影响它）
+      expect(JSON.parse(localStorage.getItem(LEGACY_STARRED_KEY) ?? '[]')).toEqual(['a.mm.md']);
+      // library 行的**内容**没有变化，所以这次变更仍可回退
+      expect(d.projectionStatus().projectionFailed).toBe(false);
+      // 收藏本身照常生效（索引侧不受影响）
+      expect(d.getDoc(key)?.starred).toBe(true);
+    } finally {
+      Storage.prototype.setItem = real;
+    }
+  });
+
+  it('library 投影写成功后回读校验通过（回读校验本身不误报失败）', () => {
+    // 上一条的对照：没有注入任何失败时，回读比对必须放过正常路径——
+    // 否则「回读校验」会变成常态误报（宁可报失败也不能报假失败）。
+    const d = idx(diskCtx());
+    const key = wsDocKey('ws:aaaa', '研发/架构.mm.md');
+    d.openDoc({ docKey: key, relPath: '研发/架构.mm.md', name: '架构.mm.md' }, 1_111);
+    d.saveDoc({ docKey: key, relPath: '研发/架构.mm.md', name: '架构.mm.md' }, 1_200);
+    d.setStarred(key, true, 1_300);
+    expect(d.projectionStatus().projectionFailed).toBe(false);
+    expect(first(readLib()).id).toBe('研发/架构.mm.md');
+    expect(first(readLib()).ts).toBe(1_200); // max(openedAt, savedAt)；收藏不推进时间
+  });
+
+  it('回读校验覆盖**畸形旧行**：library 写丢畸形行时也判失败（不只是索引条目）', () => {
+    // 「不处理也不丢」（§6.2.1）保护的正是畸形行，故比对必须覆盖它们。
+    // 这里模拟一个「只写得出合法行、把畸形行丢掉」的坏 `replaceAll`
+    // （即修复前最危险的那种投影实现）：写入时把畸形行从落盘内容里剔除。
+    // **回读比对必须发现行集合不符**——所以比对的行集合是 `rows`（含畸形行），
+    // 而不是「有 id 的索引条目」。
+    localStorage.setItem(
+      LEGACY_LIBRARY_KEY,
+      JSON.stringify([{ id: '好.mm.md', name: '好.mm.md', ts: 10 }, null, { name: '缺 id' }]),
+    );
+    const real = Storage.prototype.setItem;
+    let dropMalformed = false;
+    Storage.prototype.setItem = function patched(key: string, value: string): void {
+      if (dropMalformed && key === LEGACY_LIBRARY_KEY) {
+        const parsed: unknown = JSON.parse(value);
+        if (Array.isArray(parsed)) {
+          // 坏实现：只留下「像 DocEntry」的行，畸形行被静默丢弃
+          const kept = parsed.filter(
+            (r) => typeof r === 'object' && r !== null && typeof (r as { id?: unknown }).id === 'string',
+          );
+          real.call(this, key, JSON.stringify(kept));
+          return;
+        }
+      }
+      real.call(this, key, value);
+    };
+    try {
+      // 先建索引（此时还没开启坏实现）：旧库 3 行原样在，登记+投影正常
+      const d = idx(diskCtx());
+      expect(readLib()).toHaveLength(3); // 索引尚未登记，旧库 3 行未被投影重写
+
+      // 打开坏实现，再登记 → 投影尝试写出 3 行（索引行 + 两条畸形行），
+      // 落盘只剩 1 行 → 回读比对必须判失败
+      dropMalformed = true;
+      seedRegistered(d, '好.mm.md');
+      expect(d.projectionStatus().projectionFailed).toBe(true);
+    } finally {
+      Storage.prototype.setItem = real;
+    }
   });
 });
 

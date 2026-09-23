@@ -96,7 +96,55 @@ export function projectLibrary(index: ProjectionState): boolean {
       // 这不是失败（没有东西要写），故返回 true。
       if (rows.length === 0) return true;
 
-      new DocLibrary().replaceAll(rows);
+      const lib = new DocLibrary();
+      lib.replaceAll(rows);
+
+      // **写后回读校验**（N-1）。为什么不靠 `replaceAll` 抛错：包侧
+      // `DocLibrary.save`（`docLibrary.ts:107-119`）是两层 try/catch 自吞——
+      // 配额失败时**不抛、不返回、不说**，只把整表丢掉；于是「沿用既有静默降级」
+      // 与「失败能被 `projectionFailed` 捕获」不可能同源成立（施工方 §4.5 已自陈，
+      // 复核 §7 N-1 用 `Storage.prototype.setItem` 打桩确证：`projectionFailed` 会**谎报 false**）。
+      // `replaceAll` 的返回值在本包授权内也改不了（跨包契约，主控裁定归属 apps/canvas）。
+      // 唯一能在本包内成立的判据是**把真值读回来比对**。
+      //
+      // 必须用 `DocLibrary.list()`（`:122`）这个**公开读取面**：不重造包侧序列化，
+      // 读到什么就以什么为准。`index` 上虽然挂着 `store`，但那是**索引键**的端口，
+      // 不是旧库的读取方——用 `store.get(LEGACY_LIBRARY_KEY)` 等于本包自己解析
+      // 旧库格式，与「投影只经公开读取面验真」的意图相反。
+      //
+      // 比对**行集合**（`rows`），不只是索引条目：`rows` 含保留的孤儿行与无法表达的
+      // 畸形行，它们同样是「不处理也不丢」的承诺对象——只比索引条目会让
+      // 「畸形行被写丢」这条路径漏检。
+      //
+      // 口径说明（**`list()` 与 `rows` 的形状差是刻意的，不是 bug**）：
+      // `list()` 走 `load()` → `filter(isEntry).map(normalize)`，只返回**结构化合法**的
+      // `DocEntry` 并按 `ts` 降序；`rows` 里那些畸形行（`null` / 缺 `id`）**本来就读不出来**。
+      // 所以不能天真地要求「读回条数 === rows.length」——那会让**任何**含畸形行的
+      // 旧库被误判成投影失败（实测：修复初版即如此，healthy 路径也报 failed）。
+      //
+      // **只比 `id` 集合是不够的**（实测踩过）：`saveDoc(ts=1200)` 写失败时，
+      // 落盘的还是旧行 `ts=1111` —— `id` 集合完全一致，但「本次变更不可回退」
+      // 这一事实必须被抓到。故比对**投影真正携带的字段**（§6.3 的三项：
+      // `id` / `name` / `ts = max(openedAt, savedAt)`）。
+      // 不展开比对 `folder`/`tags`/`source`：`DocLibrary` 的 `normalize`/`cleanFolder`
+      // 是包内私有（本包拿不到），逐个字段比会把包侧归一化细节复制进本包——
+      // 那是跨包耦合，主控裁定 N-1 的修法不得动包侧契约。
+      // `id`/`name`/`ts` 是投影**必须**写对的三个字段，足以判定「写进去了没有」。
+      const expected = new Map<string, { name: string; ts: number }>();
+      for (const r of rows) {
+        if (isRecord(r) && typeof r.id === 'string' && r.id !== '') {
+          expected.set(r.id, { name: String(r.name), ts: Number(r.ts) });
+        }
+      }
+      const read = lib.list();
+      if (read.length !== expected.size) return false; // 整表没写进去 / 多写 / 少写
+      for (const e of read) {
+        const want = expected.get(e.id);
+        if (want === undefined) return false; // 读回一条本次没打算写的 id
+        if (e.name !== want.name) return false; // 行内容被改写
+        // `ts` 必须已是数值：`persistSorted` 只排序不投影，故这里就是写出去的值
+        if (e.ts !== want.ts) return false; // 写失败留下的陈旧行（如 saveDoc 没推进 ts）
+      }
       return true;
     } catch {
       return false; // 写失败：调用方据此置 projectionFailed（§6.3「不可回退且可查」）
