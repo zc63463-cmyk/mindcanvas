@@ -221,6 +221,8 @@ export class DocIndex {
     openedAt?: number;
     /** 传入即推进保存时间（真实落盘）；缺省保持原值 */
     savedAt?: number;
+    /** P1-A ②：内部标题（首个 H1，来自已加载快照非新扫描）；显式含 null = 更新；undefined = 保持 */
+    title?: string | null;
   }): void {
     this.mutate((prev) => {
       const base = prev ?? this.freshEntry(input.docKey, input.relPath, input, this.nowMs());
@@ -232,6 +234,7 @@ export class DocIndex {
         sourceRef: input.sourceRef,
         openedAt: input.openedAt ?? base.openedAt,
         savedAt: input.savedAt ?? base.savedAt,
+        title: input.title === undefined ? base.title : input.title,
       };
       return input.persisted ? stripEphemeral(next) : { ...next, ephemeral: true as const };
     }, input.docKey);

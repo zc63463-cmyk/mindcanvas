@@ -18,11 +18,20 @@ export function StorageBar({
   name,
   onPick,
   onDetach,
+  associate,
 }: {
   mounted: boolean;
   name: string | null;
   onPick?: () => void;
   onDetach?: () => void;
+  /**
+   * P1-A rider-B：人工关联面板的挂载点（`shared-contracts` §1.2.8）。
+   *
+   * 为什么挂在这里：这一行就是用户表达「这是哪个工作区」的地方
+   * （「🟢 工作区已连接 · 📁 <名>」），关联动作属于同一话题。
+   * 缺省 `undefined` → 不渲染入口（旧调用方/测试零改动）。
+   */
+  associate?: React.ReactNode;
 }) {
   return (
     <div
@@ -63,6 +72,7 @@ export function StorageBar({
         </span>
       )}
       <span style={{ flex: 1 }} />
+      {associate}
       {onPick && (
         <button
           type="button"

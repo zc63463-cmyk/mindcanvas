@@ -35,6 +35,14 @@ export function useFileTreeOps(input: {
   setDropTarget: (v: string | null) => void;
   setRenamingKey: (v: string | null) => void;
   setPendingDelete: (node: TreeNode | null) => void;
+  /**
+   * 移动/归位失败的用户可见出口（P1-A ⑥ 起必需）。
+   *
+   * 为什么必须是**显式回调**而不是就地打一条开发日志：失败需要用户读到
+   * （「权限被拒」的恢复路径是重新授权，与「磁盘不可用」不同），
+   * 且文案必须来自 `assetNotices` 的唯一事实源（不得在这里拼第二套说法）。
+   */
+  onMoveFailed: (error: unknown, node: TreeNode) => void;
 }): FileTreeOps {
   const {
     library,
@@ -47,6 +55,7 @@ export function useFileTreeOps(input: {
     setDropTarget,
     setRenamingKey,
     setPendingDelete,
+    onMoveFailed,
   } = input;
 
   const createDocIn = useCallback(
@@ -120,22 +129,40 @@ export function useFileTreeOps(input: {
     [useWorkspace, workspace, library, reload, refresh, setRenamingKey],
   );
 
-  /** 拖拽归位：落到目标目录（取代旧版「手敲路径字符串」） */
+  /**
+   * 拖拽归位：落到目标目录（取代旧版「手敲路径字符串」）。
+   *
+   * P1-A ⑥ 起它同时是**归档的落点入口**（「改为归档」= 移到 `_归档/`）。
+   * 因此必须有**可判别的失败出口**：旧实现直接 `await workspace.moveFile(...)`
+   * 且在编排器里没有 `catch`（R-02/R-03 登记的缺口），失败会变成
+   * **未处理的 Promise 拒绝** —— 用户看不到任何反馈，树也不会刷新
+   * （这正是负控 5「失败不留幽灵」要钉住的形态；实测由
+   * `file-manager-archive.test.tsx` 的失败路径用例捕获为 unhandled rejection）。
+   *
+   * 失败时的行为：
+   *  - **不**刷新树（磁盘没变，刷了只会让用户以为成功了）；
+   *  - 通过 `onMoveFailed` 把错误交给调用方（文案由 `assetNotices` 唯一事实源给）；
+   *  - 成功才 `reload()`，因此树里不会出现幽灵条目。
+   */
   const dropInto = useCallback(
     async (node: TreeNode, target: TreeNode): Promise<void> => {
       setDropTarget(null);
       if (!canDropInto(node.key, target.fullPath, tree)) return;
       if (useWorkspace && workspace) {
-        if (node.type === 'doc' && node.wsFile) {
-          await workspace.moveFile(node.wsFile, target.fullPath);
+        try {
+          if (node.type === 'doc' && node.wsFile) {
+            await workspace.moveFile(node.wsFile, target.fullPath);
+          }
+          await reload();
+        } catch (e) {
+          onMoveFailed(e, node);
         }
-        await reload();
         return;
       }
       if (node.entry) library.move(node.entry.id, target.fullPath);
       refresh();
     },
-    [useWorkspace, workspace, library, tree, reload, refresh, setDropTarget],
+    [useWorkspace, workspace, library, tree, reload, refresh, setDropTarget, onMoveFailed],
   );
 
   return { createDocIn, createDirIn, doRemove, commitRename, dropInto, confirmTarget };

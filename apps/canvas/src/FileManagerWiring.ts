@@ -19,6 +19,7 @@ import {
 import type { Dispatch, SetStateAction } from 'react';
 import type { FileManagerTreeCtx } from './FileManagerTree.js';
 import type { MenuState } from './fileManagerShared.js';
+import type { TreeKeyIntent, VisibleRow } from './fileTreeKeyboard.js';
 import { browserDocKey, formatRecentWhen, wsDocKey } from './docIndex.js';
 import type { DocIndexEntry } from './docIndex.js';
 import type { TreeNode } from './fileTreeModel.js';
@@ -38,7 +39,11 @@ export interface WorkspaceLike {
   scopeId?: string | null;
   /** 运行期身份形态；`persisted === false` → 索引条目带 `ephemeral` */
   scopeState?: { kind: string; persisted: boolean };
-  scan(force?: boolean): Promise<WorkspaceNode[]>;
+  /**
+   * 扫描真实目录树。`options.includeOtherFiles`（P1-A ⑤）让扫描同时回传
+   * 不支持打开的文件（带 `unopenable` 标记）——**不是第二遍扫描**。
+   */
+  scan(force?: boolean, options?: { includeOtherFiles?: boolean }): Promise<WorkspaceNode[]>;
   createFile(dirPath: string, name: string, text: string): Promise<WorkspaceFile>;
   createDir(parentPath: string, name: string): Promise<WorkspaceDir>;
   renameFile(file: WorkspaceFile, name: string): Promise<WorkspaceFile>;
@@ -134,6 +139,20 @@ export function buildTreeCtx(input: {
   onOpenEntry: (entry: DocEntry) => void;
   allDocs: readonly TreeNode[];
   openNode: (node: TreeNode) => void;
+  /** P1-A ①：当前文档完整路径（高亮判据；null = 无当前文档） */
+  currentPath: string | null;
+  /** P1-A ④：roving tabindex 面 */
+  focusedKey: string | null;
+  setFocusedKey: (key: string) => void;
+  focusRow: (key: string) => void;
+  keyIntent: (key: string, rows: readonly VisibleRow[]) => TreeKeyIntent;
+  visibleRows: () => VisibleRow[];
+  registerRow: (key: string, el: HTMLElement | null) => void;
+  setExpanded: (key: string, open: boolean) => void;
+  /** P1-A ⑤：不支持文件的点击提示 */
+  onUnopenable: (node: TreeNode) => void;
+  /** P1-A ④ `Delete` 键 */
+  onDeleteKey: (node: TreeNode) => void;
 }): FileManagerTreeCtx {
   return {
     tree: input.tree,
@@ -163,6 +182,17 @@ export function buildTreeCtx(input: {
       if (node) input.openNode(node);
       else input.onOpenEntry(entry);
     },
+    // P1-A ①/④/⑤：树交互的 P1-A 增量面（值 + 回调，原样透传）
+    currentPath: input.currentPath,
+    focusedKey: input.focusedKey,
+    setFocusedKey: input.setFocusedKey,
+    focusRow: input.focusRow,
+    keyIntent: input.keyIntent,
+    visibleRows: input.visibleRows,
+    registerRow: input.registerRow,
+    setExpanded: input.setExpanded,
+    onUnopenable: input.onUnopenable,
+    onDeleteKey: input.onDeleteKey,
   };
 }
 

@@ -142,7 +142,9 @@ import {
 import { nodeById, useEdgeActions } from './hooks/useEdgeActions.js';
 import { EdgeDraftLayer, type EdgeContextMenuState } from './EdgeDraftLayer.js';
 import { DocIndex, browserDocKey, migrateContextOf, wsDocKey } from './docIndex.js';
+import { firstHeadingOf } from './docTitle.js';
 import { FileManagerModal } from './FileManagerModal.js';
+import { FloatingNotice } from './FloatingNotice.js';
 import { NodeContextMenu } from './NodeContextMenu.js';
 import { RecentDocMenu } from './RecentDocMenu.js';
 import { useEntityPick } from './hooks/useEntityPick.js';
@@ -715,11 +717,8 @@ function StageContent({
    */
   const preDirsRef = useRef<ReadonlyMap<string, GrowDir>>(new Map());
   const [preDirHint, setPreDirHint] = useState<{ id: string; dir: GrowDir } | null>(null);
-  useEffect(() => {
-    if (preDirHint === null) return;
-    const timer = setTimeout(() => setPreDirHint(null), 2500);
-    return () => clearTimeout(timer);
-  }, [preDirHint]);
+  // 预方向提示的 2500ms 消退同理由 `FloatingNotice` 的 `pre-dir-hint` 槽位承担
+  // （rider-A：消退策略参数化，不再散落在各处 effect 里）。
 
   /**
    * ② 二级环（T5）：节点动作袋（描述 / 笔记 / 中心）——与右键菜单**同一份闭包**。
@@ -1279,11 +1278,15 @@ function StageContent({
   useEffect(() => {
     if (!doc.saved) return;
     const snapshot = doc.savedSource ?? doc.source;
+    // P1-A ②：内部标题 = 已加载快照的首个 H1（纯函数、零新 I/O，§3.4）；
+    // registerDoc 每次载入都跑 → 打开即有标题；saveDoc 在内容变化时刷新它。
+    const docTitle = firstHeadingOf(snapshot);
     const scopeId = workspace.scopeId;
     index.registerDoc({
       docKey,
       relPath: workspacePath,
       name: doc.name,
+      title: docTitle,
       scopeId: scopeId ?? 'browser:local',
       persisted: scopeId !== null && workspace.scopeState.persisted,
       sourceRef: doc.handle ? { kind: 'disk-handle' } : { kind: 'none' },
@@ -1301,7 +1304,7 @@ function StageContent({
     const first = seen === null || seen.slice(0, seen.indexOf('|')) !== docKey;
     savedEffectRef.current = stamp;
     if (first || seen === stamp) return; // 打开 / 同一次保存重跑 → 不推进 `savedAt`
-    index.saveDoc({ docKey, relPath: workspacePath, name: doc.name });
+    index.saveDoc({ docKey, relPath: workspacePath, name: doc.name, title: docTitle });
   }, [doc.name, doc.handle, doc.savedSource, doc.source, doc.saved, docKey, index, workspace, workspacePath]);
   // 异步清单（宿主可换 HTTP/FS 实现）；插入/上传后由 Stage 更新本地副本
   const [assetList, setAssetList] = useState<AssetItem[]>([]);
@@ -1615,11 +1618,9 @@ function StageContent({
    */
   const completeSummaryAt = summaryHop.completeAt;
 
-  useEffect(() => {
-    if (commandNotice === null) return;
-    const timer = setTimeout(() => setCommandNotice(null), 4000);
-    return () => clearTimeout(timer);
-  }, [commandNotice]);
+  // A5 的 4s 消退已由 `FloatingNotice` 按槽位策略统一承担（rider-A）：
+  // 计时器的注册点从「每条浮条各自写一遍」收敛到槽位表一处。
+  // 这里**不再**另注册一次 —— 两份计时器会让提示提前消失（先到点的那个赢）。
 
   // R5-3：Canvas 自动降级提示——stats.backend 由 MapView 上报（已并入材料字段：
   // 后端变化必然触发一次上报，节流窗口内补报）。同一文档只提示一次；切文档后重新允许。
@@ -2495,85 +2496,39 @@ function StageContent({
 
       <PerfPanel stats={stats} />
 
-      {/* A5：命令拒绝/事务失败告警条（置顶居中，4s 消退） */}
+      {/* A5：命令拒绝/事务失败告警条（位置与消退策略的唯一事实源：floatingNotices） */}
       {commandNotice !== null && (
-        <div
-          style={{
-            position: 'absolute',
-            top: 64,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            maxWidth: 460,
-            padding: '8px 14px',
-            borderRadius: 8,
-            background: 'rgba(226, 75, 74, 0.14)',
-            border: '1px solid rgba(226, 75, 74, 0.5)',
-            color: '#e24b4a',
-            fontFamily: 'inherit',
-            fontSize: 12,
-            lineHeight: 1.6,
-            zIndex: 5,
-            pointerEvents: 'none',
-            userSelect: 'none',
-          }}
+        <FloatingNotice
+          slot="command-notice"
+          testId="command-notice"
+          onDismiss={() => setCommandNotice(null)}
         >
           ⚠ {commandNotice}
-        </div>
+        </FloatingNotice>
       )}
 
       {/* P0-B ⑦：资产落点/失败提示条（与命令告警同形但独立一条 —— 落点提示不是错误，
           用中性底色；内容全部来自 `assetStoreCopy.ts` 的单点文案表，不得就地硬编码）。 */}
       {assetNotice !== null && (
-        <div
-          data-asset-notice
+        <FloatingNotice
+          slot="asset-notice"
+          dataAttrs={{ 'data-asset-notice': 'true' }}
           onClick={() => setAssetNotice(null)}
-          style={{
-            position: 'absolute',
-            top: 100,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            maxWidth: 460,
-            padding: '8px 14px',
-            borderRadius: 8,
-            background: 'rgba(120, 170, 255, 0.12)',
-            border: '1px solid rgba(120, 170, 255, 0.45)',
-            color: CHROME.text,
-            fontFamily: 'inherit',
-            fontSize: 12,
-            lineHeight: 1.6,
-            zIndex: 5,
-            cursor: 'pointer',
-          }}
         >
           {assetNotice}
-        </div>
+        </FloatingNotice>
       )}
 
       {/* 预方向提示（PG 式「预设-固化」的可见反馈）：设了方向必须看得见，
           否则用户无法判断快捷键是否生效（实测无反馈 = 等于没实现）。 */}
       {preDirHint !== null && (
-        <div
-          data-testid="pre-dir-hint"
-          style={{
-            position: 'absolute',
-            left: '50%',
-            top: 16,
-            transform: 'translateX(-50%)',
-            padding: '8px 14px',
-            borderRadius: 8,
-            background: 'rgba(64, 128, 255, 0.14)',
-            border: '1px solid rgba(64, 128, 255, 0.5)',
-            color: '#2f6fed',
-            fontFamily: 'inherit',
-            fontSize: 12,
-            lineHeight: 1.6,
-            zIndex: 6,
-            pointerEvents: 'none',
-            userSelect: 'none',
-          }}
+        <FloatingNotice
+          slot="pre-dir-hint"
+          testId="pre-dir-hint"
+          onDismiss={() => setPreDirHint(null)}
         >
           预方向：{PRE_DIR_LABEL_CN[preDirHint.dir]} —— 按 Tab 生长即固化到该节点
-        </div>
+        </FloatingNotice>
       )}
 
       {/* G6″（A3-2）：中心诊断警示条（宁可不写也不错写——坏锚/重复中心的原因在此可见）。
@@ -2706,26 +2661,9 @@ function StageContent({
 
       {/* T8 降级策略 L4：规模提示（>20K 激进简化 / >50K 建议折叠） */}
       {scaleNoticeFor(layout.nodes.length) !== null && (
-        <div
-          style={{
-            position: 'absolute',
-            left: '50%',
-            top: 10,
-            transform: 'translateX(-50%)',
-            zIndex: 3,
-            background: CHROME.panelBg,
-            border: `1px solid ${CHROME.warn}`,
-            color: CHROME.warn,
-            borderRadius: CHROME.radius,
-            boxShadow: CHROME.shadow,
-            backdropFilter: 'blur(10px)',
-            fontSize: CHROME.fontSizeSmall,
-            padding: '6px 14px',
-            pointerEvents: 'none',
-          }}
-        >
+        <FloatingNotice slot="scale-notice" testId="scale-notice">
           {scaleNoticeFor(layout.nodes.length)}
-        </div>
+        </FloatingNotice>
       )}
 
       {/* E8：关系模式操作提示（非阻塞；浏览态不出现） */}

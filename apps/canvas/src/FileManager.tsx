@@ -13,42 +13,34 @@
  *  - 未挂载工作区时降级为 `DocLibrary` 虚拟目录（同一套树，落点换成 localStorage）。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CHROME, type DocEntry, type DocLibrary, type WorkspaceFile } from '@mindcanvas/react';
+import { CHROME, classifyFileOpError, type DocEntry, type DocLibrary, type WorkspaceFile } from '@mindcanvas/react';
 import {
+  UNOPENABLE_NOTICE,
   allDirs,
-  breadcrumbOf,
-  filterTree,
   findNode,
-  sortTree,
   treeFromLibrary,
   treeFromWorkspace,
   type TreeNode,
 } from './fileTreeModel.js';
+import { useFileTreeView } from './useFileTreeView.js';
+import { associationPort, useFileArchive } from './useFileArchive.js';
+import { BreadcrumbBar, TreeNoticeBar, TreeToolbar } from './FileManagerTreeTools.js';
+import { TreePane } from './FileManagerTreePane.js';
+import { useFlatDocRows } from './useFlatDocRows.js';
+import { useFileManagerTreeCtx, virtualDirNode } from './useFileManagerTreeCtx.js';
+import { FileManagerHistories } from './FileManagerHistories.js';
+import { AssociateWorkspacePanel } from './AssociateWorkspacePanel.js';
 import { ContextMenu } from './FileManagerContextMenu.js';
 import { StorageBar, ViewTabs, type FileManagerTab } from './FileManagerChrome.js';
-import {
-  FlatDocList,
-  HistoryPool,
-  MigrateFailedNotice,
-  ProjectionFailureNotice,
-} from './FileManagerViews.js';
-import {
-  buildTreeCtx,
-  docKeyOfEntry,
-  nodeIndex,
-  rowFromIndexEntry,
-  rowFromNode,
-  type WorkspaceLike,
-} from './FileManagerWiring.js';
+import { docKeyOfEntry, type WorkspaceLike } from './FileManagerWiring.js';
 import { useIndexWiring } from './useIndexWiring.js';
 import { useFileTreeOps } from './useFileTreeOps.js';
+import { failNoticeOf } from './hooks/useFileOpOrchestration.js';
 import { useFileManagerRouting } from './useFileManagerRouting.js';
 import type { CurrentDocOps } from './currentDocOps.js';
-import type { PartialChoice, RenameDirtyChoice } from './FileOpPanels.js';
 import { FileManagerOpStack } from './FileManagerOpStack.js';
 import {
   DeleteConfirmBar,
-  FileManagerFooter,
   FileManagerHeader,
   NewFolderNameBar,
   TreeErrorBar,
@@ -58,19 +50,17 @@ import {
 // 拆分只搬家不改进口（否则所有消费点都要改路径，纯属噪音）。
 export type { WorkspaceLike } from './FileManagerWiring.js';
 export { docKeyOfEntry } from './FileManagerWiring.js';
-import { FileManagerTree, type FileManagerTreeCtx } from './FileManagerTree.js';
+import type { FileManagerTreeCtx } from './FileManagerTree.js';
 import {
   NEW_DOC_TEMPLATE,
   SEP,
-  btnBase,
   collectDocs,
   formatRelative,
-  inlineBarStyle,
   inputStyle,
   useStarredKeys,
   type MenuState,
 } from './fileManagerShared.js';
-import { type DocIndex, RECENT_MAX } from './docIndex.js';
+import type { DocIndex } from './docIndex.js';
 
 export interface FileManagerProps {
   library: DocLibrary;
@@ -123,8 +113,6 @@ export function FileManager({
   variant = 'wide',
   currentDocOps = null,
 }: FileManagerProps) {
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set(['']));
-  const [query, setQuery] = useState('');
   const [tree, setTree] = useState<TreeNode[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -178,8 +166,10 @@ export function FileManager({
         ? treeFromWorkspace(await workspace.scan(true))
         : treeFromLibrary(library);
       if (aliveRef.current) {
-        // 树里的文档补上索引身份（「最近」与收藏要按稳定身份认，见 docKeyOfEntry）
-        setTree(sortTree(next));
+        // 树里的文档补上索引身份（「最近」与收藏要按稳定身份认，见 docKeyOfEntry）。
+        // 排序**不在这里**做：P1-A ③ 起排序依据是用户可选状态，统一由
+        // `useFileTreeView` 施加（否则会出现「载入排一次、切依据再排一次」两处规则）。
+        setTree(next);
         registerDocs(collectDocs(next));
       }
     } catch (e) {
@@ -194,16 +184,33 @@ export function FileManager({
     void reload();
   }, [reload]);
 
-  const filtered = useMemo(() => filterTree(tree, query), [tree, query]);
+  /**
+   * P1-A ⑤：切换「显示其他文件」后重扫一次（带 `includeOtherFiles`）。
+   * 必须重扫而不是前端筛：不支持的文件在**扫描阶段**就被过滤掉，前端没有原料；
+   * 同一遍遍历完成（`scan(force, { includeOtherFiles })`），无第二遍扫描。
+   */
+  const rescan = useCallback(
+    async (includeOtherFiles: boolean): Promise<void> => {
+      if (!useWorkspace || !workspace) return;
+      setLoading(true);
+      try {
+        const next = treeFromWorkspace(await workspace.scan(true, { includeOtherFiles }));
+        if (aliveRef.current) setTree(next);
+      } catch (e) {
+        if (aliveRef.current) setError(e instanceof Error ? e.message : '扫描工作区失败');
+      } finally {
+        if (aliveRef.current) setLoading(false);
+      }
+    },
+    [useWorkspace, workspace],
+  );
 
-  const toggle = (key: string): void => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
+  /**
+   * P1-A ⑤/⑥：树侧内联提示（不可打开文件的点击提示、归档拒绝/完成说明）。
+   * 不复用 `currentDocOps.ui.notice`：那条通道属于当前文档操作，生命周期不同；
+   * 两者共用渲染位置（`role="status"`）但判据独立（见 `TreeNoticeBar` 注释）。
+   */
+  const [treeNotice, setTreeNotice] = useState<string | null>(null);
 
   const closeMenu = useCallback((): void => setMenu(null), []);
 
@@ -243,6 +250,11 @@ export function FileManager({
       setDropTarget,
       setRenamingKey,
       setPendingDelete,
+      // 移动/归位失败（含归档落点）的用户可见出口：文案经 `classifyFileOpError` →
+      // `failNoticeOf` 取唯一事实源（逐码给恢复路径）；失败不刷新树 → 无幽灵条目（负控 5）。
+      onMoveFailed: (e, node) => {
+        setTreeNotice(`「${node.name}」${failNoticeOf(classifyFileOpError(e))}`);
+      },
     });
 
   // ---------------------------------------------------------------- P0-A：当前文档操作路由
@@ -266,27 +278,53 @@ export function FileManager({
     setDropTarget,
   });
 
-  // 树行渲染上下文：值 + 原样透传的回调（组装逻辑在同名适配模块，见 FileManagerWiring）
-  const treeCtx: FileManagerTreeCtx = buildTreeCtx({
+  // ---------------------------------------------------------------- P1-A：树视图状态（①②③④⑤）
+  //
+  // 实现已抽到 `useFileTreeView.ts`（`bigFiles` 预算）：排序依据、标题搜索、
+  // 「显示其他文件」、roving tabindex 的焦点状态全部在那里；本组件只接线。
+  const view = useFileTreeView({
     tree,
-    expanded,
-    query,
+    index,
+    currentPath,
+  });
+
+  /** P1-A ⑥：「改为归档」—— 删除确认条旁 + 右键菜单两个入口调同一 `archive.request`（§3.2） */
+  const archive = useFileArchive({
+    useWorkspace,
+    moveToDir: (node, targetDir) => {
+      const target = findNode(tree, `dir:${targetDir}`) ?? virtualDirNode(targetDir);
+      void dropIntoRouted(node, target);
+    },
+    onNotice: setTreeNotice,
+  });
+
+  /** rider-B：人工关联面板的宿主端口（读四态 + 单事务写回；不碰裸句柄键） */
+  const assocPort = useMemo(() => associationPort(), []);
+
+  /** P1-A ④ `Delete` 键：与右键菜单删除**同一分流**，不新写第二条删除规则 */
+  const deleteByKey = useCallback((node: TreeNode): void => requestDelete(node), [requestDelete]);
+
+  // 树行渲染上下文：回调面较宽，组装抽到 `useFileManagerTreeCtx`（bigFiles 预算）
+  const treeCtx: FileManagerTreeCtx = useFileManagerTreeCtx({
+    view,
     dropTarget,
     dragKey,
     renamingKey,
     starredKeys,
-    toggle,
+    currentPath,
+    allDocs,
+    openNode,
+    onOpenFile,
+    onOpenEntry,
+    onDropInto: dropIntoRouted,
+    onCommitRename: commitRenameRouted,
+    onDeleteKey: deleteByKey,
+    onUnopenable: (node) => setTreeNotice(`${node.name}：${UNOPENABLE_NOTICE}`),
+    toggleStar,
     setDropTarget,
     setDragKey,
     setMenu,
-    dropInto: dropIntoRouted,
-    commitRename: commitRenameRouted,
     setRenamingKey,
-    toggleStar,
-    onOpenFile,
-    onOpenEntry,
-    allDocs,
-    openNode,
   });
 
   /**
@@ -303,50 +341,17 @@ export function FileManager({
           void dupOps.duplicate(dupFile);
         };
 
-  /** 树节点查询（「最近」/「收藏」两个视图共用） */
-  const matchQuery = useCallback(
-    (rows: readonly TreeNode[]): TreeNode[] => {
-      if (!query.trim()) return [...rows];
-      const q = query.trim().toLowerCase();
-      return rows.filter(
-        (d) => d.name.toLowerCase().includes(q) || d.fullPath.toLowerCase().includes(q),
-      );
-    },
-    [query],
-  );
+  // 「最近」/「收藏」两个平铺视图的行解析已抽到 `useFlatDocRows`（bigFiles 预算）
+  const { recentRows, starredRows } = useFlatDocRows({
+    index,
+    allDocs,
+    starredKeys,
+    hasQuery: view.hasQuery,
+    query: view.query,
+  });
 
-  /**
-   * 「最近」：**唯一入口**，按 `openedAt` 降序（索引层的 `compareRecent`），
-   * `openedAt === null` 排末尾并显示「未记录打开时间」——**不回落 mtime**（UD-2）。
-   *
-   * 无索引（旧调用方）时退化为按树里的 `ts` 排序，仅用于保持旧测试/降级可用；
-   * 生产路径由 MindmapStage 注入索引，走上面那条。
-   */
-  const recentRows = useMemo(() => {
-    if (!index) {
-      // 无索引（旧调用方）：退化为按树里的 ts 排序，仅供降级与旧测试使用。
-      // 生产路径由 MindmapStage 注入索引（走下面那条，按 openedAt）。
-      return matchQuery([...allDocs].sort((a, b) => b.ts - a.ts)).map((d) =>
-        rowFromNode(d, formatRelative(d.ts), starredKeys.has(d.fullPath) || starredKeys.has(d.key)),
-      );
-    }
-    const byKey = nodeIndex(allDocs);
-    return index
-      .recentDocs(RECENT_MAX)
-      .flatMap((e) => {
-        const row = rowFromIndexEntry(e, byKey, starredKeys, matchQuery);
-        return row === null ? [] : [row];
-      });
-  }, [index, allDocs, matchQuery, starredKeys]);
-
-  /** 收藏：按索引的稳定身份判定（`docKey` / `relPath` / 旧键三个别名都认） */
-  const starredRows = useMemo(() => {
-    return matchQuery(
-      allDocs
-        .filter((d) => starredKeys.has(d.fullPath) || starredKeys.has(d.key))
-        .sort((a, b) => b.ts - a.ts),
-    ).map((d) => rowFromNode(d, formatRelative(d.ts), true));
-  }, [allDocs, starredKeys, matchQuery]);
+  /** 提示位的内容（树侧优先于当前文档操作侧；两者可能同时存在） */
+  const visibleNotice = treeNotice ?? currentDocOps?.ui.notice ?? null;
 
   return (
     <div
@@ -377,11 +382,21 @@ export function FileManager({
         onClose={onClose}
       />
 
+      {/* rider-B：人工关联面板挂在作用域区（见 useFileArchive.associationPort） */}
       <StorageBar
         mounted={useWorkspace}
         name={workspace?.name ?? null}
         onPick={onPickWorkspace}
         onDetach={onDetachWorkspace}
+        associate={
+          useWorkspace ? (
+            <AssociateWorkspacePanel
+              read={assocPort.read}
+              write={assocPort.write}
+              onNotice={setTreeNotice}
+            />
+          ) : undefined
+        }
       />
 
       <ViewTabs tab={tab} starredCount={starredKeys.size} onChange={setTab} />
@@ -390,38 +405,48 @@ export function FileManager({
       <div style={{ padding: '8px 12px' }}>
         <input
           data-fm-search
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="搜索文件名或路径…"
+          value={view.query}
+          onChange={(e) => view.setQuery(e.target.value)}
+          // P1-A ②：范围明示 —— 标题只对**已索引**文档生效（§6 原文文案）
+          placeholder="搜索文件名、路径或标题…（标题仅搜索已记录的文档）"
+          aria-label="搜索文件名、路径或标题"
           style={{ ...inputStyle(), width: '100%', boxSizing: 'border-box' }}
         />
       </div>
 
-      {/* 面包屑 + 当前文档状态 */}
-      <div
-        data-fm-breadcrumb
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 4,
-          padding: '0 12px 8px',
-          fontSize: CHROME.fontSizeSmall,
-          color: CHROME.textMuted,
-          flexWrap: 'wrap',
-        }}
-      >
-        {useWorkspace && <span>📁 {workspace?.name}</span>}
-        {breadcrumbOf(currentPath).map((seg, i) => (
-          <span key={`${i}-${seg}`}>
-            <span style={{ opacity: 0.6 }}> › </span>
-            <span style={{ color: CHROME.text }}>{seg}</span>
-          </span>
-        ))}
-        <span style={{ flex: 1 }} />
-        <span data-doc-status style={{ color: dirty ? CHROME.warn : CHROME.neon }}>
-          {dirty ? '📝 未保存' : currentPath ? '🟢 本地磁盘已同步' : ''}
-        </span>
-      </div>
+      {/* P1-A ③/⑤：树工具条（仅「全部目录」—— 排序不动「最近」，§3.3） */}
+      {tab === 'tree' && (
+        <TreeToolbar
+          sortMode={view.sortMode}
+          onSortMode={view.setSortMode}
+          sortLabel={view.sortLabel}
+          showOtherFiles={view.showOtherFiles}
+          onShowOtherFiles={(on) => {
+            view.setShowOtherFiles(on);
+            void rescan(on);
+          }}
+          otherFileCount={view.otherFileCount}
+          showToggle={useWorkspace}
+        />
+      )}
+
+      {/* P1-A ①/⑤/⑥：树侧内联提示 `role="status"`；与操作侧共用位置、判据独立 */}
+      {visibleNotice !== null && (
+        <TreeNoticeBar
+          notice={visibleNotice}
+          onDismiss={() => {
+            setTreeNotice(null);
+            currentDocOps?.dismissNotice();
+          }}
+        />
+      )}
+
+      {/* 面包屑 + 当前文档状态（①：状态行 `role="status"`，§6 无障碍） */}
+      <BreadcrumbBar
+        workspaceName={useWorkspace ? (workspace?.name ?? null) : null}
+        currentPath={currentPath}
+        dirty={dirty}
+      />
 
       {/* A-D3：删除内联确认条 —— 已抽到 FileManagerInlineBars */}
       {pendingDelete !== null && (
@@ -430,6 +455,16 @@ export function FileManager({
           useWorkspace={useWorkspace}
           onConfirm={() => void doRemove(pendingDelete)}
           onCancel={() => setPendingDelete(null)}
+          /* ⑥ 删除确认条旁的次要动作：改为归档（§3.6），与右键菜单同一编排（§3.2） */
+          onArchive={
+            archive.canArchive(pendingDelete)
+              ? () => {
+                  const node = pendingDelete;
+                  setPendingDelete(null);
+                  archive.request(node);
+                }
+              : undefined
+          }
         />
       )}
 
@@ -454,76 +489,41 @@ export function FileManager({
 
       {error && <TreeErrorBar message={error} />}
 
-      {/* 树状 / 平铺内容区域 */}
-      <div data-fm-tree style={{ overflow: 'auto', flex: 1, padding: '2px 0 8px' }}>
-        {loading ? (
-          <div style={{ padding: 20, textAlign: 'center', color: CHROME.textMuted }}>扫描中…</div>
-        ) : tab === 'tree' ? (
-          filtered.length === 0 ? (
-            <div style={{ padding: '28px 12px', textAlign: 'center', color: CHROME.textMuted }}>
-              {query !== '' ? `没有匹配「${query}」的文件。` : '还没有文档。点「＋ 新建导图」开始。'}
-            </div>
-          ) : (
-            <FileManagerTree nodes={filtered} depth={0} ctx={treeCtx} />
-          )
-        ) : tab === 'recent' ? (
-          <FlatDocList
-            rows={recentRows}
-            emptyText={
-              query !== '' ? `没有匹配「${query}」的文件。` : '暂无最近打开的文档。'
-            }
-            onToggleStar={toggleStar}
-            onOpen={openNode}
-          />
-        ) : (
-          <FlatDocList
-            rows={starredRows}
-            emptyText={
-              query !== ''
-                ? `没有匹配「${query}」的收藏。`
-                : '暂无收藏导图。在文档条目上点击 ☆ 即可加入收藏。'
-            }
-            onToggleStar={toggleStar}
-            onOpen={openNode}
-          />
-        )}
-      </div>
+      {/* 树状 / 平铺内容区域 —— 三视图分发已抽到 FileManagerTreePane */}
+      <TreePane
+        loading={loading}
+        tab={tab}
+        viewTree={view.viewTree}
+        hasQuery={view.hasQuery}
+        query={view.query}
+        treeCtx={treeCtx}
+        recentRows={recentRows}
+        starredRows={starredRows}
+        onToggleStar={toggleStar}
+        onOpen={openNode}
+      />
 
-      {/*
-        §6.2.1 历史池：**用户语言**呈现（不暴露「索引」「作用域」这类内部概念）。
-        默认折叠；展开后可逐条「关联到此工作区」或「忽略」。
-        没有归属证据的旧记录**不自动绑定**，但用户不处理也不丢（旧键原样保留）。
-      */}
-      {index && (
-        <HistoryPool
-          entries={history}
-          open={historyOpen}
-          onToggle={() => setHistoryOpen((v) => !v)}
-          candidates={allDocs.map((d) => ({
-            docKey: docKeyOfEntry(d, useWorkspace && workspace?.scopeId ? workspace.scopeId : null),
-            name: d.fullPath,
-            // 「同名」只是给用户的排序提示（把最可能的一条排在前面），
-            // **不**据此自动绑定：`exact` 在选择前无对应旧记录，故这里恒为 false 之外
-            // 的语义由 HistoryPool 内部按 `h.key` 比较得出（见该组件注释）。
-            exact: false,
-          }))}
-          onLink={(h, targetKey) => {
-            // 用户显式点选的 `docKey` —— 这里不做任何名字回退匹配，
-            // 避免给不可撤销的 `user-confirmed` 证据灌进错误绑定
-            index.relink(h.key, targetKey);
-            refresh();
-          }}
-          onIgnore={(h) => {
-            index.ignoreLegacy(h.key);
-            refresh();
-          }}
-        />
-      )}
-
-      <MigrateFailedNotice count={migrateFailed} />
-      <ProjectionFailureNotice failed={projectionFailed} />
-
-      <FileManagerFooter />
+      {/* §6.2.1 历史池 + 迁移/投影反馈 + 底注；rider-C：关联目标只能由用户点选 */}
+      <FileManagerHistories
+        index={index}
+        history={history}
+        historyOpen={historyOpen}
+        onToggleHistory={() => setHistoryOpen((v) => !v)}
+        candidates={allDocs.map((d) => ({
+          docKey: docKeyOfEntry(d, useWorkspace && workspace?.scopeId ? workspace.scopeId : null),
+          name: d.fullPath,
+        }))}
+        onRelink={(legacyKey, targetKey) => {
+          index?.relink(legacyKey, targetKey);
+          refresh();
+        }}
+        onIgnore={(legacyKey) => {
+          index?.ignoreLegacy(legacyKey);
+          refresh();
+        }}
+        migrateFailed={migrateFailed}
+        projectionFailed={projectionFailed}
+      />
 
       {/* 右键菜单 */}
       {menu && menuNode && (
@@ -549,6 +549,15 @@ export function FileManager({
             requestDelete(menuNode);
           }}
           onDuplicate={duplicateHandler}
+          // ⑥「改为归档」：与删除确认条旁的次要动作**同一编排**（§3.2）
+          onArchive={
+            menuNode.type === 'doc' && archive.canArchive(menuNode)
+              ? () => {
+                  closeMenu();
+                  archive.request(menuNode);
+                }
+              : undefined
+          }
         />
       )}
     </div>

@@ -58,6 +58,14 @@ export interface WorkspaceFile {
   ts: number;
   /** 字节大小（读不到时回落 0） */
   size: number;
+  /**
+   * P1-A ⑤：本应用**不打开**的文件（非 `.mm.md`/`.md`，或 `.` 开头的隐藏文件）。
+   *
+   * 只在 `scan({ includeOtherFiles: true })` 时出现。带此标记的文件**只有**一个
+   * 用途：在「显示其他文件」分组里灰显列出（点击给提示）。所有写路径
+   * （打开/改名/移动/删除）都不得把它当成可操作目标 —— 缺省 `undefined` = 正常文件。
+   */
+  unopenable?: true;
 }
 
 /** 工作区里的一个目录 */

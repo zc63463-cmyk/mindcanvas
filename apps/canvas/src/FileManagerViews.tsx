@@ -15,7 +15,7 @@ import { CHROME } from '@mindcanvas/react';
 import { FlatDocRow } from './FileManagerChrome.js';
 import type { HistoryPoolEntry } from './docIndex.js';
 import type { TreeNode } from './fileTreeModel.js';
-import { btnBase, rowBtn } from './fileManagerShared.js';
+import { btnBase, inlineBarStyle, rowBtn } from './fileManagerShared.js';
 import { formatHistoryPool, formatHistoryReason, formatRecentWhen } from './docIndex.js';
 
 /** 平铺列表的一行（已解析好的节点 + 显示文案 + 收藏键） */
@@ -84,11 +84,15 @@ export function HistoryPool({
    *
    * 为什么由用户**显式选**而不是按名字猜：`relinkEvidence` 是「用户确认这条旧记录
    * 属于这个工作区」的凭证，一旦写入就无法区分对错。按名字回退匹配会把某条旧记录
-   * 绑到**另一条**索引条目上（多个同名文档时尤其容易），
-   * 等于给唯一的证据位灌进噪声。故只给「名字完全相同」的候选排序靠前，
-   * 由用户点选确定到底是哪一条。
+   * 绑到**另一条**索引条目上（多个同名文档时尤其容易），等于给唯一的证据位灌进噪声。
+   *
+   * P1-A rider-C：`exact` 字段**已删除**。它此前表示「名字完全相同」，
+   * 在 P0-D 里只用于**排序提示**；但它与「弱匹配」在语义上只差一步之遥
+   * （P0-D-report :405 登记的债务正是「先 fullPath 再 name 相等回退」）。
+   * 现在排序提示改由显示名字符串直接比较（见下方 `.sort`），
+   * 一个布尔字段既不能表达三态、又容易被误读为「已判定」，故不再保留。
    */
-  candidates: readonly { docKey: string; name: string; exact: boolean }[];
+  candidates: readonly { docKey: string; name: string }[];
   onLink: (entry: HistoryPoolEntry, docKey: string) => void;
   onIgnore: (entry: HistoryPoolEntry) => void;
 }): React.ReactElement | null {
@@ -140,6 +144,7 @@ export function HistoryPool({
                 {[...candidates]
                   // 路径与旧键完全一致的一条排最前（提示「最可能就是它」），
                   // 但**仍由用户点选**——排序是提示，不是判定。
+                  // rider-C：这里只比**完整路径字符串**，不再有任何 name 相等回退分支。
                   .sort((a, b) => Number(b.name === h.key) - Number(a.name === h.key))
                   .map((c) => (
                     <option key={c.docKey} value={c.docKey}>
@@ -169,40 +174,30 @@ export function HistoryPool({
  * 用户语言里没有「投影」这个概念，所以文案只说后果：旧版本读不到这次的改动。
  * 这不是可选的点缀——没有它，`projectionStatus()` 就没有生产读取方，
  * §6.3 的「必须在回执与验证中可查」在生产链路上不成立。
+ *
+ * P1-A rider-A：几何一律取自 `inlineBarStyle`（唯一事实源），本组件不再手写
+ * `margin`/`padding`/`borderRadius`/`fontSize` —— 否则「同一条面板里两条提示
+ * 内边距不同」会随任一处调整而重新漂开。
  */
 export function ProjectionFailureNotice({ failed }: { failed: boolean }): React.ReactElement | null {
   if (!failed) return null;
   return (
     <div
       data-fm-projection-failed
-      style={{
-        margin: '0 12px 8px',
-        padding: '6px 8px',
-        borderRadius: 6,
-        border: `1px solid ${CHROME.warn}`,
-        color: CHROME.warn,
-        fontSize: CHROME.fontSizeSmall,
-      }}
+      style={{ ...inlineBarStyle, border: `1px solid ${CHROME.warn}`, color: CHROME.warn }}
     >
       这次的收藏/最近改动没能同步给旧版本（存储写入失败）；改动本身已保存，稍后可再试。
     </div>
   );
 }
 
-/** 迁移失败可见（不把「未迁移」伪报成完成） */
+/** 迁移失败可见（不把「未迁移」伪报成完成）—— 几何同 rider-A 的 `inlineBarStyle` */
 export function MigrateFailedNotice({ count }: { count: number }): React.ReactElement | null {
   if (count <= 0) return null;
   return (
     <div
       data-fm-migrate-failed
-      style={{
-        margin: '0 12px 8px',
-        padding: '6px 8px',
-        borderRadius: 6,
-        border: `1px solid ${CHROME.warn}`,
-        color: CHROME.warn,
-        fontSize: CHROME.fontSizeSmall,
-      }}
+      style={{ ...inlineBarStyle, border: `1px solid ${CHROME.warn}`, color: CHROME.warn }}
     >
       {count} 条旧记录本次未迁移（已保留在原位置，下次打开会再试）。
     </div>

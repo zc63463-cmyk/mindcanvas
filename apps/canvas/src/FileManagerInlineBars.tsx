@@ -16,12 +16,23 @@ export function DeleteConfirmBar({
   useWorkspace,
   onConfirm,
   onCancel,
+  onArchive,
 }: {
   target: TreeNode;
   /** 工作区模式：文案说明「会真实删除磁盘文件」 */
   useWorkspace: boolean;
   onConfirm(): void;
   onCancel(): void;
+  /**
+   * P1-A ⑥：**删除确认条旁的次要动作** —— 『改为归档（移入 _归档/）』
+   * （`file-management.md` §3.6 原文位置）。
+   *
+   * 为什么放在这里而不是另开一个入口：规格把「归档替代删除」定位成删除的
+   * **副作用替代**（DS-13：不提供撤销，用归档替代）—— 用户点「删除」的那一刻
+   * 才是他真正需要这个选项的时刻。缺省 `undefined` → 不渲染（非工作区/
+   * 虚拟分组等没有归档落点的场景）。
+   */
+  onArchive?: () => void;
 }): React.ReactElement {
   return (
     <div
@@ -35,6 +46,11 @@ export function DeleteConfirmBar({
           （{useWorkspace ? '会真实删除磁盘文件' : '所含文档将退回根目录'}）
         </span>
       </span>
+      {onArchive && (
+        <button type="button" data-fm-confirm-archive style={btnBase} onClick={onArchive}>
+          改为归档
+        </button>
+      )}
       <button
         type="button"
         data-fm-confirm-ok
@@ -84,14 +100,8 @@ export function NewFolderNameBar({
 export function TreeErrorBar({ message }: { message: string }): React.ReactElement {
   return (
     <div
-      style={{
-        margin: '0 12px 8px',
-        padding: '6px 8px',
-        borderRadius: 6,
-        border: `1px solid ${CHROME.warn}`,
-        color: CHROME.warn,
-        fontSize: CHROME.fontSizeSmall,
-      }}
+      data-fm-tree-error
+      style={{ ...inlineBarStyle, border: `1px solid ${CHROME.warn}`, color: CHROME.warn }}
     >
       {message}
     </div>

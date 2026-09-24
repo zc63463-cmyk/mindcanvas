@@ -6,6 +6,7 @@
 import { useEffect } from 'react';
 import { CHROME } from '@mindcanvas/react';
 import { menuItem } from './fileManagerShared.js';
+import { ARCHIVE_ACTION_COPY } from './useFileArchive.js';
 
 /** 右键菜单（点击空白关闭；定位在光标处） */
 export function ContextMenu({
@@ -18,6 +19,7 @@ export function ContextMenu({
   onRename,
   onDelete,
   onDuplicate,
+  onArchive,
 }: {
   x: number;
   y: number;
@@ -32,6 +34,12 @@ export function ContextMenu({
    * （兼容模式/未接线时没有副本入口，避免造出无落点的按钮）。
    */
   onDuplicate?: () => void;
+  /**
+   * P1-A ⑥：「改为归档」（§3.6 / §3.2 的**右键入口**）。
+   * 与删除确认条旁的次要动作调**同一编排**（`useFileArchive.request`）。
+   * 缺省 undefined → 不渲染（非工作区/目录/已在归档里）。
+   */
+  onArchive?: () => void;
 }) {
   useEffect(() => {
     const close = (): void => onClose();
@@ -71,6 +79,11 @@ export function ContextMenu({
       {onDuplicate && (
         <button type="button" data-menu-duplicate style={menuItem} onClick={onDuplicate}>
           创建副本
+        </button>
+      )}
+      {onArchive && (
+        <button type="button" data-menu-archive style={menuItem} onClick={onArchive}>
+          {ARCHIVE_ACTION_COPY}
         </button>
       )}
       <button

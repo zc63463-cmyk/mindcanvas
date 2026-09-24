@@ -50,12 +50,21 @@ export interface ScanOptions {
   maxFiles?: number;
   /** 额外跳过的目录名 */
   skipDirs?: readonly string[];
+  /**
+   * P1-A ⑤：是否同时收集**不支持打开**的文件（非 `.mm.md`/`.md`、`.` 开头的隐藏文件）。
+   *
+   * 为什么是扫描选项而不是第二遍扫描：这些项必须来自**同一次**目录遍历
+   * （第二遍扫描会与主树的上限、跳过目录、错误处理全部脱钩，两份结果迟早不一致）。
+   * 缺省 `false` → 既有调用方与既有语义**零变化**。
+   */
+  includeOtherFiles?: boolean;
 }
 
 const DEFAULT_SCAN: Required<ScanOptions> = {
   maxDepth: 8,
   maxFiles: 2000,
   skipDirs: SCAN_SKIP_DIRS,
+  includeOtherFiles: false,
 };
 
 /** 浏览器是否支持目录选择器 */
@@ -122,6 +131,8 @@ async function dirAt(
 export class DirectoryWorkspaceHost {
   private root: FsDirectoryHandle | null = null;
   private tree: WorkspaceNode[] | null = null;
+  /** 上一次扫描是否含「其他文件」（P1-A ⑤）：缓存键的一部分，见 `scan()` */
+  private treeIncludeOtherFiles = false;
   /** 工作区身份（browser / disk / disk-session）；epoch：挂载、断开、scopeId 变化时 +1 */
   private scope: ScopeState = { ...BROWSER_SCOPE };
 
@@ -233,11 +244,25 @@ export class DirectoryWorkspaceHost {
     return this.root;
   }
 
-  /** 扫描真实目录树（结果缓存；force=true 重新扫盘） */
-  async scan(force = false): Promise<WorkspaceNode[]> {
+  /**
+   * 扫描真实目录树（结果缓存；force=true 重新扫盘）。
+   *
+   * `options.includeOtherFiles`（P1-A ⑤）参与**缓存键**：开/关是两次不同的扫描结果，
+   * 若共用一个缓存槽，用户切换「显示其他文件」后会拿到上一次口径的树
+   * （要么看不到无关文件，要么在主树上凭空多出灰项）。
+   */
+  async scan(force = false, options?: ScanOptions): Promise<WorkspaceNode[]> {
     const root = this.requireRoot();
-    if (this.tree !== null && !force) return this.tree;
-    this.tree = await this.scanDir(root, '', 0, { ...DEFAULT_SCAN, count: { n: 0 } });
+    const includeOtherFiles = options?.includeOtherFiles === true;
+    if (this.tree !== null && !force && this.treeIncludeOtherFiles === includeOtherFiles) {
+      return this.tree;
+    }
+    this.tree = await this.scanDir(root, '', 0, {
+      ...DEFAULT_SCAN,
+      includeOtherFiles,
+      count: { n: 0 },
+    });
+    this.treeIncludeOtherFiles = includeOtherFiles;
     return this.tree;
   }
 
@@ -272,6 +297,27 @@ export class DirectoryWorkspaceHost {
           handle: entry,
           ts,
           size,
+        });
+        continue;
+      }
+      /**
+       * P1-A ⑤：不支持打开的文件也回传（带 `unopenable` 标记），供「显示其他文件」
+       * 分组使用。**默认不收集**（`includeOtherFiles` 缺省 false）→ 既有调用方
+       * 拿到的树与改动前逐项一致。
+       *
+       * 计数**不进** `st.count.n`：上限（2000）是「导图收纳量」的预算，
+       * 让无关文件挤掉导图会改变既有语义（用户会突然看不到自己的文档）。
+       */
+      if (st.includeOtherFiles && isFileEntry(entry)) {
+        const { ts, size } = await statOf(entry);
+        out.push({
+          kind: 'file',
+          name: rawName,
+          path: joinPath(path, rawName),
+          handle: entry,
+          ts,
+          size,
+          unopenable: true,
         });
       }
     }
