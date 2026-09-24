@@ -63,7 +63,7 @@
 
 ## 四、遗留事项（供评审）
 
-- 本次为**合并测试**：结果分支 `codex/integrate-20260925`（`78aa8d9` 合并 + 本回执提交）**未推送**；是否推送/并入 main 由主控决定。
+- 本次为**合并测试**：结果分支 `codex/integrate-20260925`（`78aa8d9` 合并 + 回执提交 `1d7b8d5`/`8733042`）**已按主控决定推送至 origin**（2026-09-25 03:42；Mac 侧可 fetch 复核）；是否并入 main（PR 或快进）由主控决定。
 - `mindcanvas-github-public` 工作树：行尾已规范化（内容零变化，`git diff` 为 0 字节），但 `git status` 仍显示 ~640 个文件为「修改」——**纯 stat 缓存噪声**（`git diff-files -p` 为 0 字节、内容与 index 逐字节一致）。在常规终端一条命令可清净：`git ls-files -z | xargs -0 rm -f && git checkout -- .`（本沙箱对批量删除限权，未能代为执行）。`mindcanvas-github-wip` / `-s5` 未动。
 - README「当前分支」段与 CHANGELOG 仍写「workspace-wip 尚未整合」——本合并使其过时，建议 P1-A 评审收口时顺手更新（本批未改，避免超范围）。
 - P1-A 状态仍为「已交付、待主控评审」，与本次合并无关（两件事）。
