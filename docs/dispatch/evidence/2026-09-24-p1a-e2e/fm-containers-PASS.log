@@ -1,0 +1,103 @@
+[snapshot] 产物构建于 2026-09-24 18:35:52 · 引用的入口 = main-DQeEtSpE.js
+[snapshot] 最新源码 2026-09-24 18:31:29 · HEAD 提交 2026-09-24 11:32:27
+[snapshot] 页面实际加载 = main-DQeEtSpE.js
+{
+  "script": "verify-fm-containers",
+  "base": "http://localhost:5175",
+  "checks": {
+    "asset-notice 出现（浏览器素材插入工作区后有落点提示）": {
+      "ok": true,
+      "detail": null
+    },
+    "asset-notice 几何：top=100 / zIndex=5 / 水平居中": {
+      "ok": true,
+      "detail": "{\"top\":100,\"left\":531.2421875,\"width\":337.515625,\"cx\":700,\"zIndex\":\"5\",\"padding\":\"8px 14px\",\"borderRadius\":\"8px\",\"fontSize\":\"12px\"}"
+    },
+    "asset-notice 1.5s 后仍常驻（manual 语义保留）": {
+      "ok": true,
+      "detail": null
+    },
+    "asset-notice 点击后关闭": {
+      "ok": true,
+      "detail": null
+    },
+    "pre-dir-hint 出现": {
+      "ok": true,
+      "detail": null
+    },
+    "pre-dir-hint 几何：top=16 / zIndex=6 / 水平居中": {
+      "ok": true,
+      "detail": "{\"top\":16,\"left\":558.421875,\"width\":283.15625,\"cx\":700,\"zIndex\":\"6\",\"padding\":\"8px 14px\",\"borderRadius\":\"8px\",\"fontSize\":\"12px\"}"
+    },
+    "pre-dir-hint 2.8s 后自动消退（auto 2500）": {
+      "ok": true,
+      "detail": null
+    },
+    "command-notice 出现（超深子树切断被命令层拒绝）": {
+      "ok": true,
+      "detail": null
+    },
+    "command-notice 几何：top=64 / zIndex=5 / 水平居中": {
+      "ok": true,
+      "detail": "{\"top\":64,\"left\":499.4765625,\"width\":401.046875,\"cx\":700,\"zIndex\":\"5\",\"padding\":\"8px 14px\",\"borderRadius\":\"8px\",\"fontSize\":\"12px\"}"
+    },
+    "command-notice 4.5s 后自动消退（auto 4000）": {
+      "ok": true,
+      "detail": null
+    },
+    "scale-notice 出现（>20K 节点；本夹具落在 >50K 档）": {
+      "ok": true,
+      "detail": null
+    },
+    "scale-notice 几何：top=10 / zIndex=3 / 水平居中": {
+      "ok": true,
+      "detail": "{\"top\":10,\"left\":480.3828125,\"width\":439.234375,\"cx\":700,\"zIndex\":\"3\",\"padding\":\"8px 14px\",\"borderRadius\":\"8px\",\"fontSize\":\"12px\"}"
+    },
+    "scale-notice 3s 后仍常驻（manual：条件存续期间不走）": {
+      "ok": true,
+      "detail": null
+    },
+    "树侧提示出现（非导图文件点击）": {
+      "ok": true,
+      "detail": null
+    },
+    "树侧提示几何 = inlineBarStyle（margin 0 12px 8px / padding 6px 8px / radius 6px）": {
+      "ok": true,
+      "detail": "{\"margin\":\"0px 12px 8px\",\"padding\":\"6px 8px\",\"borderRadius\":\"6px\",\"fontSize\":\"11px\"}"
+    },
+    "投影失败条出现（配额下收藏/最近写回失败可见）": {
+      "ok": true,
+      "detail": {
+        "projection": true,
+        "migrate": false
+      }
+    },
+    "失败条几何 = inlineBarStyle（与树侧提示同一事实源）": {
+      "ok": true,
+      "detail": "{\"margin\":\"0px 12px 8px\",\"padding\":\"6px 8px\",\"borderRadius\":\"6px\",\"fontSize\":\"11px\"}"
+    }
+  },
+  "unconfirmed": [
+    {
+      "label": "TreeErrorBar（扫描失败条）",
+      "reason": "真实 FSA 扫描失败在替身内存盘上不可复现；几何同 inlineBarStyle 由单测钉死"
+    }
+  ],
+  "findings": [],
+  "barGeoms": [
+    [
+      "command-notice",
+      {
+        "top": 64,
+        "left": 455,
+        "width": 490,
+        "cx": 700,
+        "zIndex": "5",
+        "padding": "8px 14px",
+        "borderRadius": "8px",
+        "fontSize": "12px"
+      }
+    ]
+  ],
+  "result": "PASS"
+}

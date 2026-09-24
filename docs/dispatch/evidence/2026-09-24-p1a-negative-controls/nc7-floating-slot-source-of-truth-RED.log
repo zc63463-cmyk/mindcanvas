@@ -1,0 +1,3221 @@
+[33m(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./vite.config" without a file extension (vitest.config.ts:4:24). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.[39m
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.11 [39m[90m/Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas[39m
+
+ [31m❯[39m tests/floating-notices-consistency.test.tsx [2m([22m[2m8 tests[22m[2m | [22m[31m2 failed[39m[2m)[22m[32m 50[2mms[22m[39m
+     [32m✓[39m 四个槽位各有唯一定位（居中 + 递增 top，互不重叠）[32m 1[2mms[22m[39m
+     [32m✓[39m 渲染出的几何与表**逐值一致**（组件不得自己算位置）[32m 31[2mms[22m[39m
+     [32m✓[39m 四条浮条内边距 / 圆角 / 字号一致（rider-A 的「不是第六处重复」）[32m 6[2mms[22m[39m
+     [32m✓[39m auto 槽位到点消退；manual 槽位**不**消退[32m 0[2mms[22m[39m
+     [32m✓[39m auto 槽位真的触发 onDismiss；manual 槽位永不触发[32m 6[2mms[22m[39m
+[31m     [31m×[31m MindmapStage.tsx 里没有旧浮条的硬编码位置（三个已归槽位表的值）[39m[32m 3[2mms[22m[39m
+[31m     [31m×[31m 四条浮条都经 FloatingNotice 渲染（不各自手写 div）[39m[32m 3[2mms[22m[39m
+     [32m✓[39m 旧的两处手写 setTimeout 消退已移除（唯一事实源在槽位表）[32m 0[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 2 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/floating-notices-consistency.test.tsx[2m > [22mrider-A · 源码守卫：MindmapStage 不得再硬编码浮动条位置[2m > [22mMindmapStage.tsx 里没有旧浮条的硬编码位置（三个已归槽位表的值）
+[31m[1mAssertionError[22m: MindmapStage 仍硬编码浮动条位置：top: 64: expected [ 'top: 64' ] to deeply equal [][39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [][39m
+[31m+ [[39m
+[31m+   "top: 64",[39m
+[31m+ ][39m
+
+[36m [2m❯[22m tests/floating-notices-consistency.test.tsx:[2m134:66[22m[39m
+    [90m132|[39m     [35mconst[39m stale [33m=[39m [[32m'top: 64'[39m[33m,[39m [32m'top: 100'[39m[33m,[39m [32m'top: 16,'[39m][33m;[39m
+    [90m133|[39m     [35mconst[39m found [33m=[39m stale[33m.[39m[34mfilter[39m((s) [33m=>[39m src[33m.[39m[34mincludes[39m(s))[33m;[39m
+    [90m134|[39m     expect(found, `MindmapStage 仍硬编码浮动条位置：${found.join(' / ')}`).toEqu…
+    [90m   |[39m                                                                  [31m^[39m
+    [90m135|[39m   })[33m;[39m
+    [90m136|[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯[22m[39m
+
+[41m[1m FAIL [22m[49m tests/floating-notices-consistency.test.tsx[2m > [22mrider-A · 源码守卫：MindmapStage 不得再硬编码浮动条位置[2m > [22m四条浮条都经 FloatingNotice 渲染（不各自手写 div）
+[31m[1mAssertionError[22m: expected '/**\n * MindmapStage：apps/canvas 组合入口…' to contain 'slot="command-notice"'[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- slot="command-notice"[39m
+[31m+ /**[39m
+[31m+  * MindmapStage：apps/canvas 组合入口（= kernel 数据管线 + react 渲染器 + chrome 壳 + 编辑器闭环）。[39m
+[31m+  * - 编辑器：EditorController（全部编辑经 TreeOp + OpHistory），useEditor 驱动重渲[39m
+[31m+  * - 快捷键：6 个必做 + 保存（Ctrl+S）+ 折叠（Space）——经 matchEditorKey 分发[39m
+[31m+  * - 玻璃 chrome 恒定（K3 决策 3）；性能面板消费 MapView stats[39m
+[31m+  */[39m
+[31m+[39m
+[31m+ import {[39m
+[31m+   hasNote,[39m
+[31m+   nodeAtPath,[39m
+[31m+   pathOfNode,[39m
+[31m+   type NodePath,[39m
+[31m+ } from '@mindcanvas/kernel';[39m
+[31m+ import type { EditableNode, Entity, GrowDir, Note, TreeOp } from '@mindcanvas/kernel';[39m
+[31m+ import {[39m
+[31m+   DEFAULT_SECTION_COLOR,[39m
+[31m+   makeSectionId,[39m
+[31m+   removeSection,[39m
+[31m+   upsertSection,[39m
+[31m+ } from '@mindcanvas/kernel';[39m
+[31m+ import { findNode, getNode, LayoutCache, REGISTERED_KINDS, refKey } from '@mindcanvas/kernel';[39m
+[31m+ // L1：文本区域链接跳转（锚解析 + 三态）[39m
+[31m+ import { parseLinkAnchor, resolveLinkAnchor } from '@mindcanvas/kernel';[39m
+[31m+ import type {[39m
+[31m+   AssetItem,[39m
+[31m+   AssetInsertAction,[39m
+[31m+   Center,[39m
+[31m+   DocumentHost,[39m
+[31m+   EdgeManual,[39m
+[31m+   EdgeRouteEntry,[39m
+[31m+   FreeEdge,[39m
+[31m+   MapStats,[39m
+[31m+   MindDoc,[39m
+[31m+   ResolvedSection,[39m
+[31m+   UploadOptions,[39m
+[31m+   WorkspaceFile,[39m
+[31m+ } from '@mindcanvas/react';[39m
+[31m+ import {[39m
+[31m+   AssetPanel,[39m
+[31m+   anchorOfNode,[39m
+[31m+   AssetWriteLedger,[39m
+[31m+   formatAssetWriteNotice,[39m
+[31m+   isWriteConfirmed,[39m
+[31m+   normalizeForInsert,[39m
+[31m+   readWorkspaceRegistry,[39m
+[31m+   appendEdge,[39m
+[31m+   assetDiagnostics,[39m
+[31m+   buildEditable,[39m
+[31m+   buildEntities,[39m
+[31m+   createSummary,[39m
+[31m+   CHROME,[39m
+[31m+   collapsedAncestors,[39m
+[31m+   collectEntityRelations,[39m
+[31m+   collectFreeEdges,[39m
+[31m+   collectNodeChoices,[39m
+[31m+   createRankedCharMeasure,[39m
+[31m+   createReactRegistries,[39m
+[31m+   DemoPlugin,[39m
+[31m+   DocLibrary,[39m
+[31m+   EditorController,[39m
+[31m+   EdgeHealthBar,[39m
+[31m+   edgeHealthOf,[39m
+[31m+   EntityGraphPanel,[39m
+[31m+   EntityPicker,[39m
+[31m+   exportPng,[39m
+[31m+   exportSvg,[39m
+[31m+   FlipCard,[39m
+[31m+   formatNote,[39m
+[31m+   getNodeLabel,[39m
+[31m+   IdbAssetHost,[39m
+[31m+   installBeforeUnload,[39m
+[31m+   isEscapedEntityInput,[39m
+[31m+   isImageFileName,[39m
+[31m+   isMindDocFile,[39m
+[31m+   DirectoryWorkspaceHost,[39m
+[31m+   WorkspaceAssetHost,[39m
+[31m+   idsMeasureKey,[39m
+[31m+   LocalDocHost,[39m
+[31m+   LocalEntityStore,[39m
+[31m+   layoutDemo,[39m
+[31m+   buildIslandView,[39m
+[31m+   collectCenters,[39m
+[31m+   findEntityNodeId,[39m
+[31m+   ensureNodeCid,[39m
+[31m+   planPromoteCenter,[39m
+[31m+   resolveSections,[39m
+[31m+   upsertCenter,[39m
+[31m+   MapView,[39m
+[31m+   matchEditorKey,[39m
+[31m+   matchPreDirKey,[39m
+[31m+   itemAt,[39m
+[31m+   RADIAL_ITEMS_V1,[39m
+[31m+   submenuItemsFor,[39m
+[31m+   OutlinePanel,[39m
+[31m+   PluginHost,[39m
+[31m+   QaEditor,[39m
+[31m+   planCutTreeEdge,[39m
+[31m+   SearchPanel,[39m
+[31m+   ShortcutHelpPanel,[39m
+[31m+   scaleNoticeFor,[39m
+[31m+   summarizeReferenceDiagnostics,[39m
+[31m+   inferChildDir,[39m
+[31m+   searchMind,[39m
+[31m+   setFrameDepth,[39m
+[31m+   ThemeProvider,[39m
+[31m+   ThemeSwitcher,[39m
+[31m+   unescapeEntityInput,[39m
+[31m+   useEditor,[39m
+[31m+   useTheme,[39m
+[31m+ } from '@mindcanvas/react';[39m
+[31m+ import {[39m
+[31m+   type CSSProperties,[39m
+[31m+   type Dispatch,[39m
+[31m+   type RefObject,[39m
+[31m+   type SetStateAction,[39m
+[31m+   useCallback,[39m
+[31m+   useEffect,[39m
+[31m+   useMemo,[39m
+[31m+   useRef,[39m
+[31m+   useState,[39m
+[31m+ } from 'react';[39m
+[31m+ import { flushActiveDraft, hasPendingDraft } from './draftFlush.js';[39m
+[31m+ import {[39m
+[31m+   SAVE_METADATA_WARNING,[39m
+[31m+   type DocumentLeavePort,[39m
+[31m+   type RequestLeave,[39m
+[31m+   type SaveCompletion,[39m
+[31m+ } from './documentLifecycle.js';[39m
+[31m+ import { useLeavePortRegistration } from './hooks/useDocumentLeaveRegistration.js';[39m
+[31m+ import gatewaySource from './demo/gateway.mm.md?raw';[39m
+[31m+ import { useAutoSave } from './hooks/useAutoSave.js';[39m
+[31m+ import { useCanvasDegradeNotice } from './hooks/useCanvasDegradeNotice.js';[39m
+[31m+ import { useDocumentActions } from './hooks/useDocumentActions.js';[39m
+[31m+ import { useDocumentSaveSession } from './hooks/useDocumentSaveSession.js';[39m
+[31m+ import { useDocumentSwitch } from './hooks/useDocumentSwitch.js';[39m
+[31m+ import {[39m
+[31m+   UNCONFIRMED_WRITE_NOTICE,[39m
+[31m+   assetDuplicateCopyNotice,[39m
+[31m+   insertRefusalNotice,[39m
+[31m+   uploadFailureNotice,[39m
+[31m+ } from './assetNotices.js';[39m
+[31m+ import { nodeById, useEdgeActions } from './hooks/useEdgeActions.js';[39m
+[31m+ import { EdgeDraftLayer, type EdgeContextMenuState } from './EdgeDraftLayer.js';[39m
+[31m+ import { DocIndex, browserDocKey, migrateContextOf, wsDocKey } from './docIndex.js';[39m
+[31m+ import { FileManagerModal } from './FileManagerModal.js';[39m
+[31m+ import { FloatingNotice } from './FloatingNotice.js';[39m
+[31m+ import { NodeContextMenu } from './NodeContextMenu.js';[39m
+[31m+ import { RecentDocMenu } from './RecentDocMenu.js';[39m
+[31m+ import { useEntityPick } from './hooks/useEntityPick.js';[39m
+[31m+ import { useExportActions } from './hooks/useExportActions.js';[39m
+[31m+ import { RadialStageOverlay, useRadialStage } from './hooks/useRadialStage.js';[39m
+[31m+ import { layoutBoxCenterOf } from './layoutBoxCenter.js';[39m
+[31m+ import { makeCenterActions, makeDescActions, makeNoteActions, makeSummaryActions } from './nodeMenuBags.js';[39m
+[31m+ import { useDocumentToken } from './hooks/useDocumentToken.js';[39m
+[31m+ import { useFileOpOrchestration } from './hooks/useFileOpOrchestration.js';[39m
+[31m+ import { conflictKeepBothName, useFileOpController } from './useFileOpController.js';[39m
+[31m+ import { useCurrentDocDeleteFlow } from './hooks/useCurrentDocDeleteFlow.js';[39m
+[31m+ import type { CurrentDocOps } from './FileManager.js';[39m
+[31m+ import { useSummaryHop } from './hooks/useSummaryHop.js';[39m
+[31m+ import { IS_TEST_BUILD } from './testBuild.js';[39m
+[31m+ import { ghostBoxOf } from './radialGhost.js';[39m
+[31m+ import { LenBubble } from './LenBubble.js';[39m
+[31m+ import { FrameDepthBubble } from './FrameDepthBubble.js';[39m
+[31m+ import { applyLen } from './lenEdit.js';[39m
+[31m+ import { applyBeamCommit } from './beamEdit.js';[39m
+[31m+ import { PerfPanel } from './PerfPanel.js';[39m
+[31m+ import { SidePanels } from './SidePanels.js';[39m
+[31m+ import { StartupScreen } from './StartupScreen.js';[39m
+[31m+[39m
+[31m+ /** 路径末段（落点文案的工作区名；无分隔符时整体即名字） */[39m
+[31m+ function fileNameOfPath(path: string): string {[39m
+[31m+   const seg = path.split('/').filter((s) => s !== '');[39m
+[31m+   return seg[seg.length - 1] ?? path;[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ /** gateway 实体标题表（缺口 → unresolved 演示；同 gateway.mm.md refs） */[39m
+[31m+ const GATEWAY_TITLES: Record<string, { title: string; status?: string }> = {[39m
+[31m+   'doc:docs/01-architecture.md': { title: '01 · 架构设计', status: 'published' },[39m
+[31m+   'doc:docs/07-entity-ref-protocol.md': { title: '07 · 实体引用协议', status: 'published' },[39m
+[31m+   'doc:docs/09-knowledge-canvas-and-conventions.md': {[39m
+[31m+     title: '09 · 知识画布与约定',[39m
+[31m+     status: 'published',[39m
+[31m+   },[39m
+[31m+   'issue:1': { title: '门户显示优化', status: 'open' },[39m
+[31m+   'issue:6': { title: '解析链路验证', status: 'open' },[39m
+[31m+   'issue:8': { title: 'K3 渲染层', status: 'open' },[39m
+[31m+   'milestone:门户显示优化': { title: '门户显示优化里程碑', status: 'open' },[39m
+[31m+   'idea:forge-inbox:2': { title: '灵感：只读先行', status: 'open' },[39m
+[31m+   'img:demo-assets/demo-diagram.svg': { title: '演示架构图', status: 'ready' },[39m
+[31m+   'draw:demo-assets/board.svg': { title: '白板草稿', status: 'ready' },[39m
+[31m+ };[39m
+[31m+[39m
+[31m+ /** 图库资产清单（P0 起由资产宿主注入：首期 = 打包 demo 资产；真实 FS/HTTP 宿主属宿主实现） */[39m
+[31m+ const DEMO_ASSETS: AssetItem[] = [[39m
+[31m+   { kind: 'img', id: 'demo-assets/demo-diagram.svg', name: 'demo-diagram.svg', type: 'svg' },[39m
+[31m+   { kind: 'draw', id: 'demo-assets/board.svg', name: 'board.svg', type: 'svg' },[39m
+[31m+ ];[39m
+[31m+[39m
+[31m+ /** 折叠状态持久化 key（localStorage；v2 = 路径制，v1 为 id 制已弃用） */[39m
+[31m+ const COLLAPSE_KEY = 'mindcanvas.collapsed.v2';[39m
+[31m+[39m
+[31m+ /** C+1：自由画布入口透传（App 模式态；缺省不影响导图任何行为） */[39m
+[31m+ export interface MindmapStageProps {[39m
+[31m+   onOpenFreeCanvas?: () => void;[39m
+[31m+   /**[39m
+[31m+    * MODE-GUARD：App 注入的离开决策器（模式切换与文档替换共用）。[39m
+[31m+    * 缺省 = 不做离开保护（独立用法/旧测试）；生产由 App 注入。[39m
+[31m+    */[39m
+[31m+   requestLeave?: RequestLeave;[39m
+[31m+   /** MODE-GUARD：把本 Stage 的 leave port 登记到 App */[39m
+[31m+   registerLeavePort?: (port: DocumentLeavePort | null) => () => void;[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ function StageInner({ onOpenFreeCanvas, requestLeave, registerLeavePort }: MindmapStageProps) {[39m
+[31m+   const { token } = useTheme();[39m
+[31m+   const [stats, setStats] = useState<MapStats | null>(null);[39m
+[31m+   const [pluginActive, setPluginActive] = useState(false);[39m
+[31m+   const apiRef = useRef<MapViewApi | null>(null);[39m
+[31m+[39m
+[31m+   // 六注册表（T3 实装）+ 插件宿主：组合点 = kernel + [plugins][39m
+[31m+   const regs = useMemo(() => createReactRegistries(), []);[39m
+[31m+   const hostRef = useRef<PluginHost | null>(null);[39m
+[31m+   if (hostRef.current === null) hostRef.current = new PluginHost();[39m
+[31m+   const host = hostRef.current;[39m
+[31m+[39m
+[31m+   // 挂载样例插件（T5 演示组合能力）；卸载时自注销 + 清理 DOM[39m
+[31m+   useEffect(() => {[39m
+[31m+     const demo = new DemoPlugin(regs);[39m
+[31m+     void host.load(demo).then(() => setPluginActive(true));[39m
+[31m+     return () => {[39m
+[31m+       void host.unload(demo).then(() => setPluginActive(false));[39m
+[31m+     };[39m
+[31m+   }, [regs, host]);[39m
+[31m+[39m
+[31m+   // ---------- B1 多文档：文档宿主 + 当前文档（初始 = 内置 gateway 快照） ----------[39m
+[31m+   const docHostRef = useRef<DocumentHost | null>(null);[39m
+[31m+   if (docHostRef.current === null) docHostRef.current = new LocalDocHost();[39m
+[31m+   const docHost = docHostRef.current;[39m
+[31m+   const [doc, setDoc] = useState<MindDoc>(() => ({[39m
+[31m+     ...docHost.create('gateway.mm.md', gatewaySource),[39m
+[31m+     saved: true,[39m
+[31m+   }));[39m
+[31m+   const [docMenuOpen, setDocMenuOpen] = useState(false);[39m
+[31m+   const fileInputRef = useRef<HTMLInputElement | null>(null);[39m
+[31m+   // R1-3：applyDoc 已解析好的树交给渲染侧复用（同 source 时），保证只有一处 id 空间[39m
+[31m+   const parsedHandoffRef = useRef<{ source: string; parsed: EditableData } | null>(null);[39m
+[31m+[39m
+[31m+   // 数据管线：parseMm → astToEditable → entities（T3；B1：随当前文档 source 重解析）[39m
+[31m+   // entities 为 state：图库插入 @img/@draw 引用后动态扩展（key = `${kind}:${id}`）[39m
+[31m+   //[39m
+[31m+   // R1-3：`applyDoc` 为了「树属于新文档」的**同步事实**必须先 parse 一次；而[39m
+[31m+   // `astToEditable` 每次都 `newId()`，两次解析会得到**两个 id 空间** —— 于是按 id[39m
+[31m+   // 记录的会话态（摘要两跳草稿 `fromId` 等）会指向不存在的节点。这里**复用**交接过来的[39m
+[31m+   // 那棵树：同 source 即取用并清空，保证 controller 与渲染看到的是同一份对象。[39m
+[31m+   const data = useMemo(() => {[39m
+[31m+     const handoff = parsedHandoffRef.current;[39m
+[31m+     if (handoff !== null && handoff.source === doc.source) {[39m
+[31m+       parsedHandoffRef.current = null;[39m
+[31m+       return handoff.parsed;[39m
+[31m+     }[39m
+[31m+     return buildEditable(doc.source);[39m
+[31m+   }, [doc.source]);[39m
+[31m+   const { editable, refs } = data;[39m
+[31m+   const [entities, setEntities] = useState<Map<string, Entity>>(() =>[39m
+[31m+     buildEntities(refs, GATEWAY_TITLES),[39m
+[31m+   );[39m
+[31m+[39m
+[31m+   // A5：命令拒绝/事务失败的告警（4s 自动消退；与中心诊断条同样「宁可不写也不错写」）[39m
+[31m+   // R1-4：声明在 controller 构造之前——锚迁移冲突回调（R1-1）直接复用本通道[39m
+[31m+   const [commandNotice, setCommandNotice] = useState<string | null>(null);[39m
+[31m+[39m
+[31m+   // 编辑器：controller 随初始树创建一次；所有编辑经 controller（TreeOp）[39m
+[31m+   // 折叠持久化：localStorage（key 按 demo 文件定名；打开新文件时 controller.reset 清空写回）[39m
+[31m+   const controllerRef = useRef<EditorController | null>(null);[39m
+[31m+   // S2G：保存侧同步守卫的同步标记（写点①：下方 controller 创建处；其余写点见 useDocumentSwitch）[39m
+[31m+   const syncedSourceRef = useRef<string | null>(null);[39m
+[31m+   // S2G/R1-3：applyDoc ↔ useDocumentSwitch 的「树已同步 reset」交接位（见 useDocumentSwitch 选项注释）[39m
+[31m+   const resetSourceRef = useRef<string | null>(null);[39m
+[31m+   if (controllerRef.current === null && editable) {[39m
+[31m+     controllerRef.current = new EditorController(editable, {[39m
+[31m+       // R1-4：管线内锚迁移冲突（apply 路径）→ 命令告警条；applyTransaction 路径[39m
+[31m+       // 的冲突由各调用方经 result.error 上报（切断/接回等已有通道）[39m
+[31m+       onAnchorConflict: setCommandNotice,[39m
+[31m+       storage: {[39m
+[31m+         load: () => {[39m
+[31m+           try {[39m
+[31m+             return JSON.parse(localStorage.getItem(COLLAPSE_KEY) ?? '[]') as number[][];[39m
+[31m+           } catch {[39m
+[31m+             return [];[39m
+[31m+           }[39m
+[31m+         },[39m
+[31m+         save: (paths) => localStorage.setItem(COLLAPSE_KEY, JSON.stringify(paths)),[39m
+[31m+       },[39m
+[31m+     });[39m
+[31m+     syncedSourceRef.current = doc.source; // S2G 写点①：controller 按当前树创建 = 确定同步[39m
+[31m+   }[39m
+[31m+   const controller = useEditor(controllerRef.current ?? (null as unknown as EditorController));[39m
+[31m+   // ⚠️ 已知违反 React Hooks 规则（早退位于 Hook 之前）—— biome useHookAtTopLevel 已降级为 warn。[39m
+[31m+   //[39m
+[31m+   // 为什么保留早退：controller **确实可能为 null** —— 见上方 151 行[39m
+[31m+   // `if (controllerRef.current === null && editable)`，当数据管线解析失败（editable 为 null）时[39m
+[31m+   // controller 即为 null。此时若继续往下执行，后续 31 处 Hook（如 481 行 useMemo 读[39m
+[31m+   // `controller.root`、647 行 `controller.dirty`）会直接 TypeError → 白屏崩溃。[39m
+[31m+   // 早退在此处可让页面降级为空白，而非抛错。[39m
+[31m+   //[39m
+[31m+   // 正确修复（P2，需重构）：把 StageInner 拆成「数据加载层」+「渲染层」两个组件——[39m
+[31m+   // 外层在 editable/controller 为 null 时直接返回错误提示，内层接收**非 null** 的[39m
+[31m+   // controller 后，所有 Hook 无条件调用。这是 React 官方推荐的解法。[39m
+[31m+[39m
+[31m+   // ---------- S2 启动页：有最近文档时先进入口，而非直接打开内置示例 ----------[39m
+[31m+   // 初值只算一次：有最近文档 → 显示启动页；没有（全新用户）→ 沿用内置示例。[39m
+[31m+   const [showStartup, setShowStartup] = useState(() => docHost.recent().length > 0);[39m
+[31m+[39m
+[31m+   // MODE-GUARD：启动页 / 解析失败态也要登记 leave port，否则模式切换会被「未就绪」挡住。[39m
+[31m+   // - 启动页：尚无可编辑内容（文件未被内存改写）→ 干净端口，允许直接切换；[39m
+[31m+   // - 解析失败：若该文档从未落盘（拖入/粘贴导入的源文解析失败），存在只在内存里的内容 →[39m
+[31m+   //   只有用户显式「放弃修改」才离开，不默认当作可安全丢弃。[39m
+[31m+   const needsFallbackLeavePort = showStartup || !controller;[39m
+[31m+   useLeavePortRegistration(needsFallbackLeavePort ? registerLeavePort : undefined, () => ({[39m
+[31m+     flushEdits: () => true,[39m
+[31m+     isDirty: () => !showStartup && !doc.saved,[39m
+[31m+     isSaving: () => false,[39m
+[31m+     waitForIdle: () => Promise.resolve(),[39m
+[31m+     // 无 controller 无法序列化：保存不可用（用户仍可显式放弃或取消）[39m
+[31m+     save: (): Promise<SaveCompletion> => Promise.resolve({ kind: 'failed' }),[39m
+[31m+   }));[39m
+[31m+[39m
+[31m+   // 启动页优先于其它分支：它不读画布状态，controller 是否就绪都无关。[39m
+[31m+   // 放在全部 Hook 之后（useState 是最后一个 Hook），Hook 调用数恒定。[39m
+[31m+   if (showStartup) {[39m
+[31m+     return ([39m
+[31m+       <StartupScreen[39m
+[31m+         recent={docHost.recent()}[39m
+[31m+         onOpenRecent={(d) => {[39m
+[31m+           // 这里**不需要** applyDoc 的未保存守卫，理由（2026-09-03 复核）：[39m
+[31m+           // 启动页只在冷启动出现一次（初值 = 有最近文档），此时用户尚未编辑任何内容[39m
+[31m+           // —— 不存在"可丢失的未保存修改"；applyDoc 在 StageContent 里（本分支早退拿不到）。[39m
+[31m+           // ⚠️ 「不需要守卫」≠「不需要同步」：controller 已在本组件随初始树建立（见上方[39m
+[31m+           // controllerRef 段），三条出口 setDoc 直通 = 「StageContent 挂载前 doc 已换」——[39m
+[31m+           // 树同步由 useDocumentSwitch 的状态判据兜住（首挂不同源 → 补做 reset；S2F [1.8.19]）。[39m
+[31m+           setDoc(d);[39m
+[31m+           docHost.remember(d); // 刷新 ts，下次启动仍是它排第一[39m
+[31m+           setShowStartup(false);[39m
+[31m+         }}[39m
+[31m+         onNew={() => {[39m
+[31m+           setDoc(docHost.create('未命名.mm.md', '# 未命名\n'));[39m
+[31m+           setShowStartup(false);[39m
+[31m+         }}[39m
+[31m+         onUseSample={() => setShowStartup(false)}[39m
+[31m+         onOpenFreeCanvas={onOpenFreeCanvas}[39m
+[31m+       />[39m
+[31m+     );[39m
+[31m+   }[39m
+[31m+[39m
+[31m+   // 解析失败降级：controller 为 null 说明数据管线解析失败（editable 为 null）。[39m
+[31m+   // 此早退位于本组件全部 Hook 之后，Hook 调用数恒定 —— 符合 React Hooks 规则（ADR-0007）。[39m
+[31m+   // 渲染层 StageContent 接收非 null 的 controller，其内 21 个 Hook 得以无条件调用。[39m
+[31m+   if (!controller) {[39m
+[31m+     return ([39m
+[31m+       <div[39m
+[31m+         style={{[39m
+[31m+           position: 'absolute',[39m
+[31m+           inset: 0,[39m
+[31m+           display: 'grid',[39m
+[31m+           placeItems: 'center',[39m
+[31m+           color: CHROME.text,[39m
+[31m+           fontFamily: CHROME.fontFamily,[39m
+[31m+         }}[39m
+[31m+       >[39m
+[31m+         <div style={{ textAlign: 'center' }}>[39m
+[31m+           <div style={{ fontSize: 15, marginBottom: 8 }}>文档解析失败</div>[39m
+[31m+           <div style={{ fontSize: 12, color: CHROME.textMuted }}>[39m
+[31m+             {doc.name} 无法解析为可编辑树，请检查 .mm.md 语法。[39m
+[31m+           </div>[39m
+[31m+         </div>[39m
+[31m+       </div>[39m
+[31m+     );[39m
+[31m+   }[39m
+[31m+[39m
+[31m+   return ([39m
+[31m+     <StageContent[39m
+[31m+       token={token}[39m
+[31m+       stats={stats}[39m
+[31m+       setStats={setStats}[39m
+[31m+       pluginActive={pluginActive}[39m
+[31m+       apiRef={apiRef}[39m
+[31m+       docHost={docHost}[39m
+[31m+       doc={doc}[39m
+[31m+       setDoc={setDoc}[39m
+[31m+       docMenuOpen={docMenuOpen}[39m
+[31m+       setDocMenuOpen={setDocMenuOpen}[39m
+[31m+       fileInputRef={fileInputRef}[39m
+[31m+       data={data}[39m
+[31m+       editable={editable}[39m
+[31m+       refs={refs}[39m
+[31m+       entities={entities}[39m
+[31m+       setEntities={setEntities}[39m
+[31m+       controllerRef={controllerRef}[39m
+[31m+       syncedSourceRef={syncedSourceRef}[39m
+[31m+       resetSourceRef={resetSourceRef}[39m
+[31m+       parsedHandoffRef={parsedHandoffRef}[39m
+[31m+       controller={controller}[39m
+[31m+       commandNotice={commandNotice}[39m
+[31m+       setCommandNotice={setCommandNotice}[39m
+[31m+       requestLeave={requestLeave}[39m
+[31m+       registerLeavePort={registerLeavePort}[39m
+[31m+     />[39m
+[31m+   );[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ /** 数据管线的返回形态（避免引入新导入） */[39m
+[31m+ type EditableData = ReturnType<typeof buildEditable>;[39m
+[31m+[39m
+[31m+ interface StageContentProps {[39m
+[31m+   token: ReturnType<typeof useTheme>['token'];[39m
+[31m+   stats: MapStats | null;[39m
+[31m+   setStats: Dispatch<SetStateAction<MapStats | null>>;[39m
+[31m+   pluginActive: boolean;[39m
+[31m+   apiRef: RefObject<MapViewApi | null>;[39m
+[31m+   docHost: DocumentHost;[39m
+[31m+   doc: MindDoc;[39m
+[31m+   setDoc: Dispatch<SetStateAction<MindDoc>>;[39m
+[31m+   docMenuOpen: boolean;[39m
+[31m+   setDocMenuOpen: Dispatch<SetStateAction<boolean>>;[39m
+[31m+   fileInputRef: RefObject<HTMLInputElement | null>;[39m
+[31m+   data: EditableData;[39m
+[31m+   editable: EditableData['editable'];[39m
+[31m+   refs: EditableData['refs'];[39m
+[31m+   entities: Map<string, Entity>;[39m
+[31m+   setEntities: Dispatch<SetStateAction<Map<string, Entity>>>;[39m
+[31m+   controllerRef: RefObject<EditorController | null>;[39m
+[31m+   /** S2G：保存侧同步守卫的同步标记（三写点：创建处 / switch 两分支） */[39m
+[31m+   syncedSourceRef: RefObject<string | null>;[39m
+[31m+   /** R1-3：applyDoc ↔ useDocumentSwitch 的「树已同步 reset」交接位 */[39m
+[31m+   resetSourceRef: RefObject<string | null>;[39m
+[31m+   /** R1-3：applyDoc 已解析好的树（同 source 复用，保证只有一处节点 id 空间） */[39m
+[31m+   parsedHandoffRef: RefObject<{ source: string; parsed: EditableData } | null>;[39m
+[31m+   /** 非 null —— 由 StageInner 早退保证 */[39m
+[31m+   controller: EditorController;[39m
+[31m+   /** A5 命令告警（R1-4 状态提升至 StageInner：锚迁移冲突回调在 controller 构造处闭包） */[39m
+[31m+   commandNotice: string | null;[39m
+[31m+   setCommandNotice: Dispatch<SetStateAction<string | null>>;[39m
+[31m+   /** MODE-GUARD：离开决策器（App 注入；模式切换与文档替换共用同一个判定） */[39m
+[31m+   requestLeave?: RequestLeave;[39m
+[31m+   /** MODE-GUARD：把本 Stage 的 leave port 登记到 App */[39m
+[31m+   registerLeavePort?: (port: DocumentLeavePort | null) => () => void;[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ /**[39m
+[31m+  * StageContent —— 渲染层（ADR-0007）。[39m
+[31m+  *[39m
+[31m+  * 从 StageInner 拆出：接收**非 null** 的 controller，其后所有 Hook 无条件调用，[39m
+[31m+  * 消除原先「早退位于 Hook 中间」导致的 21 处 useHookAtTopLevel 违规。[39m
+[31m+  * 本组件内仍保留 `if (!layout) return null`，但它位于全部 Hook 之后（合规）。[39m
+[31m+  */[39m
+[31m+ function StageContent({[39m
+[31m+   token,[39m
+[31m+   stats,[39m
+[31m+   setStats,[39m
+[31m+   pluginActive,[39m
+[31m+   apiRef,[39m
+[31m+   docHost,[39m
+[31m+   doc,[39m
+[31m+   setDoc,[39m
+[31m+   docMenuOpen,[39m
+[31m+   setDocMenuOpen,[39m
+[31m+   fileInputRef,[39m
+[31m+   data,[39m
+[31m+   editable,[39m
+[31m+   refs,[39m
+[31m+   entities,[39m
+[31m+   setEntities,[39m
+[31m+   controllerRef,[39m
+[31m+   syncedSourceRef,[39m
+[31m+   resetSourceRef,[39m
+[31m+   parsedHandoffRef,[39m
+[31m+   controller,[39m
+[31m+   commandNotice,[39m
+[31m+   setCommandNotice,[39m
+[31m+   requestLeave,[39m
+[31m+   registerLeavePort,[39m
+[31m+ }: StageContentProps) {[39m
+[31m+   // M1 实体 picker：候选宿主 —— 为 useDocumentSwitch 首挂登记提前声明（原「实体候选」区仅剩使用）[39m
+[31m+   const entityHostRef = useRef<LocalEntityStore | null>(null);[39m
+[31m+   if (entityHostRef.current === null) entityHostRef.current = new LocalEntityStore();[39m
+[31m+   const entityHost = entityHostRef.current;[39m
+[31m+   // 展开态节点 id（单一展开；点击有 qa 节点展开，再点/其他节点收起）——为 useDocumentSwitch 提前声明[39m
+[31m+   const [expandedQaId, setExpandedQaId] = useState<string | null>(null);[39m
+[31m+[39m
+[31m+   // SAVE-LIFECYCLE：保存会话（同会话写入串行 + 会话/内容归属校验）。[39m
+[31m+   // 「保存中…」指示由会话推送 —— 旧会话的迟完成不会隐藏新会话正在保存的状态。[39m
+[31m+   // 声明位置：早于 useDocumentSwitch / useDocumentActions / useAutoSave（三者都要用它）。[39m
+[31m+   const { session: saveSession, saving } = useDocumentSaveSession({[39m
+[31m+     readContent: () => controller.root,[39m
+[31m+     // 附属回填（commit）异常：写盘已成功，仅提示「附属步骤未完成」（复核 R4-B）[39m
+[31m+     onCommitError: () => setCommandNotice(SAVE_METADATA_WARNING),[39m
+[31m+   });[39m
+[31m+[39m
+[31m+   // R2：文档会话令牌 —— 「当前这棵树是从哪次文档加载来的」的会话身份。[39m
+[31m+   // 声明位置必须在 useDocumentSwitch 之前（它要拿到 bump 句柄）。[39m
+[31m+   // 判据是**替换事件**而非内容：同内容替换（重开同一文件）同样推进令牌 → 旧草稿必失效。[39m
+[31m+   const { token: documentToken, bump: bumpDocumentToken } = useDocumentToken();[39m
+[31m+[39m
+[31m+   /**[39m
+[31m+    * 测试观测口的**实例归属**（仅测试构建有意义，见下方注册块）。[39m
+[31m+    * 卸载时据此判断「全局入口是否仍属于我」，避免一个实例删掉另一个实例的入口。[39m
+[31m+    */[39m
+[31m+   const installedHandleRef = useRef<MindcanvasSummaryHostHandle | null>(null);[39m
+[31m+[39m
+[31m+   // B1 文档切换（迁至 hooks/useDocumentSwitch；纯搬迁：动作顺序 / deps / 首挂跳过逐字保留）。[39m
+[31m+   // 调用点留在原位 —— 保证 useDocumentSwitch 的 effect 注册在 useAutoSave 之前[39m
+[31m+   // （切换时 reset 先执行，autosave 随后读到 dirty=false 早退）。[39m
+[31m+   // 注意：保存路径不得改写 doc.source（解析输入）——见 docs/dispatch/2026-09-13-edit-flow-session-integrity-plan.md[39m
+[31m+   useDocumentSwitch({[39m
+[31m+     doc,[39m
+[31m+     editable,[39m
+[31m+     refs,[39m
+[31m+     entities,[39m
+[31m+     entityHost,[39m
+[31m+     gatewayTitles: GATEWAY_TITLES,[39m
+[31m+     controllerRef,[39m
+[31m+     syncedSourceRef,[39m
+[31m+     resetSourceRef,[39m
+[31m+     session: saveSession,[39m
+[31m+     setEntities,[39m
+[31m+     setExpandedQaId,[39m
+[31m+     apiRef,[39m
+[31m+   });[39m
+[31m+[39m
+[31m+   // GH-T2：折叠定位自动展开（F1 边界）——定位前展开目标祖先折叠，避免 focusNode no-op[39m
+[31m+   const focusNode = (id: string): void => {[39m
+[31m+     for (const a of collapsedAncestors(controller.root, controller.collapsed, id))[39m
+[31m+       controller.setCollapsed(a, false);[39m
+[31m+     controller.select(id);[39m
+[31m+     apiRef.current?.focusNode(id);[39m
+[31m+   };[39m
+[31m+[39m
+[31m+   // L1：文本区域链接跳转（T-A4）——锚解析 → 唯一命中 → 复用 focusNode（展开祖先 + 选中 + 定位）。[39m
+[31m+   // 非 well-formed（dangling/stale）不动作：幽灵态在渲染层已不可点，这里是第二道闸；[39m
+[31m+   // 实体锚（语法 well-formed 但无 nodeId）经 findEntityNodeId 落到树中节点；不自动打开 note 浮窗。[39m
+[31m+   const jumpToAnchor = (anchorText: string): void => {[39m
+[31m+     const anchor = parseLinkAnchor(anchorText);[39m
+[31m+     if (!anchor) return;[39m
+[31m+     const res = resolveLinkAnchor(controller.root, anchor);[39m
+[31m+     if (res.state !== 'well-formed') return;[39m
+[31m+     const id =[39m
+[31m+       res.nodeId ?? (anchor.kind === 'entity' ? findEntityNodeId(controller.root, anchor.target) : null);[39m
+[31m+     if (!id) return;[39m
+[31m+     focusNode(id);[39m
+[31m+   };[39m
+[31m+[39m
+[31m+   // 文档操作（打开/新建/保存/另存为）与导出已抽至 hooks/：[39m
+[31m+   //   useDocumentActions —— 依赖 autoSaveTimer，在其定义之后调用（见下）[39m
+[31m+   //   useExportActions   —— 依赖 layout，在 layout 之后调用（见下）[39m
+[31m+   // GH-T4：全图 SVG 导出（下载 .svg；主题令牌保持）[39m
+[31m+[39m
+[31m+   // GH-T3：自动保存（debounce 300ms；仅已落盘文档；手动 Ctrl+S 取消 pending；失败静默由手动保存兜底）[39m
+[31m+   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);[39m
+[31m+   /**[39m
+[31m+    * P0-A：租约释放后的**补写触发器**。[39m
+[31m+    *[39m
+[31m+    * 租约期间内容可能又变过（编辑不冻结，I-18）—— 那条内容不在任何 auto 定时器里，[39m
+[31m+    * 因为期间所有 submit 都被挡回 `blocked` 且不入队。释放后必须立刻补写一次（写新目的地）。[39m
+[31m+    * 递增这个 tick 会重排 `useAutoSave` 的 effect（它的 deps 含 `content`，而内容引用[39m
+[31m+    * 在这条路径上没有变化，故需要显式的触发器）。[39m
+[31m+    */[39m
+[31m+   const [saveFlushTick, setSaveFlushTick] = useState(0);[39m
+[31m+[39m
+[31m+   // 文档操作（打开/新建/保存/另存为）—— 依赖 autoSaveTimer，故在其定义之后调用[39m
+[31m+   const { applyDoc, handleOpen, handleNew, handleSave, handleSaveAs } = useDocumentActions({[39m
+[31m+     controller,[39m
+[31m+     docHost,[39m
+[31m+     doc,[39m
+[31m+     setDoc,[39m
+[31m+     fileInputRef,[39m
+[31m+     autoSaveTimer,[39m
+[31m+     session: saveSession,[39m
+[31m+     syncedSourceRef,[39m
+[31m+     resetSourceRef,[39m
+[31m+     parsedHandoffRef,[39m
+[31m+     // R2：显式文档替换（打开/新建/最近/文件库/工作区/拖入）都要让会话态草稿失效。[39m
+[31m+     // 放在**替换动作发生处**（performApplyDoc）而不是只听 `doc.source` 变化：[39m
+[31m+     // 同内容替换（重开同一文件）source 逐字相同，靠 source 判据会漏掉。[39m
+[31m+     onDocumentReplaced: bumpDocumentToken,[39m
+[31m+     onBlockedSave: setCommandNotice,[39m
+[31m+     // 写盘成功但附属记录失败 → 独立附属警告（不能显示「未标记已保存」，复核 R4-B）[39m
+[31m+     onSaveWarning: setCommandNotice,[39m
+[31m+     // MODE-GUARD：打开/新建/最近/拖入/工作区等替换入口统一走离开决策器[39m
+[31m+     requestLeave,[39m
+[31m+   });[39m
+[31m+[39m
+[31m+   /**[39m
+[31m+    * `handleSave` 的**实时引用**（P0-FIX-R1 R1-3）。[39m
+[31m+    *[39m
+[31m+    * 为什么必需：键位 effect 的 deps 只有 `[controller]`（它订阅的是全局 keydown）。[39m
+[31m+    * `handleSave` 是 `useDocumentActions` 里的 `useCallback`，**每次 doc 变化都会换身份**[39m
+[31m+    * （它的 `guard` 读 `doc.source`）。若键位处理器直接闭包捕获 `handleSave`，它就会永久[39m
+[31m+    * 定格在**首次**渲染那版（= 打开示例文档时的那份 `doc.source`）。[39m
+[31m+    *[39m
+[31m+    * 后果（真机实测）：Ctrl+S 触发的守卫拿 `syncedSourceRef`（**实时**，已是新文档）[39m
+[31m+    * 去比一个**陈旧**的 `doc.source` → 永远不等 → 每一次保存都被 S2G 拦掉，[39m
+[31m+    * `writes=[]`、保存态恒「未保存」（F1F2 连跑 5 次全拦）。[39m
+[31m+    *[39m
+[31m+    * ref 每渲染刷新 → 键位处理器读到的永远是当次 `handleSave`，[39m
+[31m+    * 与 `useLeavePortRegistration` 的 `buildRef` 同款模式（那处本就正确）。[39m
+[31m+    */[39m
+[31m+   const handleSaveRef = useRef(handleSave);[39m
+[31m+   handleSaveRef.current = handleSave;[39m
+[31m+   // 同族：`handleOpen` / `handleNew` 也随 doc 换身份，键位 effect 同样不该闭包捕获它们[39m
+[31m+   const handleOpenRef = useRef(handleOpen);[39m
+[31m+   handleOpenRef.current = handleOpen;[39m
+[31m+   const handleNewRef = useRef(handleNew);[39m
+[31m+   handleNewRef.current = handleNew;[39m
+[31m+[39m
+[31m+   // GH-T3：自动保存 —— 逻辑已抽至 hooks/useAutoSave（debounce 300ms；仅已落盘文档；[39m
+[31m+   // 手动 Ctrl+S 取消 pending；失败静默由手动保存兜底；口径：写回 savedSource，不碰 doc.source）[39m
+[31m+   useAutoSave({[39m
+[31m+     controller,[39m
+[31m+     docHost,[39m
+[31m+     doc,[39m
+[31m+     setDoc,[39m
+[31m+     session: saveSession,[39m
+[31m+     autoSaveTimer,[39m
+[31m+     syncedSourceRef,[39m
+[31m+     onBlockedSave: setCommandNotice,[39m
+[31m+     flushTick: saveFlushTick,[39m
+[31m+   });[39m
+[31m+[39m
+[31m+   // MODE-GUARD：把本 Stage 的离开端口登记到 App（模式切换与文档替换共用同一判定）。[39m
+[31m+   // 端口方法读实时状态；`suppressPendingAuto` 供「放弃修改并离开」停止排定新的自动保存。[39m
+[31m+   useLeavePortRegistration(registerLeavePort, () => ({[39m
+[31m+     flushEdits: flushActiveDraft,[39m
+[31m+     isDirty: () => controller.dirty,[39m
+[31m+     isSaving: () => saveSession.isSaving(),[39m
+[31m+     waitForIdle: () => saveSession.waitForIdle(),[39m
+[31m+     save: () => handleSave(),[39m
+[31m+     suppressPendingAuto: () => {[39m
+[31m+       if (autoSaveTimer.current) {[39m
+[31m+         clearTimeout(autoSaveTimer.current);[39m
+[31m+         autoSaveTimer.current = null;[39m
+[31m+       }[39m
+[31m+     },[39m
+[31m+   }));[39m
+[31m+[39m
+[31m+   // 选中节点：单一来源 = controller.selectedId + 从当前树取节点（编辑后引用自动刷新，[39m
+[31m+   // 避免点选时的快照引用陈旧导致 QaEditor/QuickCommentPanel 读不到新 note）[39m
+[31m+   const selected =[39m
+[31m+     controller.selectedId !== null ? nodeById(controller.root, controller.selectedId) : null;[39m
+[31m+[39m
+[31m+   // F1：实体关系数据（随树/实体表自动刷新）+ 画布选中实体 → 面板高亮联动[39m
+[31m+   const relations = useMemo([39m
+[31m+     () => collectEntityRelations(controller.root, entities),[39m
+[31m+     [controller.root, entities],[39m
+[31m+   );[39m
+[31m+   const activeRefKey = selected?.type === 'entity' && selected.ref ? refKey(selected.ref) : null;[39m
+[31m+[39m
+[31m+   // M1 实体 picker：{ 目标节点, 查询串, 当前引用（编辑既有实体） }；null = 关闭[39m
+[31m+   const [picker, setPicker] = useState<{[39m
+[31m+     nodeId: string;[39m
+[31m+     query: string;[39m
+[31m+     current: { kind: string; id: string } | null;[39m
+[31m+   } | null>(null);[39m
+[31m+   // 候选：当前文档实体（优先，文档内最新为准）+ 历史候选（N1 store，跨文档复用）；[39m
+[31m+   // 资产类走图库，不进 picker（entityHost 已于上方声明）[39m
+[31m+   const entityCandidates = useMemo(() => {[39m
+[31m+     const merged = new Map<string, { kind: string; id: string; title: string }>();[39m
+[31m+     for (const e of entities.values()) {[39m
+[31m+       if (e.kind === 'img' || e.kind === 'draw') continue;[39m
+[31m+       merged.set(`${e.kind}:${e.id}`, { kind: e.kind, id: e.id, title: e.title ?? e.id });[39m
+[31m+     }[39m
+[31m+     for (const r of entityHost.list()) {[39m
+[31m+       const key = `${r.kind}:${r.id}`;[39m
+[31m+       if (!merged.has(key)) merged.set(key, { kind: r.kind, id: r.id, title: r.title });[39m
+[31m+     }[39m
+[31m+     return [...merged.values()];[39m
+[31m+   }, [entities, entityHost]);[39m
+[31m+   // 实体引用的选取动作（选中即登记：写回 + 补表 + 记库 + 关 picker + 选中节点）[39m
+[31m+   const pickEntity = useEntityPick({[39m
+[31m+     controller,[39m
+[31m+     setEntities,[39m
+[31m+     entityHost,[39m
+[31m+     docName: doc.name,[39m
+[31m+     onDone: (nodeId) => {[39m
+[31m+       setPicker(null);[39m
+[31m+       controller.select(nodeId);[39m
+[31m+     },[39m
+[31m+   });[39m
+[31m+[39m
+[31m+   const pickKinds = useMemo(() => REGISTERED_KINDS.filter((k) => k !== 'img' && k !== 'draw'), []);[39m
+[31m+[39m
+[31m+   // 批次 2：? 快捷键帮助面板 + 节点右键菜单（{ 节点, 屏幕坐标 }；null = 关闭）[39m
+[31m+   const [helpOpen, setHelpOpen] = useState(false);[39m
+[31m+   // 文件管理器（文档库 UI）：独立于 `panel` 单态——它是模态浮层，不是侧面板[39m
+[31m+   const [fileManagerOpen, setFileManagerOpen] = useState(false);[39m
+[31m+   const [ctxMenu, setCtxMenu] = useState<{ nodeId: string; x: number; y: number } | null>(null);[39m
+[31m+   // v1.8.1：「出线长度 › 自定义…」数值气泡（取代原生 prompt——裁决 M3）[39m
+[31m+   const [lenBubble, setLenBubble] = useState<{[39m
+[31m+     id: string;[39m
+[31m+     x: number;[39m
+[31m+     y: number;[39m
+[31m+     current: number | null;[39m
+[31m+   } | null>(null);[39m
+[31m+   // FO-UI1：框深度数值步进气泡（取代「改框深度…」的原生 prompt——webview 会静默吞掉）[39m
+[31m+   const [frameDepthBubble, setFrameDepthBubble] = useState<{[39m
+[31m+     id: string;[39m
+[31m+     x: number;[39m
+[31m+     y: number;[39m
+[31m+     current: number;[39m
+[31m+     max: number;[39m
+[31m+   } | null>(null);[39m
+[31m+   /**[39m
+[31m+    * PG 式预方向（会话级易失：不落文档，刷新即失；Tab/Enter 生长时才固化进 note.dir）。[39m
+[31m+    * 用 ref 持有：keydown 的 effect 依赖只有 controller，若用 state 会因闭包陷阱[39m
+[31m+    * 永远读到首次渲染的空 Map（实测「设了方向但 Tab 不生效」的根因）。[39m
+[31m+    * 另存一份 state 仅用于触发重渲染以显示提示徽标。[39m
+[31m+    */[39m
+[31m+   const preDirsRef = useRef<ReadonlyMap<string, GrowDir>>(new Map());[39m
+[31m+   const [preDirHint, setPreDirHint] = useState<{ id: string; dir: GrowDir } | null>(null);[39m
+[31m+   // 预方向提示的 2500ms 消退同理由 `FloatingNotice` 的 `pre-dir-hint` 槽位承担[39m
+[31m+   // （rider-A：消退策略参数化，不再散落在各处 effect 里）。[39m
+[31m+[39m
+[31m+   /**[39m
+[31m+    * ② 二级环（T5）：节点动作袋（描述 / 笔记 / 中心）——与右键菜单**同一份闭包**。[39m
+[31m+    * 袋在函数体后段构建（依赖其后的 host 回调 state），此处以 ref 承接：[39m
+[31m+    * `getSubModel` 只在 Alt 按下（会话开始）时读，届时已就绪。[39m
+[31m+    */[39m
+[31m+   const nodeBagsRef = useRef<Parameters<typeof submenuItemsFor>[2] | null>(null);[39m
+[31m+[39m
+[31m+   // v1.8.0 Phase 2：环形快捷操作（按住 Alt ≥250ms 出环）——与预方向共用键位，[39m
+[31m+   // 「快击=手势 / 慢按=菜单」由状态机相位分层；动作与既有命令同路径（单一动作源）。[39m
+[31m+   const radial = useRadialStage({[39m
+[31m+     getSelectedId: () => controller.selectedId,[39m
+[31m+     // ② 二级环：席位与页来自派生模型（条件灰显 / 动态文案 / 翻页定义都不在接线层重写）[39m
+[31m+     getSubModel: (id) => {[39m
+[31m+       const bags = nodeBagsRef.current;[39m
+[31m+       return bags ? submenuItemsFor(controller, id, bags) : null;[39m
+[31m+     },[39m
+[31m+     getAnchor: (id) => apiRef.current?.nodeCorner(id) ?? null,[39m
+[31m+     setPreDir: (id, dir) => {[39m
+[31m+       preDirsRef.current = new Map(preDirsRef.current).set(id, dir);[39m
+[31m+       setPreDirHint({ id, dir });[39m
+[31m+     },[39m
+[31m+     actions: {[39m
+[31m+       addChild: (id) => {[39m
+[31m+         // 与 Tab 生长同一条路径（预方向 → 兄弟多数/父方向推断 → 固化 note.dir）[39m
+[31m+         const parent = getNode(controller.root, id);[39m
+[31m+         const dir = preDirsRef.current.get(id) ?? (parent ? inferChildDir(parent) : null);[39m
+[31m+         const newId = controller.addChild(id, undefined, dir ? { dir } : undefined);[39m
+[31m+         controller.select(newId);[39m
+[31m+         controller.startEdit(newId);[39m
+[31m+       },[39m
+[31m+       editText: (id) => controller.startEdit(id),[39m
+[31m+       removeNode: (id) => {[39m
+[31m+         // 环内二次确认气泡即确认步骤（不再叠 window.confirm）[39m
+[31m+         controller.removeNode(id);[39m
+[31m+         controller.select(null);[39m
+[31m+       },[39m
+[31m+       openMenu: (id, x, y) => setCtxMenu({ nodeId: id, x, y }),[39m
+[31m+     },[39m
+[31m+   });[39m
+[31m+   // 键处理 effect 依赖只有 [controller]（历史原因带 eslint-disable）——经 ref 读，稳且零 lint 噪声[39m
+[31m+   const radialKeyRef = useRef(radial.handleKey);[39m
+[31m+   radialKeyRef.current = radial.handleKey;[39m
+[31m+[39m
+[31m+   // ① 幽灵预览（Phase 3）：高亮「新建」→ 落点幽灵（方向与 addChild 命令同源）；[39m
+[31m+   //    高亮「删除」→ 可见子树红虚描边。环开期间节点/视口被守卫冻结，按高亮派生一次即稳定。[39m
+[31m+   const radialPreview = useMemo(() => {[39m
+[31m+     const none: {[39m
+[31m+       ghost: { x: number; y: number; w: number; h: number; label: string } | null;[39m
+[31m+       dangerBoxes: Array<{ x: number; y: number; w: number; h: number }>;[39m
+[31m+     } = { ghost: null, dangerBoxes: [] };[39m
+[31m+     const sel = controller.selectedId;[39m
+[31m+     if (radial.state.phase !== 'ring' || radial.state.highlight === null || sel === null) return none;[39m
+[31m+     const item = itemAt(RADIAL_ITEMS_V1, radial.state.highlight);[39m
+[31m+     if (item?.id === 'add-child') {[39m
+[31m+       const nb = apiRef.current?.nodeBox(sel);[39m
+[31m+       if (!nb) return none;[39m
+[31m+       const parent = getNode(controller.root, sel);[39m
+[31m+       const dir = preDirsRef.current.get(sel) ?? (parent ? inferChildDir(parent) : null) ?? 'right';[39m
+[31m+       return {[39m
+[31m+         ghost: { ...ghostBoxOf(nb, dir, window.innerWidth, window.innerHeight), label: '新节点' },[39m
+[31m+         dangerBoxes: [],[39m
+[31m+       };[39m
+[31m+     }[39m
+[31m+     if (item?.id === 'delete') {[39m
+[31m+       return { ghost: null, dangerBoxes: apiRef.current?.subtreeBoxes(sel) ?? [] };[39m
+[31m+     }[39m
+[31m+     return none;[39m
+[31m+     // eslint-disable-next-line react-hooks/exhaustive-deps -- 环开期间布局冻结；高亮/选中变化即可重派生[39m
+[31m+   }, [radial.state.phase, radial.state.highlight, controller.selectedId]);[39m
+[31m+[39m
+[31m+   // v1.3.0 幕布描述（note.desc）：正在编辑描述的节点 id + 已展开全文的节点集合[39m
+[31m+   const [descEditingId, setDescEditingId] = useState<string | null>(null);[39m
+[31m+   /**[39m
+[31m+    * S2 摘要两跳草稿：第一跳（菜单「创建摘要…」）登记的**范围起点**。[39m
+[31m+    *[39m
+[31m+    * 只存 id 不存坐标（与 linkDraft 不同）：第二跳是「点画布上的节点」，不需要浮层锚点。[39m
+[31m+    * 第二跳在 `onNodeClick` **首判**完成（与 E7 Shift 两连跳同族，计划 S-A4——不用[39m
+[31m+    * LinkCreator 候选面板）；点空白 / Esc / **文档替换** / 卸载均清草稿。[39m
+[31m+    *[39m
+[31m+    * R2：状态机**不再写在本组件里**，而是关在 `hooks/useSummaryHop.ts` —— 生产与测试[39m
+[31m+    * 消费同一份实现（此前测试内联复刻了一份，真实接线的回归无人守）。[39m
+[31m+    * R2 修复点：复位信号 = `documentToken`（文档替换事件），**不是** `controller` 身份[39m
+[31m+    * （切文档走 `reset` 复用同一 controller，身份不变 → 旧实现永不清理）。[39m
+[31m+    */[39m
+[31m+   const summaryHop = useSummaryHop({[39m
+[31m+     controller,[39m
+[31m+     setCommandNotice,[39m
+[31m+     draftResetToken: documentToken,[39m
+[31m+   });[39m
+[31m+   /**[39m
+[31m+    * 固定显示的 note 笔记：悬停只是预览，点击固定后保持只读。[39m
+[31m+    *[39m
+[31m+    * ⚠️ 存**索引路径**而不是节点 id：`buildEditable` 每次解析都会经 `astToEditable`[39m
+[31m+    * **重新生成 id** —— 若存 id，一编辑写回（文档重新解析）之前记的 id 就失效了，[39m
+[31m+    * 表现为"note 笔记一编辑就消失"。路径不受重新解析影响。[39m
+[31m+    */[39m
+[31m+   const [pinnedNotePaths, setPinnedNotePaths] = useState<NodePath[]>([]);[39m
+[31m+   const [editingNotePaths, setEditingNotePaths] = useState<NodePath[]>([]);[39m
+[31m+   /** 由路径换算出当前的节点 id（文档重建后自动跟上新 id） */[39m
+[31m+   const pinnedNoteIds = useMemo([39m
+[31m+     () => pinnedNotePaths.map((path) => nodeAtPath(controller.root, path)?.id).filter(Boolean) as string[],[39m
+[31m+     [pinnedNotePaths, controller.root],[39m
+[31m+   );[39m
+[31m+   const editingNoteIds = useMemo([39m
+[31m+     () => editingNotePaths.map((path) => nodeAtPath(controller.root, path)?.id).filter(Boolean) as string[],[39m
+[31m+     [editingNotePaths, controller.root],[39m
+[31m+   );[39m
+[31m+   const pinnedNoteIdSet = useMemo(() => new Set(pinnedNoteIds), [pinnedNoteIds]);[39m
+[31m+   const setPinnedNotePath = (path: NodePath, editing = false): void => {[39m
+[31m+     setPinnedNotePaths((prev) =>[39m
+[31m+       prev.some((p) => JSON.stringify(p) === JSON.stringify(path)) ? prev : [...prev, path],[39m
+[31m+     );[39m
+[31m+     if (editing) {[39m
+[31m+       setEditingNotePaths((prev) =>[39m
+[31m+         prev.some((p) => JSON.stringify(p) === JSON.stringify(path)) ? prev : [...prev, path],[39m
+[31m+       );[39m
+[31m+     }[39m
+[31m+   };[39m
+[31m+[39m
+[31m+   // P1-T1：翻面态提升宿主 —— 会话态集合（不落盘；不顺手清——承 onBlankClick「不静默关面板」裁决口径）[39m
+[31m+   const [flippedNoteIds, setFlippedNoteIds] = useState<Set<string>>(() => new Set());[39m
+[31m+   /** Set → 数组（引用稳定化：仅集合变化时更新；MapView prop 形态 = readonly string[]） */[39m
+[31m+   const flippedNoteIdList = useMemo(() => [...flippedNoteIds], [flippedNoteIds]);[39m
+[31m+   const toggleNoteFlip = (id: string, next: boolean): void => {[39m
+[31m+     setFlippedNoteIds((prev) => {[39m
+[31m+       if (prev.has(id) === next) return prev; // 幂等：同值重复调用 → 原引用（不产生状态更新）[39m
+[31m+       const out = new Set(prev);[39m
+[31m+       if (next) out.add(id);[39m
+[31m+       else out.delete(id);[39m
+[31m+       return out;[39m
+[31m+     });[39m
+[31m+   };[39m
+[31m+[39m
+[31m+   // E8：关系模式（模式隔离）——浏览态只呈现关系，关系态才暴露连线入口[39m
+[31m+   // （连接手柄 / Shift+点两节点 / 树边右键编辑 / 边点击编辑 / 右键「连线到…」）[39m
+[31m+   const [relationMode, setRelationMode] = useState(false);[39m
+[31m+   // R4-1：边右键菜单状态（渲染在 EdgeDraftLayer）[39m
+[31m+   const [edgeMenu, setEdgeMenu] = useState<EdgeContextMenuState | null>(null);[39m
+[31m+[39m
+[31m+   // E5：画布级标注边——连线创建器（右键「连线到…」）+ 边编辑浮窗（点击边弹出）[39m
+[31m+   // 边存 root note.edges（文档级，非节点属性）；锚存路径，会话内解析[39m
+[31m+   const [linkDraft, setLinkDraft] = useState<{ sourceId: string; x: number; y: number } | null>([39m
+[31m+     null,[39m
+[31m+   );[39m
+[31m+   // E6：树自然线关系内容编辑（note.via）+ 拖拽连接由 MapView 回调直驱[39m
+[31m+   const [treeEdgeEdit, setTreeEdgeEdit] = useState<{[39m
+[31m+     childId: string;[39m
+[31m+     x: number;[39m
+[31m+     y: number;[39m
+[31m+   } | null>(null);[39m
+[31m+   // 边（free edge）状态与操作的单一归属（T1 结构治理续，见 hooks/useEdgeActions）[39m
+[31m+   const edgeActions = useEdgeActions(controller);[39m
+[31m+   // 边编辑浮层用：TS 无法对 obj.prop 跨表达式收窄类型，取局部 const 让守卫生效[39m
+[31m+   const selEdgeOpen = edgeActions.selEdge;[39m
+[31m+[39m
+[31m+   // E4：语义边行（面板哑渲染；文本 = 节点文本 / 实体锚名 / 原始锚文本兜底）[39m
+[31m+   const edgeItems = useMemo(() => {[39m
+[31m+     const textOf = (id: string): string => {[39m
+[31m+       const n = nodeById(controller.root, id);[39m
+[31m+       if (!n) return '';[39m
+[31m+       if (n.type === 'entity' && n.ref) return `@${n.ref.kind}:${n.ref.id}`;[39m
+[31m+       return n.text ?? '';[39m
+[31m+     };[39m
+[31m+     return edgeActions.freeEdges.map((e) => ({[39m
+[31m+       key: e.key,[39m
+[31m+       rel: e.rel,[39m
+[31m+       dir: e.dir,[39m
+[31m+       sourceId: e.sourceId ?? '',[39m
+[31m+       sourceText: e.sourceId ? textOf(e.sourceId) || e.from : e.from,[39m
+[31m+       targetId: e.targetId,[39m
+[31m+       targetText: e.targetId ? textOf(e.targetId) : e.to,[39m
+[31m+       // R0-3：锚定三态透传 → 面板按状态分区（悬空/陈旧不再与正常行混排）[39m
+[31m+       state: e.state,[39m
+[31m+       // R2-3：两端原始锚文本（重挂 picker 排除另一端防自关联）[39m
+[31m+       from: e.from,[39m
+[31m+       to: e.to,[39m
+[31m+       ...(e.invalidAt !== undefined ? { invalidAt: e.invalidAt } : {}),[39m
+[31m+       ...(e.source !== undefined ? { source: e.source } : {}),[39m
+[31m+     }));[39m
+[31m+   }, [edgeActions.freeEdges, controller.root]);[39m
+[31m+[39m
+[31m+   // 批次 3：Ctrl+F 搜索面板 / Ctrl+D 大纲面板[39m
+[31m+   // S1：侧面板互斥收口——单态管理（search/outline/assets/relation），移动端不再浮层堆叠[39m
+[31m+   const [panel, setPanel] = useState<null | 'search' | 'outline' | 'assets' | 'relation'>(null);[39m
+[31m+   const togglePanel = (p: NonNullable<typeof panel>): void =>[39m
+[31m+     setPanel((cur) => (cur === p ? null : p));[39m
+[31m+   const searchOpen = panel === 'search';[39m
+[31m+   const outlineOpen = panel === 'outline';[39m
+[31m+[39m
+[31m+   // FA2-T1：本地目录工作区（Obsidian 式「打开一个文件夹」）。[39m
+[31m+   // 挂载后文档读写直接走磁盘句柄，摆脱 localStorage 的 8 篇源码快照上限。[39m
+[31m+   const workspaceRef = useRef<DirectoryWorkspaceHost | null>(null);[39m
+[31m+   if (workspaceRef.current === null) workspaceRef.current = new DirectoryWorkspaceHost();[39m
+[31m+   const workspace = workspaceRef.current;[39m
+[31m+   const [workspaceReady, setWorkspaceReady] = useState(false);[39m
+[31m+   /** 当前文档在工作区内的相对路径（面包屑用；非工作区文档为 null） */[39m
+[31m+   const [workspacePath, setWorkspacePath] = useState<string | null>(null);[39m
+[31m+[39m
+[31m+   // ---------------------------------------------------------------- P0-A：当前文档文件操作[39m
+[31m+   //[39m
+[31m+   // 组装两件事：[39m
+[31m+   //  - `useFileOpOrchestration`：租约 → I-14 前置 → host `*Safe` → 归属复核 → 重绑 → 释放；[39m
+[31m+   //  - `useFileOpController`：dirty 前置三选与三块反馈面板的状态机。[39m
+[31m+   //[39m
+[31m+   // 目的地重绑的**三处落点**全在 `onRebound`：会话目的地、`doc.handle`、`workspacePath`。[39m
+[31m+   // 缺任一处都会让后续保存写旧路径（R-01），或让面包屑/索引身份停在旧位置。[39m
+[31m+   const fileOpOrchestration = useFileOpOrchestration({[39m
+[31m+     session: saveSession,[39m
+[31m+     host: workspace,[39m
+[31m+     readDoc: () => ({[39m
+[31m+       // `durable` = 已成功落盘且有句柄、且这份文档确实在工作区里（`workspacePath` 非空）[39m
+[31m+       durable: doc.saved && doc.handle !== undefined && workspacePath !== null,[39m
+[31m+       // `current` = 磁盘上就是屏幕内容。`saved && !dirty` 是这里的保守读法：[39m
+[31m+       // dirty 为真表示屏幕内容还没落盘，改名会把旧快照带到新文件（I-14 要挡的就是它）[39m
+[31m+       current: doc.saved && !controller.dirty,[39m
+[31m+       dirty: controller.dirty,[39m
+[31m+     }),[39m
+[31m+     onRebound: (file) => {[39m
+[31m+       // ① 会话目的地（唯一事实源，I-20）：后续保存写新路径[39m
+[31m+       saveSession.rebindDestination({[39m
+[31m+         kind: 'disk',[39m
+[31m+         scopeId: workspace.scopeId ?? '',[39m
+[31m+         relPath: file.path,[39m
+[31m+         name: file.name,[39m
+[31m+         handle: file.handle,[39m
+[31m+       });[39m
+[31m+       // ② 文档句柄与身份（id 即相对路径：与 openWorkspaceFile 同口径）[39m
+[31m+       setDoc((d) => ({ ...d, id: file.path, name: file.name, handle: file.handle }));[39m
+[31m+       // ③ 面包屑与索引身份的路径来源[39m
+[31m+       const previousPath = workspacePath;[39m
+[31m+       setWorkspacePath(file.path);[39m
+[31m+       // ④ 索引层：**身份随行**（F5）。`docKey` 含相对路径，改名后键就变了 ——[39m
+[31m+       // 若只让下游 `registerDoc` 按新键登记，收藏会留在旧条目上（改名即丢）。[39m
+[31m+       // `relocateDoc` 把旧条目的 starred/lineageId 搬过来，并把旧键写进 `legacyKeys`[39m
+[31m+       // 供降级投影认领（这是本应用自己完成的重绑，不是凭同名猜测；§6.2.1 规则不变）。[39m
+[31m+       const scopeId = workspace.scopeId;[39m
+[31m+       if (previousPath !== null && scopeId !== null) {[39m
+[31m+         index.relocateDoc({[39m
+[31m+           fromDocKey: wsDocKey(scopeId, previousPath),[39m
+[31m+           docKey: wsDocKey(scopeId, file.path),[39m
+[31m+           relPath: file.path,[39m
+[31m+           name: file.name,[39m
+[31m+           scopeId,[39m
+[31m+           persisted: workspace.scopeState.persisted,[39m
+[31m+           sourceRef: { kind: 'disk-handle' },[39m
+[31m+         });[39m
+[31m+       }[39m
+[31m+     },[39m
+[31m+     onAfterRelease: () => {[39m
+[31m+       // 租约期间内容又变过 → 立即补写一次（写**新**目的地，I-18 时序表末行）。[39m
+[31m+       // 用 tick 触发 `useAutoSave` 的 effect 重排（内容引用未变，靠 deps 的 tick 生效）。[39m
+[31m+       if (autoSaveTimer.current) {[39m
+[31m+         clearTimeout(autoSaveTimer.current);[39m
+[31m+         autoSaveTimer.current = null;[39m
+[31m+       }[39m
+[31m+       setSaveFlushTick((n) => n + 1);[39m
+[31m+     },[39m
+[31m+     onPartialSource: (sourcePath) => {[39m
+[31m+       // F3-部分成功（DS-10 §3）：源文件仍在盘上，而同一次 `settle` 里的 `finish`→`onRebound`[39m
+[31m+       // 会把旧键认领给新身份（`relocateDoc` 每次触发一次投影）。若先认领再登记，[39m
+[31m+       // 中间那一次投影就会把源行当作「被取代」回收掉（代表丢失）——故这里必须[39m
+[31m+       // **先于** onRebound 执行。编排层保证顺序：`onPartialSource` 在 `finish` 之前调用。[39m
+[31m+       // 用 `indexRef` 而不是下面的 `index` 常量：后者在本文件更下方才声明（TDZ）。[39m
+[31m+       indexRef.current?.notePartialSource(sourcePath);[39m
+[31m+     },[39m
+[31m+   });[39m
+[31m+[39m
+[31m+   const fileOpController = useFileOpController({[39m
+[31m+     host: workspaceReady ? workspace : null,[39m
+[31m+     orchestration: fileOpOrchestration,[39m
+[31m+     isDirty: () => controller.dirty,[39m
+[31m+     currentPath: () => workspacePath,[39m
+[31m+     saveNow: async () => {[39m
+[31m+       const completion = await handleSave();[39m
+[31m+       // 只有真正写盘成功才算「保存并继续」可用；`downloaded` 不证明落盘[39m
+[31m+       return completion.kind === 'saved';[39m
+[31m+     },[39m
+[31m+     suppressPendingAuto: () => {[39m
+[31m+       if (autoSaveTimer.current) {[39m
+[31m+         clearTimeout(autoSaveTimer.current);[39m
+[31m+         autoSaveTimer.current = null;[39m
+[31m+       }[39m
+[31m+     },[39m
+[31m+     onPartialResolved: (sourcePath) => {[39m
+[31m+       // F3-部分成功的那一对文件已处理完（DS-10 §3）：源行不再需要特殊保留。[39m
+[31m+       // 「重试删除原文件」仍失败时**不**走这里（源还在盘上，代表必须留着）。[39m
+[31m+       indexRef.current?.clearPartialSource(sourcePath);[39m
+[31m+     },[39m
+[31m+     reload: async () => {[39m
+[31m+       // 树刷新由文件面板自身的 reload 负责；面包屑/索引身份已由 onRebound 完成[39m
+[31m+     },[39m
+[31m+   });[39m
+[31m+[39m
+[31m+   /**[39m
+[31m+    * F2：删除当前文档的流程（草稿/组合输入/未保存三选）。[39m
+[31m+    *[39m
+[31m+    * `onClosed` 是这里唯一的「不可逆转换」：删除成功后把会话切回空白态 ——[39m
+[31m+    * **不执行它**会留下一个指向已删文件的 dirty 会话（F2 可观察⑤ 的失败形态）。[39m
+[31m+    * 租约由 `acquireLease` 从会话取；释放交给流程的 finally 语义（幂等）。[39m
+[31m+    */[39m
+[31m+   const deleteFlow = useCurrentDocDeleteFlow({[39m
+[31m+     acquireLease: (target) => {[39m
+[31m+       const result = saveSession.beginExclusiveOp('delete', {[39m
+[31m+         scopeId: workspace.scopeId ?? '',[39m
+[31m+         relPath: workspacePath ?? target.name,[39m
+[31m+       });[39m
+[31m+       if (result.kind === 'refused') return { ok: false, reason: result.reason };[39m
+[31m+       const leaseId = result.leaseId;[39m
+[31m+       return {[39m
+[31m+         ok: true,[39m
+[31m+         release: () => {[39m
+[31m+           if (saveSession.leaseIdOf() === leaseId) saveSession.endExclusiveOp(leaseId);[39m
+[31m+         },[39m
+[31m+       };[39m
+[31m+     },[39m
+[31m+     flushEdits: flushActiveDraft,[39m
+[31m+     isDirty: () => controller.dirty,[39m
+[31m+     isSaving: () => saveSession.isSaving(),[39m
+[31m+     saveNow: async () => (await handleSave()).kind === 'saved',[39m
+[31m+     suppressPendingAuto: () => {[39m
+[31m+       if (autoSaveTimer.current) {[39m
+[31m+         clearTimeout(autoSaveTimer.current);[39m
+[31m+         autoSaveTimer.current = null;[39m
+[31m+       }[39m
+[31m+     },[39m
+[31m+     onClosed: () => {[39m
+[31m+       // 关闭回空白态：替换文档（推进会话令牌 → 旧目的地/租约作废）+ 清掉工作区路径[39m
+[31m+       setWorkspacePath(null);[39m
+[31m+       void applyDoc(docHost.create('未命名.mm.md', '# 未命名\n'));[39m
+[31m+     },[39m
+[31m+     onNotice: setCommandNotice,[39m
+[31m+   });[39m
+[31m+[39m
+[31m+   /** 面板消费的当前文档操作面（把 controller 与 deleteFlow 合成一个回调包） */[39m
+[31m+   const currentDocOps = useMemo<CurrentDocOps>([39m
+[31m+     () => ({[39m
+[31m+       currentPath: workspacePath,[39m
+[31m+       ui: fileOpController.ui,[39m
+[31m+       rename: async (file, nextName, overwrite) => {[39m
+[31m+         await fileOpController.requestRename(file, nextName, overwrite);[39m
+[31m+       },[39m
+[31m+       move: async (file, targetDir) => {[39m
+[31m+         await fileOpController.requestMove(file, targetDir);[39m
+[31m+       },[39m
+[31m+       duplicate: async (file) => {[39m
+[31m+         await fileOpController.requestDuplicate(file);[39m
+[31m+       },[39m
+[31m+       delete: async (file) => {[39m
+[31m+         await deleteFlow.request({[39m
+[31m+           name: file.name,[39m
+[31m+           isCurrent: workspacePath === file.path,[39m
+[31m+           isDir: false,[39m
+[31m+           perform: () => fileOpController.requestDelete(file),[39m
+[31m+         });[39m
+[31m+       },[39m
+[31m+       resolveConflictName: (dirPath, name) => conflictKeepBothName(workspace, dirPath, name),[39m
+[31m+       dismissNotice: fileOpController.dismissNotice,[39m
+[31m+     }),[39m
+[31m+     [workspacePath, fileOpController, deleteFlow, workspace],[39m
+[31m+   );[39m
+[31m+[39m
+[31m+[39m
+[31m+   // 刷新页面后自动恢复上次的工作区（仅限已授权 granted 的句柄）[39m
+[31m+   useEffect(() => {[39m
+[31m+     let alive = true;[39m
+[31m+     void workspace.restore().then((ok) => {[39m
+[31m+       if (alive) setWorkspaceReady(ok);[39m
+[31m+     });[39m
+[31m+     return () => {[39m
+[31m+       alive = false;[39m
+[31m+     };[39m
+[31m+   }, [workspace]);[39m
+[31m+[39m
+[31m+   /** 打开工作区里的真实文件：读磁盘内容 → 经 applyDoc 切换（带未保存守卫） */[39m
+[31m+   const openWorkspaceFile = useCallback([39m
+[31m+     async (file: WorkspaceFile): Promise<boolean> => {[39m
+[31m+       const source = await workspace.readFile(file);[39m
+[31m+       setWorkspacePath(file.path);[39m
+[31m+       // handle 直接带上：后续 Ctrl+S / 自动保存走 createWritable() 静默写回磁盘[39m
+[31m+       return applyDoc({[39m
+[31m+         id: file.path,[39m
+[31m+         name: file.name,[39m
+[31m+         source,[39m
+[31m+         handle: file.handle,[39m
+[31m+         saved: true,[39m
+[31m+         ts: file.ts || Date.now(),[39m
+[31m+       });[39m
+[31m+     },[39m
+[31m+     [workspace, applyDoc],[39m
+[31m+   );[39m
+[31m+[39m
+[31m+   /** 「打开本地文件夹」：唤起选择器（此处必有用户手势）并挂载 */[39m
+[31m+   const pickWorkspace = useCallback((): void => {[39m
+[31m+     void workspace.pick().then((ok) => {[39m
+[31m+       setWorkspaceReady(ok !== null);[39m
+[31m+     });[39m
+[31m+   }, [workspace]);[39m
+[31m+[39m
+[31m+   /** 断开工作区：回到 localStorage 兼容模式 */[39m
+[31m+   const detachWorkspace = useCallback((): void => {[39m
+[31m+     void workspace.detach().then(() => {[39m
+[31m+       setWorkspaceReady(false);[39m
+[31m+       setWorkspacePath(null);[39m
+[31m+     });[39m
+[31m+   }, [workspace]);[39m
+[31m+[39m
+[31m+   // 批次 4：Ctrl+Shift+A 图库面板（资产实体化；点资产 → 插入 @img/@draw 引用到选中节点下）[39m
+[31m+   // 图库资产宿主（P0）：清单/解析/上传全部经宿主注入；demo 宿主 = 打包资产 + objectURL 会话上传[39m
+[31m+   const assetHostRef = useRef<WorkspaceAssetHost | null>(null);[39m
+[31m+   // FA2-T4：包一层工作区宿主 —— 挂载工作区后大资产写进磁盘 ./assets/（相对路径引用），[39m
+[31m+   // 未挂载时完全退回 IndexedDB（行为不变）。用 getter 传工作区：挂载发生在宿主创建之后。[39m
+[31m+   //[39m
+[31m+   // P0-B：一并注入**作用域来源**（第四个参数）——宿主在写入前捕获 `{scopeId, epoch}`，[39m
+[31m+   // 用于「写入已完成但作用域已切换」的记账（§4.5.4 / I-22）。同样用 getter：[39m
+[31m+   // 挂载 / 切换 / 断开都发生在宿主创建之后。[39m
+[31m+   if (assetHostRef.current === null) {[39m
+[31m+     assetHostRef.current = new WorkspaceAssetHost([39m
+[31m+       new IdbAssetHost(DEMO_ASSETS, '/'),[39m
+[31m+       () => workspace,[39m
+[31m+       '',[39m
+[31m+       () => ({ scopeId: workspace.scopeId, scopeEpoch: workspace.scopeEpoch }),[39m
+[31m+     );[39m
+[31m+   }[39m
+[31m+   const assetHost = assetHostRef.current;[39m
+[31m+[39m
+[31m+   /**[39m
+[31m+    * 资产写入账本（P0-B ①）：记录「写入已发生」这个事实，与 UI 回填是否被丢弃无关（I-22）。[39m
+[31m+    * 实例跨渲染复用（`useRef`），否则每次渲染都会重读 localStorage 并丢掉本次会话的记账。[39m
+[31m+    */[39m
+[31m+   const ledgerRef = useRef<AssetWriteLedger | null>(null);[39m
+[31m+   if (ledgerRef.current === null) ledgerRef.current = new AssetWriteLedger();[39m
+[31m+   const writeLedger = ledgerRef.current;[39m
+[31m+[39m
+[31m+   /** 资产落点/失败提示（P0-B ⑦）：单条内联文案，不用原生对话框 */[39m
+[31m+   const [assetNotice, setAssetNotice] = useState<string | null>(null);[39m
+[31m+[39m
+[31m+   /** 当前工作区名（落点文案里用；未挂载时由文案回落「工作区」，不编造名字） */[39m
+[31m+   const workspaceNameOf = workspacePath === null ? undefined : fileNameOfPath(workspacePath);[39m
+[31m+[39m
+[31m+   /**[39m
+[31m+    * 卡片落点徽章（P0-B ⑦）。[39m
+[31m+    *[39m
+[31m+    * 判据优先级（**不猜**）：[39m
+[31m+    *  1. 内置项 → `builtin`（自包含，永远可用）；[39m
+[31m+    *  2. 账本里有该 `AssetKey` 的记录 → 用**记录的 store**（写入时的真实事实）；[39m
+[31m+    *  3. 其余 → 当前是否挂载：挂了且 id 是 `assets/` 形态 → 工作区；否则浏览器素材库。[39m
+[31m+    *[39m
+[31m+    * 第 3 条是**兜底**（清单里来自磁盘扫描、或上一次会话留下的项），不是主判据 ——[39m
+[31m+    * 主判据是账本，因为「落点」是写入时刻的决定，读取时无法从 id 反推。[39m
+[31m+    */[39m
+[31m+   const storeOf = useCallback([39m
+[31m+     (item: AssetItem): 'workspace-assets' | 'browser-idb' | 'builtin' | null => {[39m
+[31m+       if (item.source === 'builtin') return 'builtin';[39m
+[31m+       const scopeKey = assetHost.scopeMark().scopeKey;[39m
+[31m+       const recorded = writeLedger[39m
+[31m+         .entriesOf(scopeKey)[39m
+[31m+         .find((e) => e.assetKey === item.id || e.relPath === item.id);[39m
+[31m+       if (recorded !== undefined) return recorded.store;[39m
+[31m+       // R1-1：清单项已带**读侧来源**（`listAssets` 标注）→ 直接用，不再按 id 前缀猜。[39m
+[31m+       // 这是必需的：浏览器素材库的项 id 也是 `assets/<name>`，前缀判据会把蓝图说成磁盘图。[39m
+[31m+       if (item.origin !== undefined) return item.origin;[39m
+[31m+       // 兜底（旧宿主 / 未标来源的项）：维持既有前缀判据[39m
+[31m+       if (workspaceReady && item.id.startsWith('assets/')) return 'workspace-assets';[39m
+[31m+       return 'browser-idb';[39m
+[31m+     },[39m
+[31m+     [assetHost, writeLedger, workspaceReady],[39m
+[31m+   );[39m
+[31m+[39m
+[31m+   // 文档库（文件管理的索引层）：只登记已落盘的文档，[39m
+[31m+   // 新建未保存的不进库（否则关掉就留下一堆空条目）。[39m
+[31m+   const libraryRef = useRef<DocLibrary | null>(null);[39m
+[31m+   if (libraryRef.current === null) {[39m
+[31m+     const lib = new DocLibrary();[39m
+[31m+     lib.ensurePresetFolders();[39m
+[31m+     libraryRef.current = lib;[39m
+[31m+   }[39m
+[31m+   const library = libraryRef.current;[39m
+[31m+[39m
+[31m+   // P0-D 索引层：**唯一索引写入口**（收藏、「最近」、迁移与降级投影都走它）。[39m
+[31m+   //[39m
+[31m+   // 迁移上下文按 P0-0 的运行期身份组装：`browser` → 唯一作用域可直迁；[39m
+[31m+   // `disk` → 只有注册表里带 `isSameEntry`/用户确认证据的作用域才算「证据充分」；[39m
+[31m+   // `disk-session`（身份不跨刷新）→ 条目标 `ephemeral`，旧键进历史池（§6.2.1）。[39m
+[31m+   /** 工作区注册表条目（P0-0 产物）：M5–M7 的归属证据位来自它 */[39m
+[31m+   const registryEntriesRef = useRef<[39m
+[31m+     ReadonlyArray<{ scopeId: string; associations: ReadonlyArray<{ via: string }> }>[39m
+[31m+   >([]);[39m
+[31m+   const indexRef = useRef<DocIndex | null>(null);[39m
+[31m+   if (indexRef.current === null) {[39m
+[31m+     indexRef.current = new DocIndex({[39m
+[31m+       ctx: () => {[39m
+[31m+         const scope = workspaceRef.current?.scopeState;[39m
+[31m+         if (!scope || scope.kind === 'browser') {[39m
+[31m+           return migrateContextOf([39m
+[31m+             {[39m
+[31m+               kind: 'browser',[39m
+[31m+               scopeId: 'browser:local',[39m
+[31m+               label: '浏览器素材库',[39m
+[31m+               epoch: 0,[39m
+[31m+               persisted: true,[39m
+[31m+             },[39m
+[31m+             [],[39m
+[31m+             typeof indexedDB !== 'undefined',[39m
+[31m+           );[39m
+[31m+         }[39m
+[31m+         // 证据位由注册表决定；读不到注册表 → `[]` → 无证据（不猜归属，I-13）[39m
+[31m+         return migrateContextOf([39m
+[31m+           scope,[39m
+[31m+           registryEntriesRef.current,[39m
+[31m+           typeof indexedDB !== 'undefined',[39m
+[31m+         );[39m
+[31m+       },[39m
+[31m+     });[39m
+[31m+   }[39m
+[31m+   const index = indexRef.current;[39m
+[31m+[39m
+[31m+   /**[39m
+[31m+    * 当前文档的索引身份（`docKey`）。[39m
+[31m+    *[39m
+[31m+    * - 工作区文档：`ws:<scopeId 主体>::<相对路径>`（`workspacePath` 是唯一来源）；[39m
+[31m+    * - 兼容/浏览器文档：`browser::<docId>`（`doc.id` 是库内 id 或文件名）。[39m
+[31m+    * `wsDocKey` 对 `browser:local` 会回落到 `browser::<id>`，不会造出第三种形态。[39m
+[31m+    */[39m
+[31m+   const docKey = workspacePath !== null && workspace.scopeId !== null[39m
+[31m+     ? wsDocKey(workspace.scopeId, workspacePath)[39m
+[31m+     : browserDocKey(doc.id);[39m
+[31m+[39m
+[31m+   // 注册表证据是**异步**读的：挂载/切换工作区后刷新，[39m
+[31m+   // 让 M5–M7 的归属判据反映「该作用域本次是否以 isSameEntry/用户确认建立」。[39m
+[31m+   useEffect(() => {[39m
+[31m+     let alive = true;[39m
+[31m+     void readWorkspaceRegistry().then((read) => {[39m
+[31m+       if (!alive) return;[39m
+[31m+       registryEntriesRef.current = read.kind === 'ok' ? read.record.entries : [];[39m
+[31m+     });[39m
+[31m+     return () => {[39m
+[31m+       alive = false;[39m
+[31m+     };[39m
+[31m+   }, [index, workspaceReady]);[39m
+[31m+[39m
+[31m+   // 文档落盘 → 登记进**索引层**（P0-D：单一写入口）。[39m
+[31m+   //[39m
+[31m+   // 只在 saved 时登记：新建未保存的文档不进库，否则关掉就留下一堆空条目。[39m
+[31m+   // E 批口径：快照读 savedSource（最近一次成功保存的内容）；保存路径不得改写 doc.source ——[39m
+[31m+   // 见 docs/dispatch/2026-09-13-edit-flow-session-integrity-plan.md[39m
+[31m+   //[39m
+[31m+   // 两件事一起做（UD-2 的后半）：[39m
+[31m+   //   ① `registerDoc` 建立身份（含 `folder`/`source` 供投影用）；[39m
+[31m+   //   ② **保存成功推进 `savedAt`**（§4.7「最后成功落盘时间」）——[39m
+[31m+   //      此前没有任何生产调用点推进它，`savedAt` 停在首次登记时刻，[39m
+[31m+   //      于是「收藏」视图的时间列与投影的 `ts = max(openedAt, savedAt)` 都是错的。[39m
+[31m+   //[39m
+[31m+   // 旧 `DocLibrary.upsert` 直写已移除：`mindcanvas.library.v1` 不再有第二条写路径，[39m
+[31m+   // 全部经索引 + 降级投影（否则会绕开 `replaceAll` 的序列化口径与配额降级）。[39m
+[31m+   const savedEffectRef = useRef<string | null>(null);[39m
+[31m+   useEffect(() => {[39m
+[31m+     if (!doc.saved) return;[39m
+[31m+     const snapshot = doc.savedSource ?? doc.source;[39m
+[31m+     const scopeId = workspace.scopeId;[39m
+[31m+     index.registerDoc({[39m
+[31m+       docKey,[39m
+[31m+       relPath: workspacePath,[39m
+[31m+       name: doc.name,[39m
+[31m+       scopeId: scopeId ?? 'browser:local',[39m
+[31m+       persisted: scopeId !== null && workspace.scopeState.persisted,[39m
+[31m+       sourceRef: doc.handle ? { kind: 'disk-handle' } : { kind: 'none' },[39m
+[31m+     });[39m
+[31m+     // `savedAt` **只在真实保存转换时推进**。[39m
+[31m+     //[39m
+[31m+     // 此前把「`doc.saved` 为 true」整体当成一次保存：打开一份已保存的文档[39m
+[31m+     // （挂载 / 切换文档）也会盖上 `savedAt = now`，「最近」被打开动作污染，[39m
+[31m+     // 投影的 `ts = max(openedAt, savedAt)` 跟着漂。[39m
+[31m+     // 判据：`seenKey` 记住「这份文档上一次见过的内容戳」——[39m
+[31m+     //   - 第一次看到某份文档（打开）→ 只记戳，不推进；[39m
+[31m+     //   - 同一份文档内容变了（真实保存）→ 推进。[39m
+[31m+     const stamp = `${docKey}|${snapshot.length}|${doc.name}`;[39m
+[31m+     const seen = savedEffectRef.current;[39m
+[31m+     const first = seen === null || seen.slice(0, seen.indexOf('|')) !== docKey;[39m
+[31m+     savedEffectRef.current = stamp;[39m
+[31m+     if (first || seen === stamp) return; // 打开 / 同一次保存重跑 → 不推进 `savedAt`[39m
+[31m+     index.saveDoc({ docKey, relPath: workspacePath, name: doc.name });[39m
+[31m+   }, [doc.name, doc.handle, doc.savedSource, doc.source, doc.saved, docKey, index, workspace, workspacePath]);[39m
+[31m+   // 异步清单（宿主可换 HTTP/FS 实现）；插入/上传后由 Stage 更新本地副本[39m
+[31m+   const [assetList, setAssetList] = useState<AssetItem[]>([]);[39m
+[31m+[39m
+[31m+   /**[39m
+[31m+    * 图库上传（P1-1）：上传按钮 / 面板拖拽 / 画布 drop 共用的「入清单」原语（不插节点）。[39m
+[31m+    *[39m
+[31m+    * **P0-B（① 作用域捕获 + 记账 / ② 三态 / ⑦ 落点文案）**：[39m
+[31m+    *  1. 上传**之前**捕获作用域标记（`epoch` 可能在写入过程中变化，§6.2）；[39m
+[31m+    *  2. 用 `uploadAssetDetailed` 拿三态——不再把 `AssetItem` 当成功凭据（R-08）；[39m
+[31m+    *  3. 结果返回后校验 `isCurrent(捕获值)`：不匹配 → **不回填清单**（避免串图）、[39m
+[31m+    *     写一条开发诊断，但**仍然记账**（`unconfirmed: true`，I-22）；[39m
+[31m+    *  4. 落点文案由 `formatAssetWriteNotice` 单点给出（不得各处手写「已保存」）。[39m
+[31m+    */[39m
+[31m+   const uploadToGallery = useCallback([39m
+[31m+     async (file: File, options: UploadOptions = {}): Promise<AssetItem | null> => {[39m
+[31m+       const captured = assetHost.scopeMark();[39m
+[31m+       const result = await assetHost.uploadAssetDetailed(file, undefined, options);[39m
+[31m+       if (result.kind === 'failed') {[39m
+[31m+         /**[39m
+[31m+          * P0-C ② 迁移：此前是 `code === 'E-ABORT' ? null : '上传失败，请重试。'`[39m
+[31m+          * —— 把 `E-PERMISSION` / `E-QUOTA` / `E-ABORT` 全说成同一句，[39m
+[31m+          * 用户看不出该「重新授权」还是「清理空间」，还把用户取消说成了失败[39m
+[31m+          * （I-10 / §4.3 要求分开）。[39m
+[31m+          *[39m
+[31m+          * 判据从「就地判 E-ABORT」移进 `uploadFailureNotice`（它对 `E-ABORT`[39m
+[31m+          * 返回空串）。**但这里必须把空串折回 `null`**：本提示条的渲染判据是[39m
+[31m+          * `assetNotice !== null`（见下方 `{assetNotice !== null && …}`），[39m
+[31m+          * 空串**会**渲染成一个空气泡 —— 那既不是「静默」，也和原来 `null`[39m
+[31m+          * 的行为不同。折一下即与迁移前逐字节同行为。[39m
+[31m+          */[39m
+[31m+         const notice = uploadFailureNotice(result.error.code);[39m
+[31m+         setAssetNotice(notice === '' ? null : notice);[39m
+[31m+         return null;[39m
+[31m+       }[39m
+[31m+       const item = result.item;[39m
+[31m+       const store = result.kind === 'written' ? result.store : null;[39m
+[31m+       const confirmed = isWriteConfirmed(captured, assetHost.scopeMark());[39m
+[31m+       writeLedger.record([39m
+[31m+         {[39m
+[31m+           assetKey: item.id,[39m
+[31m+           scopeId: captured.scopeKey,[39m
+[31m+           kind: item.kind,[39m
+[31m+           name: item.name,[39m
+[31m+           relPath: item.id.startsWith('assets/') ? item.id : null,[39m
+[31m+           store: store ?? 'browser-idb',[39m
+[31m+           bytes: result.kind === 'written' ? result.bytes : null,[39m
+[31m+         },[39m
+[31m+         confirmed,[39m
+[31m+       );[39m
+[31m+       if (!confirmed) {[39m
+[31m+         // 丢弃 UI 回填（避免串图），但**不是**撤销磁盘写入（I-22）[39m
+[31m+         setAssetNotice(UNCONFIRMED_WRITE_NOTICE);[39m
+[31m+         return item;[39m
+[31m+       }[39m
+[31m+       setAssetNotice(formatAssetWriteNotice(store, workspaceNameOf));[39m
+[31m+       setAssetList((prev) => (prev.some((a) => a.id === item.id) ? prev : [...prev, item]));[39m
+[31m+       return item;[39m
+[31m+     },[39m
+[31m+     [assetHost, writeLedger, workspaceNameOf],[39m
+[31m+   );[39m
+[31m+[39m
+[31m+   /**[39m
+[31m+    * 清单加载 + **重新发现**（§4.5.4 规则 3）：该作用域挂载后 `listAssets` 看到了文件，[39m
+[31m+    * 清除对应 `unconfirmed` 标记 —— 这正是「专项二」负控要钉住的那条链。[39m
+[31m+    *[39m
+[31m+    * R1-2：抽成回调以便**写后**复用（归一化落盘后清单要立刻反映新文件）。[39m
+[31m+    * 刷新仍由 effect 与写后路径显式驱动，**不在渲染路径**发起 I/O。[39m
+[31m+    */[39m
+[31m+   const reloadAssetList = useCallback(async (): Promise<void> => {[39m
+[31m+     const list = await assetHost.listAssets();[39m
+[31m+     setAssetList(list);[39m
+[31m+     writeLedger.confirmDiscovered([39m
+[31m+       assetHost.scopeMark().scopeKey,[39m
+[31m+       list.map((a) => a.id),[39m
+[31m+     );[39m
+[31m+   }, [assetHost, writeLedger]);[39m
+[31m+[39m
+[31m+   // 挂载 / 换工作区时重载（失败静默：保持上一份清单，后续还会再刷）[39m
+[31m+   useEffect(() => {[39m
+[31m+     void reloadAssetList().catch(() => undefined);[39m
+[31m+   }, [reloadAssetList, workspaceReady]);[39m
+[31m+[39m
+[31m+   // B3：失效诊断入解析层——parse 诊断 + 资产缺失诊断（清单更新后自动重算）[39m
+[31m+   const allDiags = useMemo([39m
+[31m+     () => [...data.diagnostics, ...assetDiagnostics(refs, assetList)],[39m
+[31m+     [data, refs, assetList],[39m
+[31m+   );[39m
+[31m+[39m
+[31m+   // R0-2：边健康度（观测先行）——随树重算；坏边计数/明细供诊断条呈现（全健康不渲染）[39m
+[31m+   const edgeHealth = useMemo(() => edgeHealthOf(controller.root), [controller.root]);[39m
+[31m+   // R6-S1b：畸形项行（口径单一来源：edgeHealthOf.problems 过滤 malformed——面板不扫原始数组）[39m
+[31m+   const malformedRows = useMemo([39m
+[31m+     () => edgeHealth.problems.filter((p) => p.malformed === true).map((p) => p.index),[39m
+[31m+     [edgeHealth],[39m
+[31m+   );[39m
+[31m+[39m
+[31m+   const assetOpen = panel === 'assets';[39m
+[31m+   // F1：实体关系图谱面板（Ctrl+Shift+R）[39m
+[31m+   const relationOpen = panel === 'relation';[39m
+[31m+[39m
+[31m+   // 主题字体度量 → 布局（树 / 折叠 / 展开 / 主题字体任一变化重排）[39m
+[31m+   // 关键：依赖 controller.root（不可变引用）而非 controller（引用稳定）——编辑后布局必须重算[39m
+[31m+   //[39m
+[31m+   // MEASURE-RANK：按**视觉档**分档度量（root/branch/leaf 三档字号，字重无关）。[39m
+[31m+   // 叶卡不再用 branch 字号量（白边约 25% 的根源），整体盒随之收紧 → fit k 回升、[39m
+[31m+   // LOD 文字更晚被省。`charOf` 与传给 MapView 的是**同一份**（观察/命中与绘制同源）。[39m
+[31m+   const charOf = useMemo(() => createRankedCharMeasure(token.font), [token.font]);[39m
+[31m+   const char = useMemo(() => charOf('branch'), [charOf]);[39m
+[31m+   // M5-T6 增量布局：缓存实例跨编辑复用（折叠/度量键变化时内核自动作废重算，结果恒等于全量）[39m
+[31m+   const layoutCacheRef = useRef<LayoutCache | null>(null);[39m
+[31m+   if (layoutCacheRef.current === null) layoutCacheRef.current = new LayoutCache();[39m
+[31m+[39m
+[31m+   // G6″：文档级中心标注 → 布局岛视图（A3-2：specs + 跨岛边界边 + 中心诊断）。[39m
+[31m+   // 无标注时 specs 为 null，回退既有的单树 layoutMindmap 路径（行为完全不变）。[39m
+[31m+   const islandView = useMemo([39m
+[31m+     () => buildIslandView(controller.root, collectCenters(controller.root)),[39m
+[31m+     [controller.root],[39m
+[31m+   );[39m
+[31m+   const centerSpecs = islandView.specs;[39m
+[31m+[39m
+[31m+   /** G6′：中心节点 id 集合（MapView 据此把拖拽解释为「移动坐标」而非改树结构）。[39m
+[31m+    *  与布局同源（islandView.specs = projectIslands 投影结果）——布局忽略的[39m
+[31m+    *  中心不得进入手势，否则深层中心「能拖但布局不认」，拖拽变成无效写坐标。 */[39m
+[31m+   const centerIds = useMemo(() => {[39m
+[31m+     const s = new Set<string>();[39m
+[31m+     for (const c of centerSpecs ?? []) s.add(c.node.id);[39m
+[31m+     return s;[39m
+[31m+   }, [centerSpecs]);[39m
+[31m+[39m
+[31m+   /**[39m
+[31m+    * ROOT-DRAG-1：「**可拖中心**」= 有 center 条目的 well-formed 中心（不含文档根）。[39m
+[31m+    *[39m
+[31m+    * 与 centerIds 的分工：centerIds = 布局岛根（含虚拟根岛，供布局/命中/总览口径）；[39m
+[31m+    * 本表只管「拖拽 = 移动坐标」的判定与提交校验 —— 虚拟根岛没有 center 条目，[39m
+[31m+    * 拖它/拖根锚 Section 标题不得写 note（此前经 handleCenterMove 的 at 兜底分支[39m
+[31m+    * 新建根条目 = 静默升格，绕过 planPromoteCenter 的 is-root 守卫）。[39m
+[31m+    * 契约见 docs/dispatch/2026-09-17-root-drag-guard-dispatch-prompt.md。[39m
+[31m+    */[39m
+[31m+   const centerEntryIds = useMemo(() => {[39m
+[31m+     const s = new Set<string>();[39m
+[31m+     for (const c of collectCenters(controller.root)) {[39m
+[31m+       if (c.nodeId !== null && c.state === 'well-formed' && c.nodeId !== controller.root.id) {[39m
+[31m+         s.add(c.nodeId);[39m
+[31m+       }[39m
+[31m+     }[39m
+[31m+     return s;[39m
+[31m+   }, [controller.root]);[39m
+[31m+[39m
+[31m+   /** C4：中心角标标题（nodeId → 「中心（doc#cid）」；无 cid 旧数据只写「中心」）。[39m
+[31m+    *  依赖 controller.root（不可变引用）：升格/降格/改名后 root 换代 → 标题重算。[39m
+[31m+    *  本表**即角标渲染条件**（真实中心事实；不用 centerIds——它含布局输出所需的根岛根）；[39m
+[31m+    *  仅 well-formed 中心进入（与布局/拖拽同源纪律：布局忽略的中心不标角标）。 */[39m
+[31m+   const centerTitles = useMemo(() => {[39m
+[31m+     const m = new Map<string, string>();[39m
+[31m+     for (const c of collectCenters(controller.root)) {[39m
+[31m+       if (c.nodeId === null || c.state !== 'well-formed') continue;[39m
+[31m+       m.set(c.nodeId, c.cid ? `中心（${doc.name}#${c.cid}）` : '中心');[39m
+[31m+     }[39m
+[31m+     return m;[39m
+[31m+   }, [controller.root, doc.name]);[39m
+[31m+[39m
+[31m+   const layout = useMemo([39m
+[31m+     () =>[39m
+[31m+       layoutDemo([39m
+[31m+         controller.root,[39m
+[31m+         entities,[39m
+[31m+         char,[39m
+[31m+         controller.collapsed,[39m
+[31m+         expandedQaId,[39m
+[31m+         layoutCacheRef.current!,[39m
+[31m+         // 度量语义键：字体/实体规模/展开态/描述编辑目标任一变化 → 键变 → 缓存作废（结果恒等于全量）[39m
+[31m+         //[39m
+[31m+         // descEditingId **必须入键**（2026-09-04 修正）：早期为了"进入/退出编辑零重排"[39m
+[31m+         // 刻意不入键，代价是新建描述时 measure 不预留编辑区 → 节点盒不扩张、[39m
+[31m+         // 编辑框只能浮出在节点下方（用户反馈：按 Shift+Enter 看不到节点长出编辑区）。[39m
+[31m+         //[39m
+[31m+         // 修正后的重排成本：**进入/退出编辑各一次**（用户主动操作，可接受）；[39m
+[31m+         // 键入过程中 descEditingId 不变 → 键不变 → 不重排。[39m
+[31m+         // 这与当初"避免每敲一字就重排"的诉求并不冲突。[39m
+[31m+         //[39m
+[31m+         // MEASURE-RANK：键必须含**分档字号全量**（sizeRoot / sizeLeaf / 三档字重）——[39m
+[31m+         // 度量自本批起按视觉档分档，只盯 size 会在换主题（如 size/leaf 同时变）时漏判。[39m
+[31m+         `${token.font.family}|${token.font.size}|${token.font.sizeRoot ?? ''}|${token.font.sizeLeaf}|${token.font.weight}|${token.font.weightRoot}|${token.font.weightLeaf ?? ''}|${entities.size}|${expandedQaId ?? ''}|${descEditingId ?? ''}|${idsMeasureKey(pinnedNoteIdSet)}`,[39m
+[31m+         // 让正在编辑描述的节点在布局里预留编辑区（节点自己扩张，而不是浮出遮挡）[39m
+[31m+         descEditingId,[39m
+[31m+         pinnedNoteIdSet,[39m
+[31m+         centerSpecs,[39m
+[31m+         // 档位度量：与 MapView charOf 同一份（布局盒 = 渲染字号同一事实源）[39m
+[31m+         charOf,[39m
+[31m+       ).layout,[39m
+[31m+     [[39m
+[31m+       controller.root,[39m
+[31m+       entities,[39m
+[31m+       char,[39m
+[31m+       charOf,[39m
+[31m+       controller.collapsed,[39m
+[31m+       expandedQaId,[39m
+[31m+       token.font,[39m
+[31m+       descEditingId,[39m
+[31m+       pinnedNoteIdSet,[39m
+[31m+       centerSpecs,[39m
+[31m+     ],[39m
+[31m+   );[39m
+[31m+[39m
+[31m+   /**[39m
+[31m+    * 提交节点文本（Enter / Tab 共用）。[39m
+[31m+    * 返回 true 表示已转入实体 picker（`@` 查询）——调用方不应再做后续动作。[39m
+[31m+    */[39m
+[31m+   const commitNodeText = (id: string, text: string): boolean => {[39m
+[31m+     const t = text.trim();[39m
+[31m+     // N4：转义输入（@@ / \@）→ 落为纯文本 @ 内容（不触发 picker）[39m
+[31m+     if (isEscapedEntityInput(t)) {[39m
+[31m+       controller.commitEdit(id, unescapeEntityInput(t));[39m
+[31m+       return false;[39m
+[31m+     }[39m
+[31m+     // M1：以 @ 开头 → 不落文本，转实体 picker（查询串 = @ 后内容）[39m
+[31m+     if (t.startsWith('@')) {[39m
+[31m+       controller.cancelEdit();[39m
+[31m+       setPicker({ nodeId: id, query: t.slice(1).trim(), current: null });[39m
+[31m+       return true;[39m
+[31m+     }[39m
+[31m+     controller.commitEdit(id, text);[39m
+[31m+     return false;[39m
+[31m+   };[39m
+[31m+[39m
+[31m+   /**[39m
+[31m+    * G6′：中心拖拽落库。[39m
+[31m+    *[39m
+[31m+    * 起点取 note 里的既有坐标；若中心尚未落过坐标（自动排列中），[39m
+[31m+    * 则用它在当前布局里的位置作为起点 —— 否则第一次拖动会瞬移到原点附近。[39m
+[31m+    */[39m
+[31m+   const handleCenterMove = useCallback([39m
+[31m+     (id: string, worldDx: number, worldDy: number) => {[39m
+[31m+       const centers = collectCenters(controller.root);[39m
+[31m+       const nested = islandView.nestedCenterIdsByRoot.get(id) ?? [];[39m
+[31m+       const moveIds = [id, ...nested];[39m
+[31m+       let note = controller.root.note;[39m
+[31m+       let touched = false;[39m
+[31m+       for (const moveId of moveIds) {[39m
+[31m+         const cur = centers.find((c) => c.nodeId === moveId);[39m
+[31m+         // ROOT-DRAG-1：无既有 center 条目 → 跳过（虚拟根岛等）。此前 `at` 兜底会为根[39m
+[31m+         // 新建条目 = 静默升格（绕过 is-root 守卫）——此处为提交层兜底，禁止再写。[39m
+[31m+         if (cur === undefined) continue;[39m
+[31m+         const at = cur.at;[39m
+[31m+         const ln = layout.nodes.find((n) => n.node.id === moveId);[39m
+[31m+         const baseX = cur.pos?.x ?? (ln ? ln.box.x + ln.box.w / 2 : 0);[39m
+[31m+         const baseY = cur.pos?.y ?? (ln ? ln.box.y + ln.box.h / 2 : 0);[39m
+[31m+         note = upsertCenter(note, at, {[39m
+[31m+           x: baseX + worldDx,[39m
+[31m+           y: baseY + worldDy,[39m
+[31m+         });[39m
+[31m+         touched = true;[39m
+[31m+       }[39m
+[31m+       // ROOT-DRAG-1：全部跳过（零写入）→ 早退：不触碰 note、不产生 history 条目。[39m
+[31m+       // 必要性：守卫引入后 `note` 保持 undefined 成为可达运行态（根无 note 时旧式[39m
+[31m+       // `note.centers` 会 TypeError）——本函数要求「跳过 = 零副作用」，而非崩溃或空写。[39m
+[31m+       if (!touched) return;[39m
+[31m+       controller.updateNote(controller.root.id, { centers: note?.centers ?? undefined });[39m
+[31m+     },[39m
+[31m+     [controller, layout, islandView.nestedCenterIdsByRoot],[39m
+[31m+   );[39m
+[31m+[39m
+[31m+   // A5（G2）：切断并独立——命令层 planCutTreeEdge 产出事务 ops（move + detached + 引用迁移），[39m
+[31m+   // applyTransaction 原子提交；pos 取当前布局盒中心，防切断后首次落位跳变。[39m
+[31m+   // PROMOTE-SEED-1：取点抽到共享 layoutBoxCenterOf（与升格落点同口径；行为不变）。[39m
+[31m+   const handleCutTreeEdge = useCallback([39m
+[31m+     (childId: string) => {[39m
+[31m+       const pos = layoutBoxCenterOf(layout, childId);[39m
+[31m+       const plan = planCutTreeEdge(controller.root, childId, { pos });[39m
+[31m+       if (!plan.ok) {[39m
+[31m+         setCommandNotice(plan.error.message);[39m
+[31m+         return;[39m
+[31m+       }[39m
+[31m+       // R0-4：迁移诊断不再被吞——「本来就是坏」的引用保留原值时给用户可见提示（不阻断）[39m
+[31m+       if (plan.diagnostics.length > 0) setCommandNotice(summarizeReferenceDiagnostics(plan.diagnostics) ?? null);[39m
+[31m+       const result = controller.applyTransaction(plan.ops);[39m
+[31m+       if (!result.ok) setCommandNotice(`切断未提交：${result.error.message}`);[39m
+[31m+     },[39m
+[31m+     // R1-4：setCommandNotice 现为 props 透传（状态提升至 StageInner）→ 进依赖数组[39m
+[31m+     [controller, layout, setCommandNotice],[39m
+[31m+   );[39m
+[31m+[39m
+[31m+   // A5：命令拒绝/事务失败的告警状态声明已上移至 controller 构造之前（R1-4 锚迁移冲突复用）[39m
+[31m+   // ② 二级环（T5）：动作袋构建一次，右键菜单与环席位消费**同一份**（单一动作源，防两处漂移）[39m
+[31m+   const nodeBagHost = {[39m
+[31m+     setDescEditingId,[39m
+[31m+     setPinnedNotePath,[39m
+[31m+     onAttachError: setCommandNotice,[39m
+[31m+     // PROMOTE-SEED-1：升格落点 = 升格前布局盒中心（无盒 → undefined → 不传 pos）。[39m
+[31m+     // nodeBagHost 每次渲染重建（无 memo），闭包捕获当帧 layout，无陈旧引用。[39m
+[31m+     layoutPosOf: (id: string) => layoutBoxCenterOf(layout, id),[39m
+[31m+     // S2：摘要第一跳——登记范围起点并提示点选末成员（第二跳在 onNodeClick 首判完成）[39m
+[31m+     onStartSummary: (id: string) => {[39m
+[31m+       summaryHop.start(id);[39m
+[31m+     },[39m
+[31m+   };[39m
+[31m+   const nodeBags = {[39m
+[31m+     descActions: makeDescActions(nodeBagHost),[39m
+[31m+     noteActions: makeNoteActions(controller, nodeBagHost),[39m
+[31m+     centerActions: makeCenterActions(controller, doc.name, nodeBagHost),[39m
+[31m+     summaryActions: makeSummaryActions(nodeBagHost),[39m
+[31m+   };[39m
+[31m+   nodeBagsRef.current = nodeBags; // 渲染期同步进 ref（`getSubModel` 到 Alt 按下才读）[39m
+[31m+[39m
+[31m+   /**[39m
+[31m+    * S2：第二跳——以草稿起点与本次点中的节点为范围建摘要。[39m
+[31m+    *[39m
+[31m+    * R2 起本组件**不再自持状态机**：实现与判据（含同步消费闸门）在[39m
+[31m+    * `hooks/useSummaryHop.ts` —— 生产与测试消费同一份，杜绝「测试测的是复刻体」。[39m
+[31m+    */[39m
+[31m+   const completeSummaryAt = summaryHop.completeAt;[39m
+[31m+[39m
+[31m+   // A5 的 4s 消退已由 `FloatingNotice` 按槽位策略统一承担（rider-A）：[39m
+[31m+   // 计时器的注册点从「每条浮条各自写一遍」收敛到槽位表一处。[39m
+[31m+   // 这里**不再**另注册一次 —— 两份计时器会让提示提前消失（先到点的那个赢）。[39m
+[31m+[39m
+[31m+   // R5-3：Canvas 自动降级提示——stats.backend 由 MapView 上报（已并入材料字段：[39m
+[31m+   // 后端变化必然触发一次上报，节流窗口内补报）。同一文档只提示一次；切文档后重新允许。[39m
+[31m+   useCanvasDegradeNotice({ backend: stats?.backend, docId: doc.id, notify: setCommandNotice });[39m
+[31m+[39m
+[31m+   /**[39m
+[31m+    * v1.5.0 Section 写入管线（T4）。[39m
+[31m+    *[39m
+[31m+    * D1 裁决：Section ⇒ center（不变量）。三条路径统一保证「root 锚落 cid + center 条目存在」：[39m
+[31m+    * - onMark（已是 center）：复用 center 条目既有 cid → 只写 sections，单条 undo；[39m
+[31m+    *   退化情形（手写 YAML 的 center 无 cid）补分配并同批写回节点 note（仍单条 undo）；[39m
+[31m+    * - onPromoteAndMark（非 center）：复用 planPromoteCenter 的 cid 分配 + center 条目，[39m
+[31m+    *   再把 sections 并入**同一批 ops 的 root note patch**（一次 Ctrl+Z 撤回整件事）；[39m
+[31m+    * - onUnmark：只删 sections 条目，**不动树、不动 center**（降格是独立动作，仍归「取消中心」）。[39m
+[31m+    *[39m
+[31m+    * 全程走 controller.applyTransaction / updateNote（TreeOp + OpHistory），与 center 写入通道同构。[39m
+[31m+    */[39m
+[31m+   const sectionActions = useMemo(() => {[39m
+[31m+     return {[39m
+[31m+       sectionOf: (id: string): string | undefined => {[39m
+[31m+         const at = anchorOfNode(controller.root, id);[39m
+[31m+         if (!at) return undefined;[39m
+[31m+         return resolveSections(controller.root).find((s: ResolvedSection) => s.rootId === id)?.spec[39m
+[31m+           .id;[39m
+[31m+       },[39m
+[31m+       onMark: (id: string): void => {[39m
+[31m+         const at = anchorOfNode(controller.root, id);[39m
+[31m+         if (!at) return;[39m
+[31m+         // D1 守卫：非 center 不得直接标记（手写 YAML 可能造出这种态，此处不放大）[39m
+[31m+         const center = collectCenters(controller.root).find((c: Center) => c.at === at);[39m
+[31m+         if (!center) return;[39m
+[31m+         const root = controller.root;[39m
+[31m+         const node = getNode(root, id);[39m
+[31m+         let rootNote: Note = root.note ?? {};[39m
+[31m+         let nodeNote: Note | undefined = node?.note;[39m
+[31m+         let cid = center.cid;[39m
+[31m+         if (cid === undefined) {[39m
+[31m+           const ensured = ensureNodeCid(rootNote, nodeNote);[39m
+[31m+           rootNote = ensured.rootNote;[39m
+[31m+           nodeNote = ensured.nodeNote;[39m
+[31m+           cid = ensured.cid;[39m
+[31m+         }[39m
+[31m+         const labeled = upsertSection(rootNote, {[39m
+[31m+           id: makeSectionId(),[39m
+[31m+           root: `cid:${cid}`,[39m
+[31m+           color: DEFAULT_SECTION_COLOR,[39m
+[31m+           ...(node ? { title: getNodeLabel(root, id) } : {}),[39m
+[31m+         });[39m
+[31m+         // cid 是新分配的 → 节点 note 也要落库（两条 update-node 同批，单条 undo）[39m
+[31m+         if (nodeNote !== node?.note) {[39m
+[31m+           const ops: TreeOp[] = [[39m
+[31m+             { type: 'update-node', id: root.id, patch: { note: labeled } },[39m
+[31m+             { type: 'update-node', id, patch: { note: nodeNote } },[39m
+[31m+           ];[39m
+[31m+           const result = controller.applyTransaction(ops);[39m
+[31m+           if (!result.ok) setCommandNotice(`Section 未提交：${result.error.message}`);[39m
+[31m+           return;[39m
+[31m+         }[39m
+[31m+         controller.updateNote(root.id, { sections: labeled.sections ?? undefined });[39m
+[31m+       },[39m
+[31m+       onPromoteAndMark: (id: string): void => {[39m
+[31m+         // PROMOTE-SEED-1：与 onPromote 同口径——升格前布局盒中心作落点；无盒不传 pos[39m
+[31m+         const pos = layoutBoxCenterOf(layout, id);[39m
+[31m+         const plan = planPromoteCenter(controller.root, id, {[39m
+[31m+           dir: 'right',[39m
+[31m+           ...(pos !== undefined ? { pos } : {}),[39m
+[31m+         });[39m
+[31m+         if (!plan.ok) {[39m
+[31m+           setCommandNotice(plan.error.message);[39m
+[31m+           return;[39m
+[31m+         }[39m
+[31m+         // 合并：把 sections 并入 plan 中已存在的 root update-node patch（单条 undo）[39m
+[31m+         const ops: TreeOp[] = plan.ops.map((op: TreeOp): TreeOp => {[39m
+[31m+           if (op.type !== 'update-node' || op.id !== controller.root.id) return op;[39m
+[31m+           const note = op.patch.note ?? {};[39m
+[31m+           const labeled = upsertSection(note, {[39m
+[31m+             id: makeSectionId(),[39m
+[31m+             root: `cid:${plan.cid}`,[39m
+[31m+             color: DEFAULT_SECTION_COLOR,[39m
+[31m+             title: getNodeLabel(controller.root, id),[39m
+[31m+           });[39m
+[31m+           return { ...op, patch: { ...op.patch, note: labeled } };[39m
+[31m+         });[39m
+[31m+         const result = controller.applyTransaction(ops);[39m
+[31m+         if (!result.ok) setCommandNotice(`Section 未提交：${result.error.message}`);[39m
+[31m+       },[39m
+[31m+       onUnmark: (id: string): void => {[39m
+[31m+         const sec = resolveSections(controller.root).find([39m
+[31m+           (s: ResolvedSection) => s.rootId === id,[39m
+[31m+         );[39m
+[31m+         if (!sec) return;[39m
+[31m+         const next = removeSection(controller.root.note, sec.spec.id);[39m
+[31m+         controller.updateNote(controller.root.id, { sections: next.sections ?? undefined });[39m
+[31m+       },[39m
+[31m+     };[39m
+[31m+     // PROMOTE-SEED-1：onPromoteAndMark 读 layout 取落点 → layout 进依赖（防陈旧槽位）[39m
+[31m+   }, [controller, setCommandNotice, layout]);[39m
+[31m+[39m
+[31m+   // 导出（SVG / PNG）—— 依赖 layout，故在其定义之后调用[39m
+[31m+     // A6/T23：boundaryLinks 补线随导出（islandView.boundaryLinks 已按 parent_link 过滤）[39m
+[31m+     // S4：root 随导出 → 摘要括线进 SVG/PNG（与画布同源几何；无摘要文档零差异）[39m
+[31m+     const { handleExport, handleExportPng } = useExportActions({[39m
+[31m+       layout,[39m
+[31m+       token,[39m
+[31m+       docName: doc.name,[39m
+[31m+       boundaryLinks: islandView.boundaryLinks,[39m
+[31m+       root: controller.root,[39m
+[31m+       onNotice: setCommandNotice, // A-D2：PNG 降级提示走命令告警条（替代被 webview 静默吞掉的 alert）[39m
+[31m+     });[39m
+[31m+[39m
+[31m+     // A6/T23 Canvas 门禁：含中心岛（跨岛父子连接）或自由边的文档仅 SVG 后端完整支持[39m
+[31m+     // → 显式 forceBackend='svg' 压过 >50K 自动 Canvas 降级，不静默丢岛/边；[39m
+[31m+     //   纯树文档保持既有降级策略（Canvas 大图性能路径）不变。[39m
+[31m+     //[39m
+[31m+     // 验收入口（VERIFY-CANVAS）：`?backend=canvas` / `?backend=svg` 显式指定后端，[39m
+[31m+     // 供真浏览器矩阵核对 Canvas 纯树后端的身份与渲染（自动降级阈值 5 万节点在浏览器里不可达）。[39m
+[31m+     // 纯只读覆盖：**无参数时上面两条门禁逐字不变**，也不进任何产品 UI。[39m
+[31m+     const forceBackend = useMemo<'svg' | 'canvas' | undefined>(() => {[39m
+[31m+       if (centerSpecs !== null) return 'svg';[39m
+[31m+       if (edgeActions.freeEdges.length > 0) return 'svg';[39m
+[31m+       const forced =[39m
+[31m+         typeof location === 'undefined' ? null : new URLSearchParams(location.search).get('backend');[39m
+[31m+       if (forced === 'canvas' || forced === 'svg') return forced;[39m
+[31m+       return undefined;[39m
+[31m+     }, [centerSpecs, edgeActions.freeEdges]);[39m
+[31m+[39m
+[31m+   // 全局快捷键（editing 时输入框自行拦截；此处只处理画布层）[39m
+[31m+   useEffect(() => {[39m
+[31m+     const onKey = (e: KeyboardEvent): void => {[39m
+[31m+       if (controller.editingId !== null) return; // 输入框内：stopPropagation 已在 OverlayEditor[39m
+[31m+       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return; // 搜索/批注输入框内不触发画布快捷键[39m
+[31m+       // v1.8.0：环形菜单状态机优先（Alt 蓄力/出环中的方向键漫游、Enter/Esc、二次确认）——未消费落回既有键位[39m
+[31m+       if (radialKeyRef.current(e)) return;[39m
+[31m+       const sel = controller.selectedId;[39m
+[31m+       // 预方向：Alt+方向键（会话级预设；生长时 Tab/Enter 才把它固化进新节点 note.dir）。[39m
+[31m+       // 快捷键清单见 ShortcutHelpPanel（'?'）；事后改向走右键「生长方向」。[39m
+[31m+       const preDir = matchPreDirKey(e);[39m
+[31m+       if (preDir !== null) {[39m
+[31m+         if (!sel) return;[39m
+[31m+         e.preventDefault();[39m
+[31m+         preDirsRef.current = new Map(preDirsRef.current).set(sel, preDir);[39m
+[31m+         setPreDirHint({ id: sel, dir: preDir }); // 视觉反馈：让用户看见「已设方向」[39m
+[31m+         return;[39m
+[31m+       }[39m
+[31m+       const act = matchEditorKey(e);[39m
+[31m+       if (!act) return;[39m
+[31m+       switch (act.type) {[39m
+[31m+         case 'add-child':[39m
+[31m+           if (!sel) return;[39m
+[31m+           e.preventDefault();[39m
+[31m+           {[39m
+[31m+             // 生长固化：预方向 → 否则按兄弟多数/父方向推断 → 都没有则不写（走继承）[39m
+[31m+             const parent = getNode(controller.root, sel);[39m
+[31m+             const dir = preDirsRef.current.get(sel) ?? (parent ? inferChildDir(parent) : null);[39m
+[31m+             const id = controller.addChild(sel, undefined, dir ? { dir } : undefined);[39m
+[31m+             controller.select(id);[39m
+[31m+             controller.startEdit(id);[39m
+[31m+           }[39m
+[31m+           return;[39m
+[31m+         case 'add-sibling': {[39m
+[31m+           if (!sel) return;[39m
+[31m+           e.preventDefault();[39m
+[31m+           // G6′ 触发一致性：同级生长也走推断（参照兄弟的显式方向参与多数票）[39m
+[31m+           const loc = findNode(controller.root, sel);[39m
+[31m+           const sibDir = loc ? inferChildDir(loc.parent) : null;[39m
+[31m+           const id = controller.addSibling(sel, undefined, sibDir ? { dir: sibDir } : undefined);[39m
+[31m+           if (id !== null) {[39m
+[31m+             controller.select(id);[39m
+[31m+             controller.startEdit(id);[39m
+[31m+           }[39m
+[31m+           return;[39m
+[31m+         }[39m
+[31m+         case 'delete':[39m
+[31m+           if (!sel) return;[39m
+[31m+           e.preventDefault();[39m
+[31m+           // 直删（裁决 M2：原生 confirm 退役——IDE 内嵌 webview 会**静默吞掉**原生对话框：[39m
+[31m+           // 不是「弹窗被拒」而是 confirm 恒返回 false → 表现为「不弹气泡也删不掉」）。[39m
+[31m+           // 撤销（Ctrl+Z）兜底；根节点由 controller.removeNode 守卫（返回 false，不动）。[39m
+[31m+           controller.removeNode(sel);[39m
+[31m+           controller.select(null);[39m
+[31m+           return;[39m
+[31m+         case 'edit':[39m
+[31m+           if (!sel) return;[39m
+[31m+           e.preventDefault();[39m
+[31m+           controller.startEdit(sel);[39m
+[31m+           return;[39m
+[31m+         case 'desc': {[39m
+[31m+           // Shift+Enter：切换「主题 ↔ 描述」编辑（幕布 Shift+Enter 语义）[39m
+[31m+           if (!sel) return;[39m
+[31m+           e.preventDefault();[39m
+[31m+           if (descEditingId === sel) {[39m
+[31m+             // 已在描述编辑 → 回到主题文本编辑[39m
+[31m+             setDescEditingId(null);[39m
+[31m+             controller.startEdit(sel);[39m
+[31m+           } else {[39m
+[31m+             // 进入描述编辑（无描述 = 新建；有描述 = 编辑）[39m
+[31m+             controller.cancelEdit();[39m
+[31m+             setDescEditingId(sel);[39m
+[31m+           }[39m
+[31m+           return;[39m
+[31m+         }[39m
+[31m+         case 'collapse':[39m
+[31m+           if (!sel) return;[39m
+[31m+           e.preventDefault();[39m
+[31m+           controller.toggleCollapse(sel);[39m
+[31m+           return;[39m
+[31m+         case 'undo':[39m
+[31m+           e.preventDefault();[39m
+[31m+           controller.undo();[39m
+[31m+           return;[39m
+[31m+         case 'redo':[39m
+[31m+           e.preventDefault();[39m
+[31m+           controller.redo();[39m
+[31m+           return;[39m
+[31m+         case 'save':[39m
+[31m+           e.preventDefault();[39m
+[31m+           void handleSaveRef.current();[39m
+[31m+           return;[39m
+[31m+         case 'open':[39m
+[31m+           e.preventDefault();[39m
+[31m+           void handleOpenRef.current();[39m
+[31m+           return;[39m
+[31m+         case 'new':[39m
+[31m+           e.preventDefault();[39m
+[31m+           handleNewRef.current();[39m
+[31m+           return;[39m
+[31m+         case 'indent':[39m
+[31m+           if (!sel) return;[39m
+[31m+           e.preventDefault();[39m
+[31m+           controller.indent(sel);[39m
+[31m+           return;[39m
+[31m+         case 'outdent':[39m
+[31m+           if (!sel) return;[39m
+[31m+           e.preventDefault();[39m
+[31m+           controller.outdent(sel);[39m
+[31m+           return;[39m
+[31m+         case 'navigate': {[39m
+[31m+           if (!sel) return;[39m
+[31m+           e.preventDefault();[39m
+[31m+           // 几何导航（A 档）：按视觉方向取最近可见节点——↕ 不再穿子树、↔ 不再与 ↕ 同义；[39m
+[31m+           // 目标不可见时由 MapView 内部最小推入视口（不居中、不改 k）。选中态在此写入。[39m
+[31m+           const target = apiRef.current?.navigateFrom(sel, act.dir) ?? null;[39m
+[31m+           if (target !== null) controller.select(target);[39m
+[31m+           return;[39m
+[31m+         }[39m
+[31m+         case 'fold':[39m
+[31m+           if (!sel) return;[39m
+[31m+           e.preventDefault();[39m
+[31m+           controller.setCollapsed(sel, true);[39m
+[31m+           return;[39m
+[31m+         case 'unfold':[39m
+[31m+           if (!sel) return;[39m
+[31m+           e.preventDefault();[39m
+[31m+           controller.setCollapsed(sel, false);[39m
+[31m+           return;[39m
+[31m+         case 'reset-zoom':[39m
+[31m+           e.preventDefault();[39m
+[31m+           apiRef.current?.resetZoom();[39m
+[31m+           return;[39m
+[31m+         case 'help':[39m
+[31m+           e.preventDefault();[39m
+[31m+           setHelpOpen((v) => !v);[39m
+[31m+           return;[39m
+[31m+         case 'search':[39m
+[31m+           e.preventDefault();[39m
+[31m+           togglePanel('search');[39m
+[31m+           return;[39m
+[31m+         case 'outline':[39m
+[31m+           e.preventDefault();[39m
+[31m+           togglePanel('outline');[39m
+[31m+           return;[39m
+[31m+         case 'assets':[39m
+[31m+           e.preventDefault();[39m
+[31m+           togglePanel('assets');[39m
+[31m+           return;[39m
+[31m+         case 'relation':[39m
+[31m+           e.preventDefault();[39m
+[31m+           togglePanel('relation');[39m
+[31m+           return;[39m
+[31m+       }[39m
+[31m+     };[39m
+[31m+     window.addEventListener('keydown', onKey);[39m
+[31m+     return () => window.removeEventListener('keydown', onKey);[39m
+[31m+     // eslint-disable-next-line react-hooks/exhaustive-deps[39m
+[31m+   }, [controller]);[39m
+[31m+[39m
+[31m+   // beforeunload 守卫：未保存变更 / 未提交草稿 / 写入进行中 时拦截离开（T2 + MODE-GUARD）。[39m
+[31m+   // 原生能力，不在 unload 里弹自定义异步模态（浏览器不允许）。[39m
+[31m+   useEffect([39m
+[31m+     () =>[39m
+[31m+       installBeforeUnload([39m
+[31m+         () => controller.dirty || saveSession.isSaving() || hasPendingDraft(),[39m
+[31m+       ),[39m
+[31m+     [controller, saveSession],[39m
+[31m+   );[39m
+[31m+[39m
+[31m+   // E3：边编辑/连线创建浮窗 Esc 关闭[39m
+[31m+   useEffect(() => {[39m
+[31m+     if (!linkDraft && !edgeActions.edgeSel && !treeEdgeEdit) return;[39m
+[31m+     const onKey = (e: KeyboardEvent): void => {[39m
+[31m+       if (e.key === 'Escape') {[39m
+[31m+         setLinkDraft(null);[39m
+[31m+         edgeActions.setEdgeSel(null);[39m
+[31m+         edgeActions.clearEdgeMulti();[39m
+[31m+         setTreeEdgeEdit(null);[39m
+[31m+       }[39m
+[31m+     };[39m
+[31m+     window.addEventListener('keydown', onKey);[39m
+[31m+     return () => window.removeEventListener('keydown', onKey);[39m
+[31m+   }, [linkDraft, edgeActions.edgeSel, treeEdgeEdit, edgeActions.clearEdgeMulti]);[39m
+[31m+[39m
+[31m+   // S2：摘要草稿的清理（Esc；空白点击在 onBlankClick；文档替换/卸载在 useSummaryHop 内部）。[39m
+[31m+   //[39m
+[31m+   // 为什么与上面的连线浮窗分开：那条 effect 的依赖是「浮窗开着」的布尔组合，[39m
+[31m+   // 且清的是连线状态；摘要草稿是独立等待态，混进去会让连线 Esc 语义被摘要牵连。[39m
+[31m+   // Esc 判定走 hook 的同步真理源（不受渲染时机影响）。[39m
+[31m+   useEffect(() => {[39m
+[31m+     const onKey = (e: KeyboardEvent): void => {[39m
+[31m+       if (e.key === 'Escape') summaryHop.cancel();[39m
+[31m+     };[39m
+[31m+     window.addEventListener('keydown', onKey);[39m
+[31m+     return () => window.removeEventListener('keydown', onKey);[39m
+[31m+   }, [summaryHop]);[39m
+[31m+[39m
+[31m+   /**[39m
+[31m+    * R3-(b)：**真实挂载**测试观测口（**仅测试构建**，见 `testBuild.ts`）。[39m
+[31m+    *[39m
+[31m+    * 为什么需要：`summary-two-hop.test.tsx` 驱动的是 `useSummaryHop`（生产与测试共同消费[39m
+[31m+    * 的 hook），但它本身不挂载 `MindmapStage` —— 「`onNodeClick` 首判真的接在前面」[39m
+[31m+    * 这条装配契约没有证据。本句柄把**已挂载的真实实例**（同一 controller / 同一 hook /[39m
+[31m+    * 同一布局）暴露给测试，让测试走真实节点卡命中 + 真实菜单 + 真实点击派发，[39m
+[31m+    * 而不是复刻链路（复刻体改了生产不会红）。[39m
+[31m+    *[39m
+[31m+    * ## 隔离（S2 收口要求）[39m
+[31m+    *[39m
+[31m+    * 整个块被 `IS_TEST_BUILD` 包住，而它是**构建期常量**：生产 `vite build` 注入[39m
+[31m+    * `false` → Rollup 判死并 tree-shake → 生产产物中既无注册语句也无该全局名。[39m
+[31m+    * 不用 `NODE_ENV`、也不用 `typeof window` 冒充隔离（前者本仓未明确判断，[39m
+[31m+    * 后者在浏览器生产环境同样为真）。[39m
+[31m+    *[39m
+[31m+    * ## 归属（按实例）[39m
+[31m+    *[39m
+[31m+    * 注册时把**本实例写下的句柄**存进 `installedHandleRef`；清理时只有当前全局值[39m
+[31m+    * 仍 === 本实例句柄才删除。多实例（测试里先后 render 两个 Stage）并存时，[39m
+[31m+    * 先卸载的那个不会误删后挂载实例的入口。[39m
+[31m+    *[39m
+[31m+    * ## 只读观测 vs 操作入口（两类要分清）[39m
+[31m+    *[39m
+[31m+    * - `observe`：纯读快照与只读事实（草稿、令牌、选中、根）——测试据此断言生产事实；[39m
+[31m+    * - `actions`：会**改变文档状态**的真实入口（`replaceDoc` 经生产 `applyDoc`，[39m
+[31m+    *   `undo/redo` 经生产 `controller`）。它们不是旁路：调用它们与用户操作走同一条[39m
+[31m+    *   生产代码路径。[39m
+[31m+    *[39m
+[31m+    * 写法：**渲染期直接刷新**（不是 effect）—— handle 读的是当帧最新值，effect 版本会[39m
+[31m+    * 因依赖数组变化频繁跑 cleanup，留下「删除→重建」空窗，测试在空窗里读到 undefined。[39m
+[31m+    */[39m
+[31m+   if (IS_TEST_BUILD && typeof window !== 'undefined') {[39m
+[31m+     const handle: MindcanvasSummaryHostHandle = {[39m
+[31m+       observe: {[39m
+[31m+         summaryDraft: summaryHop.draft,[39m
+[31m+         hasDraft: summaryHop.hasDraft,[39m
+[31m+         documentToken,[39m
+[31m+         selectedId: controller.selectedId,[39m
+[31m+         root: controller.root,[39m
+[31m+         layoutReady: layout !== null,[39m
+[31m+       },[39m
+[31m+       actions: {[39m
+[31m+         undo: () => controller.undo(),[39m
+[31m+         redo: () => controller.redo(),[39m
+[31m+         /**[39m
+[31m+          * 直接经生产的 `applyDoc` 替换文档。[39m
+[31m+          *[39m
+[31m+          * 为什么需要它而不是只走「最近」菜单：**同内容替换**（重开同一文件）下[39m
+[31m+          * `doc` 换了但树逐字相同 —— 本入口让测试能构造「文档整体换了」这一事件，[39m
+[31m+          * 从而把 R2 的判据（替换事件令牌 vs 内容比较）真正区分开。[39m
+[31m+          */[39m
+[31m+         replaceDoc: (next: MindDoc) => applyDoc(next),[39m
+[31m+       },[39m
+[31m+     };[39m
+[31m+     installedHandleRef.current = handle;[39m
+[31m+     window.__mindcanvasSummaryHost = handle;[39m
+[31m+   }[39m
+[31m+   // 卸载清理：**按实例归属**——只有全局值仍是本实例写的句柄时才删，[39m
+[31m+   // 避免「一个实例卸载删掉另一个实例的入口」（多实例并存的测试场景）。[39m
+[31m+   useEffect([39m
+[31m+     () => () => {[39m
+[31m+       if (IS_TEST_BUILD && installedHandleRef.current !== null) {[39m
+[31m+         if (window.__mindcanvasSummaryHost === installedHandleRef.current) {[39m
+[31m+           delete window.__mindcanvasSummaryHost;[39m
+[31m+         }[39m
+[31m+         installedHandleRef.current = null;[39m
+[31m+       }[39m
+[31m+     },[39m
+[31m+     [],[39m
+[31m+   );[39m
+[31m+[39m
+[31m+   if (!layout) return null;[39m
+[31m+[39m
+[31m+   const selectedTitle =[39m
+[31m+     selected?.type === 'entity' ? (selected.ref?.id ?? '') : (selected?.text ?? '');[39m
+[31m+   const noteSections = selected?.note ? formatNote(selected.note) : [];[39m
+[31m+[39m
+[31m+   return ([39m
+[31m+     <div style={{ position: 'absolute', inset: 0 }}>[39m
+[31m+       {/* 工具条：玻璃 chrome（恒定）+ 保存/dirty 指示 */}[39m
+[31m+       <div[39m
+[31m+         style={{[39m
+[31m+           position: 'absolute',[39m
+[31m+           top: 14,[39m
+[31m+           left: '50%',[39m
+[31m+           transform: 'translateX(-50%)',[39m
+[31m+           display: 'flex',[39m
+[31m+           alignItems: 'center',[39m
+[31m+           gap: 12,[39m
+[31m+           padding: '8px 16px',[39m
+[31m+           borderRadius: CHROME.radius,[39m
+[31m+           background: CHROME.panelBg,[39m
+[31m+           border: `1px solid ${CHROME.panelBorder}`,[39m
+[31m+           boxShadow: CHROME.shadow,[39m
+[31m+           backdropFilter: 'blur(14px) saturate(1.3)',[39m
+[31m+           color: CHROME.text,[39m
+[31m+           fontFamily: CHROME.fontFamily,[39m
+[31m+           fontSize: CHROME.fontSize,[39m
+[31m+           zIndex: 2,[39m
+[31m+         }}[39m
+[31m+       >[39m
+[31m+         <span style={{ color: CHROME.neon, fontWeight: 600, letterSpacing: 0.5 }}>mindcanvas</span>[39m
+[31m+         <span style={{ color: CHROME.textMuted }}>·</span>[39m
+[31m+         <ThemeSwitcher />[39m
+[31m+         <span[39m
+[31m+           title="插件运行时（T5 样例：DemoPlugin 已注册 session kind / ai_role 语义键 / qa-badge 渲染器）"[39m
+[31m+           style={{[39m
+[31m+             color: pluginActive ? CHROME.neon : CHROME.textMuted,[39m
+[31m+             fontSize: CHROME.fontSizeSmall,[39m
+[31m+           }}[39m
+[31m+         >[39m
+[31m+           {pluginActive ? '◆ 插件已载' : '◆ 纯文本版'}[39m
+[31m+         </span>[39m
+[31m+         <span[39m
+[31m+           data-save-state[39m
+[31m+           style={{[39m
+[31m+             color: saving ? CHROME.neon : controller.dirty ? CHROME.warn : CHROME.textMuted,[39m
+[31m+             fontSize: CHROME.fontSizeSmall,[39m
+[31m+             minWidth: 34,[39m
+[31m+             transition: 'color .18s ease',[39m
+[31m+           }}[39m
+[31m+           title={[39m
+[31m+             saving[39m
+[31m+               ? '正在写入磁盘'[39m
+[31m+               : controller.dirty[39m
+[31m+                 ? '有未保存变更（300ms 后自动落盘）'[39m
+[31m+                 : doc.handle[39m
+[31m+                   ? `已保存到 ${doc.name}`[39m
+[31m+                   : '已保存（尚未绑定文件）'[39m
+[31m+           }[39m
+[31m+         >[39m
+[31m+           {saving ? '保存中…' : controller.dirty ? '● 未保存' : '✓ 已保存'}[39m
+[31m+         </span>[39m
+[31m+         <button[39m
+[31m+           onClick={() => apiRef.current?.fit()}[39m
+[31m+           style={{[39m
+[31m+             border: `1px solid ${CHROME.panelBorderStrong}`,[39m
+[31m+             background: 'transparent',[39m
+[31m+             color: CHROME.text,[39m
+[31m+             borderRadius: CHROME.radiusSmall,[39m
+[31m+             padding: '4px 12px',[39m
+[31m+             fontSize: CHROME.fontSizeSmall,[39m
+[31m+             fontFamily: CHROME.fontFamily,[39m
+[31m+             cursor: 'pointer',[39m
+[31m+           }}[39m
+[31m+         >[39m
+[31m+           适配视图[39m
+[31m+         </button>[39m
+[31m+         <button[39m
+[31m+           onClick={() => togglePanel('assets')}[39m
+[31m+           style={{[39m
+[31m+             border: `1px solid ${CHROME.panelBorderStrong}`,[39m
+[31m+             background: 'transparent',[39m
+[31m+             color: assetOpen ? CHROME.neon : CHROME.text,[39m
+[31m+             borderRadius: CHROME.radiusSmall,[39m
+[31m+             padding: '4px 12px',[39m
+[31m+             fontSize: CHROME.fontSizeSmall,[39m
+[31m+             fontFamily: CHROME.fontFamily,[39m
+[31m+             cursor: 'pointer',[39m
+[31m+           }}[39m
+[31m+         >[39m
+[31m+           图库[39m
+[31m+         </button>[39m
+[31m+         <button[39m
+[31m+           onClick={() => togglePanel('relation')}[39m
+[31m+           style={{[39m
+[31m+             border: `1px solid ${CHROME.panelBorderStrong}`,[39m
+[31m+             background: 'transparent',[39m
+[31m+             color: relationOpen ? CHROME.neon : CHROME.text,[39m
+[31m+             borderRadius: CHROME.radiusSmall,[39m
+[31m+             padding: '4px 12px',[39m
+[31m+             fontSize: CHROME.fontSizeSmall,[39m
+[31m+             fontFamily: CHROME.fontFamily,[39m
+[31m+             cursor: 'pointer',[39m
+[31m+           }}[39m
+[31m+         >[39m
+[31m+           关系[39m
+[31m+         </button>[39m
+[31m+         {/* E8：模式隔离——浏览 / 关系编辑 二分态（连线入口仅在关系态暴露） */}[39m
+[31m+         <button[39m
+[31m+           data-relation-mode[39m
+[31m+           onClick={() => {[39m
+[31m+             const next = !relationMode;[39m
+[31m+             setRelationMode(next);[39m
+[31m+             // 退出关系态 → 收起所有关系编辑浮窗（避免浮窗悬空在浏览态）[39m
+[31m+             if (!next) {[39m
+[31m+               setLinkDraft(null);[39m
+[31m+               edgeActions.setEdgeSel(null);[39m
+[31m+               edgeActions.clearEdgeMulti();[39m
+[31m+               setTreeEdgeEdit(null);[39m
+[31m+             }[39m
+[31m+           }}[39m
+[31m+           title={[39m
+[31m+             relationMode[39m
+[31m+               ? '关系模式（编辑中）：拖手柄连线 · Shift+点两节点连线 · 右键树边编辑 · 点击连线编辑。点击切回浏览模式'[39m
+[31m+               : '浏览模式：画布只呈现已有关系。点击切到关系模式后可添加/编辑连线'[39m
+[31m+           }[39m
+[31m+           style={{[39m
+[31m+             border: `1px solid ${relationMode ? CHROME.neon : CHROME.panelBorderStrong}`,[39m
+[31m+             background: relationMode ? CHROME.neonSoft : 'transparent',[39m
+[31m+             color: relationMode ? CHROME.neon : CHROME.text,[39m
+[31m+             borderRadius: CHROME.radiusSmall,[39m
+[31m+             padding: '4px 12px',[39m
+[31m+             fontSize: CHROME.fontSizeSmall,[39m
+[31m+             fontFamily: CHROME.fontFamily,[39m
+[31m+             cursor: 'pointer',[39m
+[31m+           }}[39m
+[31m+         >[39m
+[31m+           {relationMode ? '✦ 关系模式' : '○ 浏览模式'}[39m
+[31m+         </button>[39m
+[31m+         <button[39m
+[31m+           onClick={() => {[39m
+[31m+             controller.undo();[39m
+[31m+           }}[39m
+[31m+           disabled={!controller.canUndo}[39m
+[31m+           style={btnStyle(controller.canUndo)}[39m
+[31m+         >[39m
+[31m+           ↶[39m
+[31m+         </button>[39m
+[31m+         <button[39m
+[31m+           onClick={() => {[39m
+[31m+             controller.redo();[39m
+[31m+           }}[39m
+[31m+           disabled={!controller.canRedo}[39m
+[31m+           style={btnStyle(controller.canRedo)}[39m
+[31m+         >[39m
+[31m+           ↷[39m
+[31m+         </button>[39m
+[31m+         <button[39m
+[31m+           onClick={() => {[39m
+[31m+             void handleSave();[39m
+[31m+           }}[39m
+[31m+           style={{[39m
+[31m+             border: 'none',[39m
+[31m+             background: CHROME.neonSoft,[39m
+[31m+             color: CHROME.neon,[39m
+[31m+             borderRadius: CHROME.radiusSmall,[39m
+[31m+             padding: '4px 14px',[39m
+[31m+             fontSize: CHROME.fontSizeSmall,[39m
+[31m+             fontFamily: CHROME.fontFamily,[39m
+[31m+             cursor: 'pointer',[39m
+[31m+           }}[39m
+[31m+         >[39m
+[31m+           保存[39m
+[31m+         </button>[39m
+[31m+       </div>[39m
+[31m+[39m
+[31m+       <MapView[39m
+[31m+         layout={layout}[39m
+[31m+         // G6′复审修复：自由边/折叠路由必须读完整文档树（森林布局有多个几何根）[39m
+[31m+         documentRoot={controller.root}[39m
+[31m+         // v1.7.0：拖共享梁松手 → 写 lens[dir]（单条 undo；其余方向键保留，[39m
+[31m+         // 子节点自身 len 的覆盖关系由内核口径保证）[39m
+[31m+         // v1.11.0 双把手：主干（bias）写 beamAt[dir]——单字段分流见 beamEdit.applyBeamCommit[39m
+[31m+         onBeamChange={(fromId, commit) => applyBeamCommit(controller, fromId, commit)}[39m
+[31m+         boundaryLinks={islandView.boundaryLinks}[39m
+[31m+           // A6/T23 门禁：岛/自由边文档强制 SVG（见上方 forceBackend memo）[39m
+[31m+           forceBackend={forceBackend}[39m
+[31m+         entities={entities}[39m
+[31m+         char={char}[39m
+[31m+         // MEASURE-RANK：展示度量按视觉档分档（与上面 layoutDemo 的 charOf 同一份）[39m
+[31m+         charOf={charOf}[39m
+[31m+         // assetBaseUrl = 导图根 URL（demo 资产 id 已含「demo-assets/」相对导图前缀）[39m
+[31m+         assetBaseUrl="/"[39m
+[31m+         // P0-1 渲染接线：上传资产（objectURL）只有宿主能解析，NodeG 优先走宿主[39m
+[31m+         resolveAssetUrl={(ref) => assetHost.resolveAsset(ref)}[39m
+[31m+         // R1-2：五态解析（判别式）。字符串版把「加载中」与「真缺失」压成同一个 undefined，[39m
+[31m+         // 渲染端只能回落 `baseUrl + id`（对 assets/ 引用必然 404）→ 重开断图。[39m
+[31m+         // 五态下 resolved 出图、pending 不出图也不画断图、unresolved 保留 ✕ 用户信号。[39m
+[31m+         //[39m
+[31m+         // 入参是渲染层的 `EntityRef`（`kind: string`），五态面要 `'img' | 'draw'` 窄化：[39m
+[31m+         // 宿主只按 `id` 路由，非资产 kind 到不了这里（NodeG 已先按 img/draw 过滤），[39m
+[31m+         // 故按 `img` 落形即可 —— 这里不做语义判断，只做类型适配。[39m
+[31m+         resolveAssetState={(ref) =>[39m
+[31m+           assetHost.resolveAssetState?.({ kind: ref.kind === 'draw' ? 'draw' : 'img', id: ref.id })[39m
+[31m+         }[39m
+[31m+         apiRef={apiRef}[39m
+[31m+         onStats={setStats}[39m
+[31m+         relationMode={relationMode}[39m
+[31m+         onNodeClick={(ln, mods) => {[39m
+[31m+           // S2：摘要两跳草稿的**首判**——必须先于 Shift 连线 / note 固定 / 选择逻辑，[39m
+[31m+           // 否则第二跳会被当成普通选择而吞掉（草稿永远完不成）。[39m
+[31m+           // 判据与 E7 同族（`onNodeClick` 首分支），但不消费 shift：Shift 连线的既有[39m
+[31m+           // 路径在草稿为空时逐字不变（交互互斥靠草稿闸门，不改 mods 语义）。[39m
+[31m+           // 闸门走 hook 的同步真理源：同一事件循环内的第二次点击不会重复建摘要。[39m
+[31m+           if (summaryHop.hasDraft()) {[39m
+[31m+             const done = completeSummaryAt(ln.node.id);[39m
+[31m+             // 无论成功或被拒（跨父/根/倒序），本次点击都**不**参与选择——[39m
+[31m+             // 被拒时提示已给、草稿保留，等下一次合法点击或 Esc。[39m
+[31m+             if (done) return;[39m
+[31m+           }[39m
+[31m+           // E7：Shift+点击两节点连线——已选中 A 时 Shift+点 B → 建边并开编辑器[39m
+[31m+           // E8：仅关系模式下生效（浏览态 Shift+点不建边）[39m
+[31m+           if ([39m
+[31m+             mods?.shift &&[39m
+[31m+             relationMode &&[39m
+[31m+             controller.selectedId &&[39m
+[31m+             controller.selectedId !== ln.node.id[39m
+[31m+           ) {[39m
+[31m+             const fromId = controller.selectedId;[39m
+[31m+             const from = edgeActions.anchorById.get(fromId) ?? anchorOfNode(controller.root, fromId) ?? '';[39m
+[31m+             const to =[39m
+[31m+               edgeActions.anchorById.get(ln.node.id) ?? anchorOfNode(controller.root, ln.node.id) ?? '';[39m
+[31m+             if (from && to) {[39m
+[31m+               edgeActions.connectEdge(from, to, 'relates-to', mods.sx, mods.sy);[39m
+[31m+               controller.select(ln.node.id);[39m
+[31m+               return;[39m
+[31m+             }[39m
+[31m+           }[39m
+[31m+           // 有 note 笔记的节点：点击即固定展示（悬停只是预览）—— 记路径，不是 id[39m
+[31m+           if (hasNote(ln.node)) {[39m
+[31m+             const path = pathOfNode(controller.root, ln.node.id);[39m
+[31m+             if (path) setPinnedNotePath(path);[39m
+[31m+           }[39m
+[31m+           // 点击已选中的节点 → 切换「放大展开」：描述区浮出在节点下方，[39m
+[31m+           // 不占布局、不受节点盒尺寸限制，注释可完整换行阅读。[39m
+[31m+           // （此前这里是"取消选中"——但取消选中改用点画布空白处，[39m
+[31m+           //   把"再点一次"这个天然的第二动作让给更常用的放大展开。）[39m
+[31m+           if (controller.selectedId === ln.node.id) {[39m
+[31m+             controller.select(null);[39m
+[31m+             setExpandedQaId(null);[39m
+[31m+             return;[39m
+[31m+           }[39m
+[31m+           controller.select(ln.node.id);[39m
+[31m+           const qa = ln.node.note?.qa;[39m
+[31m+           setExpandedQaId(Array.isArray(qa) && (qa as string[]).length > 0 ? ln.node.id : null);[39m
+[31m+         }}[39m
+[31m+         onBlankClick={() => {[39m
+[31m+           // 点画布空白：**只**取消选中 + 收起「放大展开」（后者是选中态的附属面板）。[39m
+[31m+           //[39m
+[31m+           // v1.8.10 用户裁决：不再顺手清 pinnedNotePaths / editingNotePaths —— 那是**用户显式[39m
+[31m+           // 打开的面板**（不属于选中态），此前会被静默关掉：正在输入的笔记内容直接消失[39m
+[31m+           // （「丢失正在编辑的内容」的另一条真凶）。关闭路径仍完整：卡片 × → onNoteClose。[39m
+[31m+           //[39m
+[31m+           // S2：摘要草稿属**未完成的交互**（不是用户显式打开的面板）→ 点空白即取消，[39m
+[31m+           // 与 Esc 同语义（任务书 §六 5）。判定走 hook 的同步真理源。[39m
+[31m+           summaryHop.cancel();[39m
+[31m+           controller.select(null);[39m
+[31m+           setExpandedQaId(null);[39m
+[31m+         }}[39m
+[31m+         onNodeContext={(node, sx, sy) => {[39m
+[31m+           // 右键：命中节点 → 选中并弹菜单；空白 → 关菜单[39m
+[31m+           if (node === null) {[39m
+[31m+             setCtxMenu(null);[39m
+[31m+             return;[39m
+[31m+           }[39m
+[31m+           controller.select(node.node.id);[39m
+[31m+           setCtxMenu({ nodeId: node.node.id, x: sx, y: sy });[39m
+[31m+         }}[39m
+[31m+         pinnedNoteIds={pinnedNoteIds}[39m
+[31m+         editingNoteIds={editingNoteIds}[39m
+[31m+         flippedNoteIds={flippedNoteIdList}[39m
+[31m+         onToggleNoteFlip={toggleNoteFlip}[39m
+[31m+         onNoteChangeSeq={(id, seq) =>[39m
+[31m+           controller.updateNote(id, seq.length > 0 ? { note: seq } : { note: undefined })[39m
+[31m+         }[39m
+[31m+         onNoteChangeText={(id, text) =>[39m
+[31m+           controller.updateNote(id, text === '' ? { note_text: undefined } : { note_text: text })[39m
+[31m+         }[39m
+[31m+         // P2：背面源文写回（空文本 → 删 md 键；不 trim 存储值，只 trim 判空）[39m
+[31m+         onNoteChangeMd={(id, md) =>[39m
+[31m+           controller.updateNote(id, md.trim() === '' ? { md: undefined } : { md })[39m
+[31m+         }[39m
+[31m+         onNoteClose={(id) => {[39m
+[31m+           if (!id) {[39m
+[31m+             setPinnedNotePaths([]);[39m
+[31m+             setEditingNotePaths([]);[39m
+[31m+             return;[39m
+[31m+           }[39m
+[31m+           setPinnedNotePaths((prev) =>[39m
+[31m+             prev.filter((path) => nodeAtPath(controller.root, path)?.id !== id),[39m
+[31m+           );[39m
+[31m+           setEditingNotePaths((prev) =>[39m
+[31m+             prev.filter((path) => nodeAtPath(controller.root, path)?.id !== id),[39m
+[31m+           );[39m
+[31m+         }}[39m
+[31m+         onNotePin={(id) => {[39m
+[31m+           const path = pathOfNode(controller.root, id);[39m
+[31m+           if (path) setPinnedNotePath(path);[39m
+[31m+         }}[39m
+[31m+         selectedId={controller.selectedId}[39m
+[31m+         editingId={controller.editingId}[39m
+[31m+         onEditCommit={(id, text) => {[39m
+[31m+           commitNodeText(id, text);[39m
+[31m+         }}[39m
+[31m+         onEditCancel={() => controller.cancelEdit()}[39m
+[31m+         // G10：编辑态 Tab = 提交 + 建子节点（连续录入不打断）[39m
+[31m+         onEditTabGrow={(id, text) => {[39m
+[31m+           // 输入 @ 已转入实体 picker —— 此时不应再建子节点[39m
+[31m+           if (commitNodeText(id, text)) return;[39m
+[31m+           // G6′ 触发一致性：与键盘 Tab 生长同一套方向固化（预方向 → 兄弟多数/父方向）[39m
+[31m+           const pre = preDirsRef.current.get(id);[39m
+[31m+           const n = getNode(controller.root, id);[39m
+[31m+           const d = pre ?? (n ? inferChildDir(n) : null);[39m
+[31m+           const newId = controller.addChild(id, undefined, d ? { dir: d } : undefined);[39m
+[31m+           controller.select(newId);[39m
+[31m+           controller.startEdit(newId);[39m
+[31m+         }}[39m
+[31m+         // G6′：中心拖拽 = 移动坐标（带动整棵子树），其余节点仍是改树结构[39m
+[31m+         centerIds={centerIds}[39m
+[31m+         // ROOT-DRAG-1：可拖中心（仅真实条目）——虚拟根岛不参与拖拽/提交[39m
+[31m+         centerEntryIds={centerEntryIds}[39m
+[31m+         centerTitles={centerTitles}[39m
+[31m+         // 嵌套包容：Section AABB / 父岛拖动预览并入子孙岛；切断岛不参与。[39m
+[31m+         // 提交层 handleCenterMove 同步平移子孙中心坐标。[39m
+[31m+         islandMembers={islandView.membersByRoot}[39m
+[31m+         nestedCenterIdsByRoot={islandView.nestedCenterIdsByRoot}[39m
+[31m+         onCenterMove={handleCenterMove}[39m
+[31m+         // v1.5.0 Section 幽灵态（dangling）一键清理——从根 note.sections 移除该条目（数据无损前提下的显式动作）[39m
+[31m+         onRemoveSection={(sectionId) => {[39m
+[31m+           const next = removeSection(controller.root.note, sectionId);[39m
+[31m+           controller.updateNote(controller.root.id, { sections: next.sections ?? undefined });[39m
+[31m+         }}[39m
+[31m+         onEditStart={(id) => {[39m
+[31m+           controller.select(id);[39m
+[31m+           // M1：实体节点 → 直接开 picker 改引用（而非文本编辑）[39m
+[31m+           const n = nodeById(controller.root, id);[39m
+[31m+           if (n?.type === 'entity' && n.ref) {[39m
+[31m+             setPicker({[39m
+[31m+               nodeId: id,[39m
+[31m+               query: n.text ?? '',[39m
+[31m+               current: { kind: n.ref.kind, id: n.ref.id },[39m
+[31m+             });[39m
+[31m+             return;[39m
+[31m+           }[39m
+[31m+           controller.startEdit(id);[39m
+[31m+         }}[39m
+[31m+         // FO-B2：框内大纲结构键 —— 与 keys.ts 的 matchEditorKey 分发同一批 controller 调用[39m
+[31m+         // （Tab=建子 / Enter=建同级 / Shift+Tab=缩进 / Ctrl+Shift+Tab=反缩进）。[39m
+[31m+         // 跨 depth 边界的改层级由 controller 守卫 no-op（B1 kernel crossesFrameDepthBoundary），[39m
+[31m+         // 此处不做二次判定。[39m
+[31m+         onFrameKey={(id, action) => {[39m
+[31m+           if (action === 'add-child') {[39m
+[31m+             // 生长固化与全局 Tab 同口径：预方向 → 邻居推断 → 都不写（走继承）[39m
+[31m+             const parent = getNode(controller.root, id);[39m
+[31m+             const dir = preDirsRef.current.get(id) ?? (parent ? inferChildDir(parent) : null);[39m
+[31m+             const child = controller.addChild(id, undefined, dir ? { dir } : undefined);[39m
+[31m+             controller.select(child);[39m
+[31m+             controller.startEdit(child);[39m
+[31m+             return;[39m
+[31m+           }[39m
+[31m+           if (action === 'add-sibling') {[39m
+[31m+             const loc = findNode(controller.root, id);[39m
+[31m+             const sibDir = loc ? inferChildDir(loc.parent) : null;[39m
+[31m+             const sib = controller.addSibling(id, undefined, sibDir ? { dir: sibDir } : undefined);[39m
+[31m+             if (sib !== null) {[39m
+[31m+               controller.select(sib);[39m
+[31m+               controller.startEdit(sib);[39m
+[31m+             }[39m
+[31m+             return;[39m
+[31m+           }[39m
+[31m+           if (action === 'indent') {[39m
+[31m+             controller.indent(id);[39m
+[31m+             return;[39m
+[31m+           }[39m
+[31m+           controller.outdent(id);[39m
+[31m+         }}[39m
+[31m+         collapsedIds={controller.collapsed}[39m
+[31m+         onToggleCollapse={(id) => controller.toggleCollapse(id)}[39m
+[31m+         expandedId={expandedQaId}[39m
+[31m+         onToggleExpand={(id) => {[39m
+[31m+           // × 关闭 / 收起：把该节点从展开态摘除[39m
+[31m+           setExpandedQaId((prev) => (prev === id ? null : prev));[39m
+[31m+           controller.select(null);[39m
+[31m+         }}[39m
+[31m+         onQaChange={(id, qa) => controller.updateNote(id, { qa })}[39m
+[31m+         selectedEdgeKey={edgeActions.edgeSel?.key ?? null}[39m
+[31m+         selectedEdgeKeys={edgeActions.edgeMultiSel}[39m
+[31m+         onEdgeClick={(edge, sx, sy, withShift) => {[39m
+[31m+           // R4-5：Shift+点边 → 多选切换；普通点 → 单选（既有行为不变）[39m
+[31m+           if (withShift) edgeActions.toggleEdgeMulti(edge.key);[39m
+[31m+           else edgeActions.setEdgeSel({ key: edge.key, x: sx, y: sy });[39m
+[31m+         }}[39m
+[31m+         onEdgeContext={(edge, sx, sy) => {[39m
+[31m+           edgeActions.setEdgeSel({ key: edge.key, x: sx, y: sy });[39m
+[31m+           setEdgeMenu({ edge, x: sx, y: sy });[39m
+[31m+         }}[39m
+[31m+         // Issue #3：手动覆盖 —— 拖拽端点 / bend 后写入 manual，恢复自动优化传 null[39m
+[31m+         onEdgeManualChange={(edge, manual) => edgeActions.writeEdgeManual(edge.index, manual)}[39m
+[31m+         onEdgeRoutes={edgeActions.handleEdgeRoutes}[39m
+[31m+         onTreeEdgeEdit={(childId, sx, sy) => setTreeEdgeEdit({ childId, x: sx, y: sy })}[39m
+[31m+         onEdgeConnect={(fromId, toId, sx, sy) => {[39m
+[31m+           // E6 拖拽连接：命中目标 → 以默认 rel 建边并立即开编辑器（图操作体验）；未命中 → 开创建器选目标[39m
+[31m+           if (!toId) {[39m
+[31m+             setLinkDraft({ sourceId: fromId, x: sx, y: sy });[39m
+[31m+             return;[39m
+[31m+           }[39m
+[31m+           const from = edgeActions.anchorById.get(fromId) ?? anchorOfNode(controller.root, fromId) ?? '';[39m
+[31m+           const to = edgeActions.anchorById.get(toId) ?? anchorOfNode(controller.root, toId) ?? '';[39m
+[31m+           if (!from || !to) return;[39m
+[31m+           edgeActions.connectEdge(from, to, 'relates-to', sx, sy);[39m
+[31m+         }}[39m
+[31m+         onNodeMove={(op) => {[39m
+[31m+           // 节点拖拽重排（M5-T5）：全部经 move-node TreeOp + OpHistory → undo/redo 正确[39m
+[31m+           controller.apply(op);[39m
+[31m+         }}[39m
+[31m+         onAssetFiles={(files) => {[39m
+[31m+           // GH-T1：.mm.md/.md 拖入/粘贴 → 打开文档；图片 → 上传图库并插入 @img 引用（P1）[39m
+[31m+           const docFiles = files.filter((f) => isMindDocFile(f.name));[39m
+[31m+           if (docFiles.length > 0) {[39m
+[31m+             const f = docFiles[0]!;[39m
+[31m+             void (async () => {[39m
+[31m+               await applyDoc(docHost.create(f.name, await f.text()));[39m
+[31m+             })();[39m
+[31m+             return;[39m
+[31m+           }[39m
+[31m+           // 文件拖入/粘贴 → 上传图库并插入 @img 引用（P1）：宿主上传 → 清单并集 → 选中节点下插入（无选中 = 根）[39m
+[31m+           // N-6：file.type 可能为空（系统拖拽）→ isImageFileName 扩展名兜底[39m
+[31m+           const images = files.filter((f) => f.type.startsWith('image/') || isImageFileName(f.name));[39m
+[31m+           if (images.length === 0) return;[39m
+[31m+           void (async () => {[39m
+[31m+             for (const file of images) {[39m
+[31m+               const item = await uploadToGallery(file);[39m
+[31m+               if (item === null) continue; // 上传失败/取消：不改文档（零副作用）[39m
+[31m+               const parentId = controller.selectedId ?? controller.root.id;[39m
+[31m+               const id = controller.addEntityChild(parentId, { kind: item.kind, id: item.id });[39m
+[31m+               setEntities((prev) => {[39m
+[31m+                 const next = new Map(prev);[39m
+[31m+                 next.set(`${item.kind}:${item.id}`, {[39m
+[31m+                   kind: item.kind,[39m
+[31m+                   id: item.id,[39m
+[31m+                   title: item.name,[39m
+[31m+                   status: 'ready',[39m
+[31m+                   ref: null,[39m
+[31m+                 });[39m
+[31m+                 return next;[39m
+[31m+               });[39m
+[31m+               controller.select(id);[39m
+[31m+             }[39m
+[31m+           })();[39m
+[31m+         }}[39m
+[31m+         // v1.3.0 幕布描述（note.desc）[39m
+[31m+         descEditingId={descEditingId}[39m
+[31m+         onDescEditRequest={(id) => {[39m
+[31m+           // 主题文本编辑态按 Shift+Enter → 切到描述编辑（幕布「切换主题与描述」）[39m
+[31m+           controller.cancelEdit();[39m
+[31m+           setDescEditingId(id);[39m
+[31m+         }}[39m
+[31m+         onDescCommit={(id, text) => {[39m
+[31m+           // 空串 = 删除描述（note.desc 键置 undefined）[39m
+[31m+           controller.updateNote(id, text === '' ? { desc: undefined } : { desc: text });[39m
+[31m+           setDescEditingId(null);[39m
+[31m+         }}[39m
+[31m+         onDescCancel={() => setDescEditingId(null)}[39m
+[31m+         // L1：文本区域链接跳转（desc/note/note_text 内链接点击 → 解析 + 展开 + 定位 + 选中）[39m
+[31m+         onJumpToAnchor={jumpToAnchor}[39m
+[31m+       />[39m
+[31m+[39m
+[31m+       <PerfPanel stats={stats} />[39m
+[31m+[39m
+[31m+       {/* A5：命令拒绝/事务失败告警条（位置与消退策略的唯一事实源：floatingNotices） */}[39m
+[31m+       {commandNotice !== null && ([39m
+[31m+         <div[39m
+[31m+           data-testid="command-notice"[39m
+[31m+           style={{[39m
+[31m+             position: 'absolute',[39m
+[31m+             top: 64,[39m
+[31m+             left: '50%',[39m
+[31m+             transform: 'translateX(-50%)',[39m
+[31m+             zIndex: 5,[39m
+[31m+           }}[39m
+[31m+         >[39m
+[31m+           ⚠ {commandNotice}[39m
+[31m+         </div>[39m
+[31m+       )}[39m
+[31m+[39m
+[31m+       {/* P0-B ⑦：资产落点/失败提示条（与命令告警同形但独立一条 —— 落点提示不是错误，[39m
+[31m+           用中性底色；内容全部来自 `assetStoreCopy.ts` 的单点文案表，不得就地硬编码）。 */}[39m
+[31m+       {assetNotice !== null && ([39m
+[31m+         <FloatingNotice[39m
+[31m+           slot="asset-notice"[39m
+[31m+           dataAttrs={{ 'data-asset-notice': 'true' }}[39m
+[31m+           onClick={() => setAssetNotice(null)}[39m
+[31m+         >[39m
+[31m+           {assetNotice}[39m
+[31m+         </FloatingNotice>[39m
+[31m+       )}[39m
+[31m+[39m
+[31m+       {/* 预方向提示（PG 式「预设-固化」的可见反馈）：设了方向必须看得见，[39m
+[31m+           否则用户无法判断快捷键是否生效（实测无反馈 = 等于没实现）。 */}[39m
+[31m+       {preDirHint !== null && ([39m
+[31m+         <FloatingNotice[39m
+[31m+           slot="pre-dir-hint"[39m
+[31m+           testId="pre-dir-hint"[39m
+[31m+           onDismiss={() => setPreDirHint(null)}[39m
+[31m+         >[39m
+[31m+           预方向：{PRE_DIR_LABEL_CN[preDirHint.dir]} —— 按 Tab 生长即固化到该节点[39m
+[31m+         </FloatingNotice>[39m
+[31m+       )}[39m
+[31m+[39m
+[31m+       {/* G6″（A3-2）：中心诊断警示条（宁可不写也不错写——坏锚/重复中心的原因在此可见）。[39m
+[31m+           自适应高度随条目数增长；不做交互（定位/跳转归后续工作包）。 */}[39m
+[31m+       {islandView.diagnostics.length > 0 && ([39m
+[31m+         <div[39m
+[31m+           style={{[39m
+[31m+             position: 'absolute',[39m
+[31m+             left: 16,[39m
+[31m+             bottom: 178,[39m
+[31m+             maxWidth: 420,[39m
+[31m+             padding: '8px 12px',[39m
+[31m+             borderRadius: 'var(--mc-radius, 8px)',[39m
+[31m+             background: 'rgba(186, 117, 23, 0.12)',[39m
+[31m+             border: '1px solid rgba(186, 117, 23, 0.45)',[39m
+[31m+             color: 'var(--mc-warning, #BA7517)',[39m
+[31m+             fontFamily: 'inherit',[39m
+[31m+             fontSize: 12,[39m
+[31m+             lineHeight: 1.6,[39m
+[31m+             pointerEvents: 'none',[39m
+[31m+             userSelect: 'none',[39m
+[31m+           }}[39m
+[31m+         >[39m
+[31m+           <div style={{ fontWeight: 600 }}>[39m
+[31m+             ⚠ 中心标注诊断：{islandView.diagnostics.length} 条（已安全忽略）[39m
+[31m+           </div>[39m
+[31m+           {islandView.diagnostics.slice(0, 3).map((d, i) => ([39m
+[31m+             <div key={`${d.code}-${i}`} style={{ wordBreak: 'break-word' }}>[39m
+[31m+               · {d.message}[39m
+[31m+               {d.at !== null ? `（${d.at}）` : ''}[39m
+[31m+             </div>[39m
+[31m+           ))}[39m
+[31m+           {islandView.diagnostics.length > 3 && ([39m
+[31m+             <div>… 其余 {islandView.diagnostics.length - 3} 条略</div>[39m
+[31m+           )}[39m
+[31m+         </div>[39m
+[31m+       )}[39m
+[31m+[39m
+[31m+       {/* R0-2：边健康度诊断条（数据健康语义，独立于上方中心诊断条——R0-A1）。[39m
+[31m+           中心诊断条 bottom:178 向上生长且高度自适应：同时可见时抬到其最大展开[39m
+[31m+           （标题 + 3 明细 + 其余略 ≈ 112px）之上，避免堆叠遮挡。 */}[39m
+[31m+       <EdgeHealthBar[39m
+[31m+         health={edgeHealth}[39m
+[31m+         bottom={islandView.diagnostics.length > 0 ? 292 : 178}[39m
+[31m+         onOpen={() => setPanel('relation')}[39m
+[31m+       />[39m
+[31m+[39m
+[31m+       {/* B1 文档栏：名称 + 未保存标记 + 新建/打开/最近/保存/另存为（左上角玻璃条） */}[39m
+[31m+       <div[39m
+[31m+         style={{[39m
+[31m+           position: 'absolute',[39m
+[31m+           left: 12,[39m
+[31m+           top: 10,[39m
+[31m+           zIndex: 3,[39m
+[31m+           display: 'flex',[39m
+[31m+           alignItems: 'center',[39m
+[31m+           gap: 4,[39m
+[31m+           background: CHROME.panelBg,[39m
+[31m+           border: `1px solid ${CHROME.panelBorder}`,[39m
+[31m+           borderRadius: CHROME.radius,[39m
+[31m+           boxShadow: CHROME.shadow,[39m
+[31m+           backdropFilter: 'blur(12px)',[39m
+[31m+           padding: '4px 8px',[39m
+[31m+           fontSize: CHROME.fontSizeSmall,[39m
+[31m+           color: CHROME.text,[39m
+[31m+         }}[39m
+[31m+       >[39m
+[31m+         <span[39m
+[31m+           data-doc-name[39m
+[31m+           title={doc.name}[39m
+[31m+           style={{[39m
+[31m+             maxWidth: 150,[39m
+[31m+             overflow: 'hidden',[39m
+[31m+             textOverflow: 'ellipsis',[39m
+[31m+             whiteSpace: 'nowrap',[39m
+[31m+             fontWeight: 600,[39m
+[31m+             color: CHROME.neon,[39m
+[31m+           }}[39m
+[31m+         >[39m
+[31m+           {doc.name}[39m
+[31m+         </span>[39m
+[31m+         <span[39m
+[31m+           data-doc-dirty={saving ? undefined : controller.dirty || undefined}[39m
+[31m+           style={{[39m
+[31m+             color: saving ? CHROME.neon : CHROME.warn,[39m
+[31m+             fontSize: CHROME.fontSizeSmall,[39m
+[31m+             opacity: saving || controller.dirty ? 1 : 0,[39m
+[31m+             transition: 'opacity .18s ease',[39m
+[31m+           }}[39m
+[31m+           title={saving ? '正在写入磁盘' : '未保存修改'}[39m
+[31m+         >[39m
+[31m+           {saving ? '⟳' : '●'}[39m
+[31m+         </span>[39m
+[31m+         <DocBtn label="新建" onClick={handleNew} />[39m
+[31m+         <DocBtn label="打开" onClick={() => void handleOpen()} />[39m
+[31m+         <DocBtn label="最近" onClick={() => setDocMenuOpen((v) => !v)} />[39m
+[31m+         <DocBtn label="保存" onClick={() => void handleSave()} />[39m
+[31m+         <DocBtn label="另存为" onClick={() => void handleSaveAs()} />[39m
+[31m+         <DocBtn label="导出" onClick={handleExport} />[39m
+[31m+         <DocBtn label="导出 PNG" onClick={() => void handleExportPng()} />[39m
+[31m+         <DocBtn[39m
+[31m+           label="文件管理"[39m
+[31m+           onClick={() => {[39m
+[31m+             setDocMenuOpen(false);[39m
+[31m+             setFileManagerOpen(true);[39m
+[31m+           }}[39m
+[31m+         />[39m
+[31m+       </div>[39m
+[31m+       {/* 最近文档下拉（B1）—— 已抽到 RecentDocMenu */}[39m
+[31m+       {docMenuOpen && ([39m
+[31m+         <RecentDocMenu[39m
+[31m+           recent={docHost.recent()}[39m
+[31m+           onPick={(d) => void applyDoc(d)}[39m
+[31m+           onClose={() => setDocMenuOpen(false)}[39m
+[31m+         />[39m
+[31m+       )}[39m
+[31m+       {/* FS Access 不支持的浏览器：打开兜底（隐藏 file input） */}[39m
+[31m+       <input[39m
+[31m+         ref={fileInputRef}[39m
+[31m+         type="file"[39m
+[31m+         accept=".mm.md,.md,text/markdown"[39m
+[31m+         style={{ display: 'none' }}[39m
+[31m+         onChange={async (e) => {[39m
+[31m+           const f = e.target.files?.[0];[39m
+[31m+           e.target.value = '';[39m
+[31m+           if (!f) return;[39m
+[31m+           await applyDoc(docHost.create(f.name, await f.text()));[39m
+[31m+         }}[39m
+[31m+       />[39m
+[31m+[39m
+[31m+       {/* T8 降级策略 L4：规模提示（>20K 激进简化 / >50K 建议折叠） */}[39m
+[31m+       {scaleNoticeFor(layout.nodes.length) !== null && ([39m
+[31m+         <FloatingNotice slot="scale-notice" testId="scale-notice">[39m
+[31m+           {scaleNoticeFor(layout.nodes.length)}[39m
+[31m+         </FloatingNotice>[39m
+[31m+       )}[39m
+[31m+[39m
+[31m+       {/* E8：关系模式操作提示（非阻塞；浏览态不出现） */}[39m
+[31m+       {relationMode && ([39m
+[31m+         <div[39m
+[31m+           data-relation-hint[39m
+[31m+           style={{[39m
+[31m+             position: 'absolute',[39m
+[31m+             left: '50%',[39m
+[31m+             bottom: 12,[39m
+[31m+             transform: 'translateX(-50%)',[39m
+[31m+             zIndex: 3,[39m
+[31m+             background: CHROME.panelBg,[39m
+[31m+             border: `1px solid ${CHROME.panelBorder}`,[39m
+[31m+             color: CHROME.textMuted,[39m
+[31m+             borderRadius: CHROME.radius,[39m
+[31m+             boxShadow: CHROME.shadow,[39m
+[31m+             backdropFilter: 'blur(10px)',[39m
+[31m+             fontSize: CHROME.fontSizeSmall,[39m
+[31m+             padding: '5px 12px',[39m
+[31m+             pointerEvents: 'none',[39m
+[31m+             whiteSpace: 'nowrap',[39m
+[31m+           }}[39m
+[31m+         >[39m
+[31m+           关系模式：选中节点后拖右侧手柄连线 · Shift+点两节点连线 · 右键树边/连线编辑[39m
+[31m+         </div>[39m
+[31m+       )}[39m
+[31m+[39m
+[31m+       {/* B3 诊断条：parse 诊断 + W-ASSET-MISSING（左下角，非阻塞） */}[39m
+[31m+       {allDiags.length > 0 && ([39m
+[31m+         <div[39m
+[31m+           data-diagnostics[39m
+[31m+           style={{[39m
+[31m+             position: 'absolute',[39m
+[31m+             left: 12,[39m
+[31m+             bottom: 12,[39m
+[31m+             zIndex: 3,[39m
+[31m+             maxWidth: 320,[39m
+[31m+             background: CHROME.panelBg,[39m
+[31m+             border: `1px solid ${CHROME.warn}`,[39m
+[31m+             color: CHROME.warn,[39m
+[31m+             borderRadius: CHROME.radius,[39m
+[31m+             boxShadow: CHROME.shadow,[39m
+[31m+             backdropFilter: 'blur(10px)',[39m
+[31m+             fontSize: CHROME.fontSizeSmall,[39m
+[31m+             padding: '6px 10px',[39m
+[31m+             display: 'flex',[39m
+[31m+             flexDirection: 'column',[39m
+[31m+             gap: 2,[39m
+[31m+             pointerEvents: 'none',[39m
+[31m+           }}[39m
+[31m+         >[39m
+[31m+           {allDiags.map((d, i) => ([39m
+[31m+             <div key={`${d.code}-${i}`}>[39m
+[31m+               {d.code}：{d.message}[39m
+[31m+             </div>[39m
+[31m+           ))}[39m
+[31m+         </div>[39m
+[31m+       )}[39m
+[31m+[39m
+[31m+       {/* 玻璃翻卡：点选节点 → 翻转查看 note + qa 编辑（R15）；侧面板打开时让位（同区域互斥） */}[39m
+[31m+       <div[39m
+[31m+         style={{[39m
+[31m+           position: 'absolute',[39m
+[31m+           right: 18,[39m
+[31m+           top: 76,[39m
+[31m+           width: 244,[39m
+[31m+           height: 260,[39m
+[31m+           zIndex: 2,[39m
+[31m+           visibility: panel !== null ? 'hidden' : undefined,[39m
+[31m+         }}[39m
+[31m+       >[39m
+[31m+         <FlipCard[39m
+[31m+           key={selected?.id ?? 'empty'}[39m
+[31m+           width={244}[39m
+[31m+           height={260}[39m
+[31m+           title={selected ? selectedTitle || '节点' : '节点笔记'}[39m
+[31m+           front={[39m
+[31m+             <div style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>[39m
+[31m+               <span style={{ color: CHROME.textMuted, fontSize: CHROME.fontSizeSmall }}>[39m
+[31m+                 {selected ? 'NODE' : 'FLIPCARD'}[39m
+[31m+               </span>[39m
+[31m+               <span[39m
+[31m+                 style={{[39m
+[31m+                   color: CHROME.text,[39m
+[31m+                   fontWeight: 600,[39m
+[31m+                   fontSize: 13,[39m
+[31m+                   lineHeight: 1.4,[39m
+[31m+                   overflow: 'hidden',[39m
+[31m+                 }}[39m
+[31m+               >[39m
+[31m+                 {selected ? selectedTitle || '（实体）' : '点击画布节点查看笔记'}[39m
+[31m+               </span>[39m
+[31m+               <span[39m
+[31m+                 style={{[39m
+[31m+                   color: CHROME.textMuted,[39m
+[31m+                   fontSize: CHROME.fontSizeSmall,[39m
+[31m+                   marginTop: 'auto',[39m
+[31m+                 }}[39m
+[31m+               >[39m
+[31m+                 {selected[39m
+[31m+                   ? selected.note[39m
+[31m+                     ? '点击翻转查看详情'[39m
+[31m+                     : '该节点无笔记'[39m
+[31m+                   : '正面：节点摘要'}[39m
+[31m+               </span>[39m
+[31m+             </div>[39m
+[31m+           }[39m
+[31m+           back={[39m
+[31m+             <div[39m
+[31m+               style={{[39m
+[31m+                 padding: 14,[39m
+[31m+                 display: 'flex',[39m
+[31m+                 flexDirection: 'column',[39m
+[31m+                 gap: 8,[39m
+[31m+                 overflow: 'hidden',[39m
+[31m+               }}[39m
+[31m+             >[39m
+[31m+               {/* R1/M2a：实体节点翻卡背面 = 引用详情（kind/id/标题；与关系面板同源） */}[39m
+[31m+               {selected?.type === 'entity' && selected.ref && ([39m
+[31m+                 <div[39m
+[31m+                   data-flip-entity[39m
+[31m+                   style={{[39m
+[31m+                     padding: '6px 8px',[39m
+[31m+                     borderRadius: 6,[39m
+[31m+                     border: `1px solid ${CHROME.panelBorder}`,[39m
+[31m+                     fontSize: CHROME.fontSizeSmall,[39m
+[31m+                     overflow: 'hidden',[39m
+[31m+                     textOverflow: 'ellipsis',[39m
+[31m+                     whiteSpace: 'nowrap',[39m
+[31m+                   }}[39m
+[31m+                 >[39m
+[31m+                   <span style={{ color: CHROME.neon, fontWeight: 600 }}>@{selected.ref.kind}</span>[39m
+[31m+                   <span style={{ color: CHROME.text, marginLeft: 6 }}>[39m
+[31m+                     {entities.get(refKey(selected.ref))?.title ?? selected.ref.id}[39m
+[31m+                   </span>[39m
+[31m+                   <span style={{ color: CHROME.textMuted, marginLeft: 6 }}>[39m
+[31m+                     （右键节点可改引用 / 在关系图中显示）[39m
+[31m+                   </span>[39m
+[31m+                 </div>[39m
+[31m+               )}[39m
+[31m+               <span style={{ color: CHROME.neon, fontSize: CHROME.fontSizeSmall, fontWeight: 600 }}>[39m
+[31m+                 NOTE[39m
+[31m+               </span>[39m
+[31m+               {noteSections.length === 0 ? ([39m
+[31m+                 <span style={{ color: CHROME.textMuted, fontSize: CHROME.fontSizeSmall }}>[39m
+[31m+                   （该节点无笔记）[39m
+[31m+                 </span>[39m
+[31m+               ) : ([39m
+[31m+                 noteSections.map((s) => ([39m
+[31m+                   <div key={s.key} style={{ fontSize: CHROME.fontSizeSmall, lineHeight: 1.5 }}>[39m
+[31m+                     <span style={{ color: CHROME.neon, marginRight: 6 }}>{s.label}</span>[39m
+[31m+                     <span style={{ color: CHROME.text }}>{s.value}</span>[39m
+[31m+                   </div>[39m
+[31m+                 ))[39m
+[31m+               )}[39m
+[31m+               {selected && ([39m
+[31m+                 <QaEditor[39m
+[31m+                   items={qaItemsOf(selected)}[39m
+[31m+                   token={token}[39m
+[31m+                   onChange={(qa) => controller.updateNote(selected.id, { qa })}[39m
+[31m+                 />[39m
+[31m+               )}[39m
+[31m+             </div>[39m
+[31m+           }[39m
+[31m+         />[39m
+[31m+       </div>[39m
+[31m+[39m
+[31m+       {/* v1.8.0 Phase 2：环形快捷操作覆盖层（环/浮标/死区提示/二次确认）；[39m
+[31m+           Phase 3 ①：幽灵预览（高亮「新建」落点）与删除预告（高亮「删除」子树描边） */}[39m
+[31m+       <RadialStageOverlay radial={radial} ghost={radialPreview.ghost} dangerBoxes={radialPreview.dangerBoxes} />[39m
+[31m+[39m
+[31m+       {/* 批次 2：节点右键菜单 —— 已抽到 NodeContextMenu */}[39m
+[31m+       {ctxMenu !== null && ([39m
+[31m+         <NodeContextMenu[39m
+[31m+           ctxMenu={ctxMenu}[39m
+[31m+           controller={controller}[39m
+[31m+           relationMode={relationMode}[39m
+[31m+           centerActions={nodeBags.centerActions} // 描述 / 笔记的袋仍由 nodeBags 供给**环**（getSubModel）[39m
+[31m+           setPicker={setPicker}[39m
+[31m+           setPanel={setPanel}[39m
+[31m+           setLinkDraft={setLinkDraft}[39m
+[31m+           onRequestLenCustom={(id, x, y, current) => setLenBubble({ id, x, y, current })}[39m
+[31m+           // FO-UI1：改框深度交数值步进气泡（值经 setFrameDepth → 同一撤销栈）[39m
+[31m+           onRequestFrameDepth={(id, x, y, current, max) =>[39m
+[31m+             setFrameDepthBubble({ id, x, y, current, max })[39m
+[31m+           }[39m
+[31m+           sectionActions={sectionActions}[39m
+[31m+           // S2：摘要入口（「创建摘要…」= 两跳交互的第一跳）；菜单关闭后进入等待态，[39m
+[31m+           // 第二跳由上面的 onNodeClick 首判完成。[39m
+[31m+           summaryActions={nodeBags.summaryActions}[39m
+[31m+           onClose={() => setCtxMenu(null)}[39m
+[31m+         />[39m
+[31m+       )}[39m
+[31m+[39m
+[31m+       {/* v1.8.1：出线长度数值气泡（取代原生 prompt——裁决 M3） */}[39m
+[31m+       {lenBubble !== null && ([39m
+[31m+         <LenBubble[39m
+[31m+           x={lenBubble.x}[39m
+[31m+           y={lenBubble.y}[39m
+[31m+           initial={lenBubble.current}[39m
+[31m+           onCommit={(v) => {[39m
+[31m+             applyLen(controller, lenBubble.id, v);[39m
+[31m+             setLenBubble(null);[39m
+[31m+           }}[39m
+[31m+           onCancel={() => setLenBubble(null)}[39m
+[31m+         />[39m
+[31m+       )}[39m
+[31m+[39m
+[31m+       {/* FO-UI1：框深度数值步进气泡（取代「改框深度…」的原生 prompt） */}[39m
+[31m+       {frameDepthBubble !== null && ([39m
+[31m+         <FrameDepthBubble[39m
+[31m+           x={frameDepthBubble.x}[39m
+[31m+           y={frameDepthBubble.y}[39m
+[31m+           current={frameDepthBubble.current}[39m
+[31m+           max={frameDepthBubble.max}[39m
+[31m+           onCommit={(depth) => {[39m
+[31m+             setFrameDepth(controller, frameDepthBubble.id, depth); // 同一 undo 栈（内核再 clamp）[39m
+[31m+             setFrameDepthBubble(null);[39m
+[31m+           }}[39m
+[31m+           onCancel={() => setFrameDepthBubble(null)}[39m
+[31m+         />[39m
+[31m+       )}[39m
+[31m+[39m
+[31m+       {/* E7 树边标注 + E5 连线创建器 / 边编辑浮窗 —— 已抽到 EdgeDraftLayer */}[39m
+[31m+       <EdgeDraftLayer[39m
+[31m+         controller={controller}[39m
+[31m+         edgeActions={edgeActions}[39m
+[31m+         treeEdgeEdit={treeEdgeEdit}[39m
+[31m+         linkDraft={linkDraft}[39m
+[31m+         onCloseTreeEdge={() => setTreeEdgeEdit(null)}[39m
+[31m+         onCloseLinkDraft={() => setLinkDraft(null)}[39m
+[31m+         onCutTreeEdge={handleCutTreeEdge}[39m
+[31m+         edgeMenu={edgeMenu}[39m
+[31m+         onCloseEdgeMenu={() => setEdgeMenu(null)}[39m
+[31m+         onNotice={setCommandNotice}[39m
+[31m+       />[39m
+[31m+[39m
+[31m+       {/* 批次 2：? 快捷键帮助面板 */}[39m
+[31m+       {helpOpen && <ShortcutHelpPanel onClose={() => setHelpOpen(false)} />}[39m
+[31m+[39m
+[31m+       {/* 文件管理器（含遮罩与打开策略）—— 已抽到 FileManagerModal */}[39m
+[31m+       {fileManagerOpen && ([39m
+[31m+         <FileManagerModal[39m
+[31m+           library={library}[39m
+[31m+           index={index}[39m
+[31m+           workspace={workspaceReady ? workspace : null}[39m
+[31m+           applyDoc={applyDoc}[39m
+[31m+           handleOpen={handleOpen}[39m
+[31m+           handleNew={handleNew}[39m
+[31m+           openWorkspaceFile={openWorkspaceFile}[39m
+[31m+           onPickWorkspace={pickWorkspace}[39m
+[31m+           onDetachWorkspace={detachWorkspace}[39m
+[31m+           currentPath={workspacePath}[39m
+[31m+           dirty={controller.dirty}[39m
+[31m+           currentDocOps={currentDocOps}[39m
+[31m+           onClose={() => setFileManagerOpen(false)}[39m
+[31m+         />[39m
+[31m+       )}[39m
+[31m+[39m
+[31m+       {/* 批次 3：Ctrl+F 富文本搜索面板（选中 + 定位） */}[39m
+[31m+       {/* S1：侧面板簇（搜索 / 大纲 / 图库 / 关系图谱，互斥单态）——已抽到 SidePanels */}[39m
+[31m+       <SidePanels[39m
+[31m+         panel={panel}[39m
+[31m+         controller={controller}[39m
+[31m+         assetList={assetList}[39m
+[31m+         assetHost={assetHost}[39m
+[31m+         setEntities={setEntities}[39m
+[31m+         relations={relations}[39m
+[31m+         activeRefKey={activeRefKey}[39m
+[31m+         edgeItems={edgeItems}[39m
+[31m+         malformedRows={malformedRows}[39m
+[31m+         choices={edgeActions.nodeChoices}[39m
+[31m+         onReattachEdge={(key, side, anchor) =>[39m
+[31m+           edgeActions.reattachEdge(Number(key.slice(1)), side, anchor)[39m
+[31m+         }[39m
+[31m+         onDeleteEdge={(key) => edgeActions.deleteEdge(Number(key.slice(1)))}[39m
+[31m+         onUpload={(files) => {[39m
+[31m+           // P1-1 图库上传入口：按钮/面板拖拽 → 仅入图库清单（使用 = 点击资产插入）[39m
+[31m+           void (async () => {[39m
+[31m+             for (const file of files) {[39m
+[31m+               if (file.type.startsWith('image/') || isImageFileName(file.name)) {[39m
+[31m+                 await uploadToGallery(file);[39m
+[31m+               }[39m
+[31m+             }[39m
+[31m+           })();[39m
+[31m+         }}[39m
+[31m+         onSelectNode={(id) => {[39m
+[31m+           setExpandedQaId(null);[39m
+[31m+           focusNode(id);[39m
+[31m+         }}[39m
+[31m+         // P0-B（I-10）：插入前归一化 —— 把所选资产变成「重开后仍能解析」的引用。[39m
+[31m+         // 已挂载 → 字节落 <workspace>/assets/（同名走三选，默认保留两份）；[39m
+[31m+         // 未挂载 → 只允许可净化的小 SVG / 内置图标内联，其余拒绝（零副作用）。[39m
+[31m+         //[39m
+[31m+         // R1-1：`alreadyInWorkspace` 由 SidePanels 按**所选条目的存储来源**给出[39m
+[31m+         // （`origin === 'workspace-assets'`），不再按 id 前缀推断 —— 浏览器素材库的项[39m
+[31m+         // id 同样是 `assets/<name>`，前缀判据会把蓝图误判成「已在磁盘」而丢掉它的字节。[39m
+[31m+         normalizeInsert={async ([39m
+[31m+           item,[39m
+[31m+           action: AssetInsertAction,[39m
+[31m+           alreadyInWorkspace: boolean,[39m
+[31m+         ) => {[39m
+[31m+           const result = await normalizeForInsert([39m
+[31m+             item,[39m
+[31m+             { workspace: workspaceReady ? workspace : null, alreadyInWorkspace },[39m
+[31m+             assetHost,[39m
+[31m+           );[39m
+[31m+           if (result.kind === 'refused') {[39m
+[31m+             setAssetNotice(insertRefusalNotice(result.reason));[39m
+[31m+             return null;[39m
+[31m+           }[39m
+[31m+           // 归一化产生了一次真实磁盘写入 → 记进同一本账（§4.9「同样要计入」）[39m
+[31m+           if (result.store === 'workspace-assets' && result.relPath !== null) {[39m
+[31m+             const captured = assetHost.scopeMark();[39m
+[31m+             writeLedger.record([39m
+[31m+               {[39m
+[31m+                 assetKey: result.relPath,[39m
+[31m+                 scopeId: captured.scopeKey,[39m
+[31m+                 kind: item.kind,[39m
+[31m+                 name: item.name,[39m
+[31m+                 relPath: result.relPath,[39m
+[31m+                 store: 'workspace-assets',[39m
+[31m+                 bytes: null,[39m
+[31m+               },[39m
+[31m+               isWriteConfirmed(captured, assetHost.scopeMark()),[39m
+[31m+             );[39m
+[31m+             // R1-2：写后刷新清单 —— 新文件必须立刻出现在图库里。[39m
+[31m+             // 缓存预热本身在 `assetInsert.writeNormalized` 内完成（经宿主增量方法），[39m
+[31m+             // 这里只补「清单」这半边；两者都不在渲染路径上，故不违反「禁渲染期 I/O」。[39m
+[31m+             void reloadAssetList().catch(() => {[39m
+[31m+               // 刷新失败不影响已经成功的插入（磁盘事实成立）[39m
+[31m+             });[39m
+[31m+           }[39m
+[31m+           if (result.renamed) {[39m
+[31m+             setAssetNotice(assetDuplicateCopyNotice(result.refId));[39m
+[31m+           } else if (action === 'media' || action === 'icon') {[39m
+[31m+             setAssetNotice(null);[39m
+[31m+           }[39m
+[31m+           return { refId: result.refId };[39m
+[31m+         }}[39m
+[31m+         /*[39m
+[31m+           P0-C ②：这条通道此前把 SidePanels 传来的**已成形文案**直接塞进提示位[39m
+[31m+           （`(reason) => setAssetNotice(reason)`）—— 绕过唯一事实源的第二条路。[39m
+[31m+           现在 SidePanels 回传的是**键**（`AssetInsertRefusalCode`），文案在这里查表。[39m
+[31m+           `insertRefusalNotice` 接受 `string`（`onInsertRefused` 的既有签名就是[39m
+[31m+           `(reason: string) => void`，本轮不改面板契约），并对未知键兜到[39m
+[31m+           `'no-workspace'` —— 与迁移前 `inlineRefIdOf` 的默认拒绝同语义，[39m
+[31m+           不会静默变成空气泡。[39m
+[31m+         */[39m
+[31m+         onInsertRefused={(reason) => setAssetNotice(insertRefusalNotice(reason))}[39m
+[31m+         // P0-B ⑦ 落点徽章：判据是**账本里记过的事实**，不是 id 前缀猜测（R-12）。[39m
+[31m+         // 内置项自包含；有账本记录 → 用记录的 store；否则按「当前是否有工作区」降级。[39m
+[31m+         storeOf={storeOf}[39m
+[31m+         onClose={() => setPanel(null)}[39m
+[31m+       />[39m
+[31m+[39m
+[31m+       {/* M1 实体 picker：@ 触发插入 / 实体节点编辑改引用（选中回传经 controller.setEntityRef） */}[39m
+[31m+       {picker && ([39m
+[31m+         <EntityPicker[39m
+[31m+           kinds={pickKinds}[39m
+[31m+           candidates={entityCandidates}[39m
+[31m+           initialQuery={picker.query}[39m
+[31m+           initialKind={picker.current?.kind}[39m
+[31m+           currentId={picker.current?.id ?? null}[39m
+[31m+           onPick={(ref) => pickEntity(picker.nodeId, ref)}[39m
+[31m+           onClose={() => setPicker(null)}[39m
+[31m+         />[39m
+[31m+       )}[39m
+[31m+     </div>[39m
+[31m+   );[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ /** 读 note.qa（YAML 数组；非数组/缺失 → 空） */[39m
+[31m+ /** 文档栏按钮（B1：玻璃条内的小按钮；hover 高亮） */[39m
+[31m+ function DocBtn({ label, onClick }: { label: string; onClick: () => void }) {[39m
+[31m+   return ([39m
+[31m+     <span[39m
+[31m+       onClick={onClick}[39m
+[31m+       style={{[39m
+[31m+         padding: '2px 6px',[39m
+[31m+         borderRadius: 5,[39m
+[31m+         cursor: 'pointer',[39m
+[31m+         color: CHROME.textMuted,[39m
+[31m+         fontWeight: 500,[39m
+[31m+         fontSize: CHROME.fontSizeSmall,[39m
+[31m+         userSelect: 'none',[39m
+[31m+       }}[39m
+[31m+       onMouseEnter={(e) => {[39m
+[31m+         e.currentTarget.style.color = CHROME.neon;[39m
+[31m+       }}[39m
+[31m+       onMouseLeave={(e) => {[39m
+[31m+         e.currentTarget.style.color = CHROME.textMuted;[39m
+[31m+       }}[39m
+[31m+     >[39m
+[31m+       {label}[39m
+[31m+     </span>[39m
+[31m+   );[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ /**[39m
+[31m+  * 节点「放大展开」状态的持久化（常驻）。[39m
+[31m+  *[39m
+[31m+  * 为什么存 localStorage 而不是文档：展开态是**视图状态**，写进 .mm.md 会污染[39m
+[31m+  * 事实源（每次展开都要触发保存，还会把个人视图偏好塞进共享文件）。[39m
+[31m+  * 节点 id 全局唯一（`nd<ts><seq>`），所以可以按 id 记录，不绑定文档。[39m
+[31m+  *[39m
+[31m+  * 读写都吞异常：localStorage 被禁用/写满时退化为"仅本次会话有效"，不影响主流程。[39m
+[31m+  */[39m
+[31m+ const EXPANDED_NODES_KEY = 'mindcanvas.expandedNodes.v1';[39m
+[31m+[39m
+[31m+ function readExpandedNodes(): string[] {[39m
+[31m+   try {[39m
+[31m+     const raw = localStorage.getItem(EXPANDED_NODES_KEY);[39m
+[31m+     if (raw === null) return [];[39m
+[31m+     const parsed: unknown = JSON.parse(raw);[39m
+[31m+     if (!Array.isArray(parsed)) return [];[39m
+[31m+     return parsed.filter((x): x is string => typeof x === 'string');[39m
+[31m+   } catch {[39m
+[31m+     return [];[39m
+[31m+   }[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ function writeExpandedNodes(ids: ReadonlySet<string>): void {[39m
+[31m+   try {[39m
+[31m+     if (ids.size === 0) localStorage.removeItem(EXPANDED_NODES_KEY);[39m
+[31m+     else localStorage.setItem(EXPANDED_NODES_KEY, JSON.stringify([...ids]));[39m
+[31m+   } catch {[39m
+[31m+     // localStorage 禁用/满 → 静默，展开态退化为仅本次会话有效[39m
+[31m+   }[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ function qaItemsOf(node: EditableNode): string[] {[39m
+[31m+   const qa = node.note?.qa;[39m
+[31m+   return Array.isArray(qa) ? (qa as string[]) : [];[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ /** 右键菜单项（新建/编辑/层级/折叠/删除；根节点禁用新建同级/反缩进/删除） */[39m
+[31m+[39m
+[31m+ /** 按 id 从树中取节点（undefined = 未选中/已删除） */[39m
+[31m+[39m
+[31m+ function btnStyle(enabled: boolean): CSSProperties {[39m
+[31m+   return {[39m
+[31m+     border: 'none',[39m
+[31m+     background: 'transparent',[39m
+[31m+     color: enabled ? CHROME.text : CHROME.panelBorder,[39m
+[31m+     fontSize: CHROME.fontSize,[39m
+[31m+     cursor: enabled ? 'pointer' : 'default',[39m
+[31m+     padding: '0 4px',[39m
+[31m+   };[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ /** 预方向中文名（提示条用） */[39m
+[31m+ const PRE_DIR_LABEL_CN: Readonly<Record<GrowDir, string>> = {[39m
+[31m+   up: '向上',[39m
+[31m+   down: '向下',[39m
+[31m+   left: '向左',[39m
+[31m+   right: '向右',[39m
+[31m+ };[39m
+[31m+[39m
+[31m+ export default function MindmapStage({[39m
+[31m+   onOpenFreeCanvas,[39m
+[31m+   requestLeave,[39m
+[31m+   registerLeavePort,[39m
+[31m+ }: MindmapStageProps = {}) {[39m
+[31m+   return ([39m
+[31m+     <ThemeProvider>[39m
+[31m+       <StageInner[39m
+[31m+         onOpenFreeCanvas={onOpenFreeCanvas}[39m
+[31m+         requestLeave={requestLeave}[39m
+[31m+         registerLeavePort={registerLeavePort}[39m
+[31m+       />[39m
+[31m+     </ThemeProvider>[39m
+[31m+   );[39m
+[31m+ }[39m
+[31m+[39m
+[31m+ /** MapView api 结构（避免 import 链；与 react MapViewApi 对齐） */[39m
+[31m+ type MapViewApi = {[39m
+[31m+   fit(): void;[39m
+[31m+   zoomBy(f: number): void;[39m
+[31m+   resetZoom(): void;[39m
+[31m+   focusNode(id: string): void;[39m
+[31m+   /** 几何导航：视觉方向就近可见节点（无候选 → null；目标不可见时内部最小推入视口） */[39m
+[31m+   navigateFrom(id: string, dir: 'up' | 'down' | 'left' | 'right'): string | null;[39m
+[31m+   /** v1.8.0：节点盒右上角客户端坐标（环形菜单锚点） */[39m
+[31m+   nodeCorner(id: string): { x: number; y: number } | null;[39m
+[31m+   /** v1.8.0 Phase 3：节点盒客户端矩形 + 缩放 k（幽灵预览） */[39m
+[31m+   nodeBox(id: string): { x: number; y: number; w: number; h: number; k: number } | null;[39m
+[31m+   /** v1.8.0 Phase 3：可见子树全部节点盒（删除预告描边） */[39m
+[31m+   subtreeBoxes(id: string): Array<{ id: string; x: number; y: number; w: number; h: number }>;[39m
+[31m+ };[39m
+[31m+[39m
+
+[36m [2m❯[22m tests/floating-notices-consistency.test.tsx:[2m140:19[22m[39m
+    [90m138|[39m     [35mconst[39m src [33m=[39m [34mstageSrc[39m()[33m;[39m
+    [90m139|[39m     [35mfor[39m ([35mconst[39m slot [35mof[39m [33mSLOTS[39m) {
+    [90m140|[39m       [34mexpect[39m(src)[33m.[39m[34mtoContain[39m([32m`slot="[39m[36m${[39mslot[36m}[39m[32m"`[39m)[33m;[39m
+    [90m   |[39m                   [31m^[39m
+    [90m141|[39m     }
+    [90m142|[39m     [90m// 浮条数 = 组件调用数：多一个则说明有人又手写了一条[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m2 failed[39m[22m[2m | [22m[1m[32m6 passed[39m[22m[90m (8)[39m
+[2m   Start at [22m 18:03:59
+[2m   Duration [22m 681ms[2m (transform 121ms, setup 0ms, import 206ms, tests 50ms, environment 351ms)[22m
+

@@ -1,0 +1,165 @@
+[snapshot] 产物构建于 2026-09-24 18:35:52 · 引用的入口 = main-DQeEtSpE.js
+[snapshot] 最新源码 2026-09-24 18:31:29 · HEAD 提交 2026-09-24 11:32:27
+[snapshot] 页面实际加载 = main-DQeEtSpE.js
+{
+  "script": "verify-p1a-journey",
+  "base": "http://localhost:5175",
+  "checks": {
+    "A1 树容器 role=tree": {
+      "ok": true,
+      "detail": "tree"
+    },
+    "A1 根层行 role=treeitem 且 aria-level=1": {
+      "ok": true,
+      "detail": "[{\"lvl\":\"1\",\"sel\":\"true\"},{\"lvl\":\"1\",\"sel\":\"false\"},{\"lvl\":\"1\",\"sel\":\"false\"},{\"lvl\":\"1\",\"sel\":\"false\"},{\"lvl\":\"1\",\"sel\":\"false\"}]"
+    },
+    "A2 Tab 位：全树恰一行 tabindex=0 且可聚焦": {
+      "ok": true,
+      "detail": "甲组"
+    },
+    "A3 ArrowDown 焦点迁移": {
+      "ok": true,
+      "detail": {
+        "before": "甲组",
+        "after": "乙组"
+      }
+    },
+    "A4 ArrowRight 展开目录（aria-expanded=true）": {
+      "ok": true,
+      "detail": "true"
+    },
+    "A4 ArrowLeft 折叠目录（aria-expanded=false）": {
+      "ok": true,
+      "detail": "false"
+    },
+    "A5 Home/End 到首末行": {
+      "ok": true,
+      "detail": {
+        "homeKey": "甲组",
+        "endKey": "当前文档.mm.md"
+      }
+    },
+    "A6 仅当前文档一份高亮（aria-current 唯一）": {
+      "ok": true,
+      "detail": [
+        "当前文档.mm.md"
+      ]
+    },
+    "A7 同名另一份无 aria-current": {
+      "ok": true,
+      "detail": null
+    },
+    "A8 F2 出现重命名输入框": {
+      "ok": true,
+      "detail": null
+    },
+    "A8 ★负控1真机：输入框内 ↓ 不移动树焦点": {
+      "ok": true,
+      "detail": {
+        "treeFocusBefore": "待归档.mm.md",
+        "treeFocusAfter": "待归档.mm.md"
+      }
+    },
+    "A8 Esc 退出改名（输入框消失）": {
+      "ok": true,
+      "detail": null
+    },
+    "A9 Enter 打开焦点行（文档栏切换为 待归档.mm.md）": {
+      "ok": true,
+      "detail": "待归档.mm.md"
+    },
+    "A10 Esc 关闭文件面板": {
+      "ok": true,
+      "detail": {
+        "fmStillOpen": true,
+        "fmAfterEsc": false
+      }
+    },
+    "B1 切换排序后列头写明「最近修改」": {
+      "ok": true,
+      "detail": "当前依据：最近修改"
+    },
+    "B2 「最近」视图不渲染排序工具条": {
+      "ok": true,
+      "detail": null
+    },
+    "B3 按内部标题搜到「当前文档.mm.md」": {
+      "ok": true,
+      "detail": null
+    },
+    "B4 分组「其他文件（1 项，本应用不打开）」出现": {
+      "ok": true,
+      "detail": null
+    },
+    "B4 点击不支持文件给出提示（非导图文件，本应用不打开）": {
+      "ok": true,
+      "detail": "说明.txt：非导图文件，本应用不打开。知道了"
+    },
+    "B4 点击后未打开该文件（当前文档不变）": {
+      "ok": true,
+      "detail": "待归档.mm.md"
+    },
+    "C1 右键菜单存在「改为归档」项": {
+      "ok": true,
+      "detail": null
+    },
+    "C2 磁盘：源消失、`_归档/子目录/嵌套.mm.md` 出现（目录被创建）": {
+      "ok": true,
+      "detail": [
+        "_归档/子目录/嵌套.mm.md",
+        "乙组/同名.mm.md",
+        "当前文档.mm.md",
+        "待归档.mm.md",
+        "甲组/同名.mm.md",
+        "说明.txt"
+      ]
+    },
+    "C2 树中 `_归档/` 作为普通目录可见（不隐藏、不特殊渲染）": {
+      "ok": true,
+      "detail": null
+    },
+    "C3 从归档再打开（文档栏 = 嵌套.mm.md）": {
+      "ok": true,
+      "detail": "嵌套.mm.md"
+    },
+    "C4 删除确认条旁存在「改为归档」": {
+      "ok": true,
+      "detail": null
+    },
+    "C4 确认条入口归档生效（`_归档/待归档.mm.md` 落盘，未走删除）": {
+      "ok": true,
+      "detail": [
+        "_归档/子目录/嵌套.mm.md",
+        "_归档/待归档.mm.md",
+        "乙组/同名.mm.md",
+        "当前文档.mm.md",
+        "甲组/同名.mm.md",
+        "说明.txt"
+      ]
+    },
+    "C4 归档不是删除（源路径不再存在于磁盘 = 移动语义）": {
+      "ok": true,
+      "detail": null
+    },
+    "C5 已在归档的文档右键无「改为归档」": {
+      "ok": true,
+      "detail": null
+    }
+  },
+  "unconfirmed": [
+    {
+      "label": "真实 OS 输入法（IME）在重命名输入框内的组合键行为",
+      "reason": "需真实 IME，替身不伪造（沿用 P0 批次口径）"
+    },
+    {
+      "label": "触控/拖放归位",
+      "reason": "本轮键盘走查不含触控（file-management §6 标注未验证项）"
+    },
+    {
+      "label": "真实 File System Access 权限被拒场景",
+      "reason": "替身内存盘恒 granted；失败路径由单测负控 5 覆盖"
+    }
+  ],
+  "findings": [],
+  "result": "PASS"
+}

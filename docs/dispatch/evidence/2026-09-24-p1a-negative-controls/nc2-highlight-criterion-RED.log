@@ -1,0 +1,62 @@
+[33m(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./vite.config" without a file extension (vitest.config.ts:4:24). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.[39m
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.11 [39m[90m/Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas[39m
+
+ [31m❯[39m tests/file-manager-keyboard.test.tsx [2m([22m[2m27 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 508[2mms[22m[39m
+     [32m✓[39m ↓ / ↑ 在可见行上移动，边界处不越界[32m 1[2mms[22m[39m
+     [32m✓[39m → 折叠目录先展开；已展开则进第一个子行[32m 0[2mms[22m[39m
+     [32m✓[39m ← 已展开的目录 → 折叠；已折叠 / 叶子 → 回父级；根层 → none[32m 0[2mms[22m[39m
+     [32m✓[39m Home / End 到首尾行[32m 0[2mms[22m[39m
+     [32m✓[39m Enter / F2 / Delete / Esc 各对应一个意图[32m 0[2mms[22m[39m
+     [32m✓[39m ★负控 1：焦点在重命名输入框内 → 全部键位返回 none（零副作用）[32m 0[2mms[22m[39m
+     [32m✓[39m 未聚焦时游标退化为首行（不原地不动、也不越界）[32m 0[2mms[22m[39m
+     [32m✓[39m visibleRows 只展平已展开目录的子项[32m 0[2mms[22m[39m
+     [32m✓[39m 焦点收敛：原 key 消失 → 落到邻近行，绝不留下无焦点行[32m 0[2mms[22m[39m
+     [32m✓[39m 树容器 role=tree，行 role=treeitem 且 aria-level 逐层递增[32m 100[2mms[22m[39m
+     [32m✓[39m roving tabindex：全树恰有一行 tabIndex=0[32m 33[2mms[22m[39m
+     [32m✓[39m ↓ 移动焦点：tabIndex=0 随之转移（焦点归属真的变了）[32m 32[2mms[22m[39m
+     [32m✓[39m → 展开目录；← 折叠回来（键位真的改了展开态）[32m 33[2mms[22m[39m
+     [32m✓[39m Home / End 直到首行 / 末行[32m 26[2mms[22m[39m
+     [32m✓[39m Enter 打开当前行（真调用 onOpenFile）[32m 20[2mms[22m[39m
+     [32m✓[39m F2 进入改名；Delete 走既有确认条（非当前文档）[32m 34[2mms[22m[39m
+     [32m✓[39m ★负控 1：焦点在重命名输入框内，↑/↓ 不移动树焦点、Delete 不弹确认条[32m 21[2mms[22m[39m
+     [32m✓[39m 当前文档行有 aria-current=true 与「◀ 当前」标记（判据 = 完整路径）[32m 20[2mms[22m[39m
+[31m     [31m×[31m ★负控 2：两个同名不同目录的文件，只有真正打开的那一份高亮[39m[32m 22[2mms[22m[39m
+     [32m✓[39m 状态行 role=status（保存态变化读屏可听）[32m 13[2mms[22m[39m
+     [32m✓[39m 工具条写明当前依据，默认「名称」[32m 16[2mms[22m[39m
+     [32m✓[39m 切到「最近修改」→ 行序按 ts 降序（真的重排）[32m 21[2mms[22m[39m
+     [32m✓[39m 「最近」视图不出现排序工具条（排序不动 openedAt，§3.3 / UD-2）[32m 39[2mms[22m[39m
+     [32m✓[39m 开关存在；树里出现灰显不可打开的分组与条目[32m 24[2mms[22m[39m
+     [32m✓[39m ★负控 6：点击不支持文件 → 提示而非静默、也不打开[32m 21[2mms[22m[39m
+     [32m✓[39m 标题命中出现在树里（消费索引既有 title，不新扫描）[32m 17[2mms[22m[39m
+     [32m✓[39m 搜索框文案明示范围（标题仅搜索已记录的文档）[32m 13[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/file-manager-keyboard.test.tsx[2m > [22mP1-A ① · 当前文档高亮与状态行[2m > [22m★负控 2：两个同名不同目录的文件，只有真正打开的那一份高亮
+[31m[1mAssertionError[22m: expected 2 to be 1 // Object.is equality[39m
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 1[39m
+[31m+ 2[39m
+
+[36m [2m❯[22m tests/file-manager-keyboard.test.tsx:[2m373:28[22m[39m
+    [90m371|[39m     )[33m;[39m
+    [90m372|[39m     [35mconst[39m current [33m=[39m container[33m.[39m[34mquerySelectorAll[39m([32m'[data-doc-current]'[39m)[33m;[39m
+    [90m373|[39m     [34mexpect[39m(current[33m.[39mlength)[33m.[39m[34mtoBe[39m([34m1[39m)[33m;[39m [90m// 只高亮一份[39m
+    [90m   |[39m                            [31m^[39m
+    [90m374|[39m     expect(current[0]?.getAttribute('data-doc-path')).toBe('研发/笔记.mm.m…
+    [90m375|[39m     [90m// 另一份没有任何 aria-current[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m26 passed[39m[22m[90m (27)[39m
+[2m   Start at [22m 17:55:51
+[2m   Duration [22m 2.17s[2m (transform 910ms, setup 0ms, import 1.14s, tests 508ms, environment 426ms)[22m
+

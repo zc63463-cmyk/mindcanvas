@@ -1,0 +1,164 @@
+[33m(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - import "./vite.config" without a file extension (vitest.config.ts:4:24). Add the file extension
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.[39m
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.11 [39m[90m/Users/xin020/Desktop/temp workbase/mindcanvas-portable-20260921/mindcanvas-s5/apps/canvas[39m
+
+ [31m❯[39m tests/file-manager-keyboard.test.tsx [2m([22m[2m27 tests[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 1453[2mms[22m[39m
+     [32m✓[39m ↓ / ↑ 在可见行上移动，边界处不越界[32m 1[2mms[22m[39m
+     [32m✓[39m → 折叠目录先展开；已展开则进第一个子行[32m 0[2mms[22m[39m
+     [32m✓[39m ← 已展开的目录 → 折叠；已折叠 / 叶子 → 回父级；根层 → none[32m 0[2mms[22m[39m
+     [32m✓[39m Home / End 到首尾行[32m 0[2mms[22m[39m
+     [32m✓[39m Enter / F2 / Delete / Esc 各对应一个意图[32m 0[2mms[22m[39m
+     [32m✓[39m ★负控 1：焦点在重命名输入框内 → 全部键位返回 none（零副作用）[32m 0[2mms[22m[39m
+     [32m✓[39m 未聚焦时游标退化为首行（不原地不动、也不越界）[32m 0[2mms[22m[39m
+     [32m✓[39m visibleRows 只展平已展开目录的子项[32m 0[2mms[22m[39m
+     [32m✓[39m 焦点收敛：原 key 消失 → 落到邻近行，绝不留下无焦点行[32m 0[2mms[22m[39m
+     [32m✓[39m 树容器 role=tree，行 role=treeitem 且 aria-level 逐层递增[32m 83[2mms[22m[39m
+     [32m✓[39m roving tabindex：全树恰有一行 tabIndex=0[32m 24[2mms[22m[39m
+     [32m✓[39m ↓ 移动焦点：tabIndex=0 随之转移（焦点归属真的变了）[32m 24[2mms[22m[39m
+     [32m✓[39m → 展开目录；← 折叠回来（键位真的改了展开态）[32m 32[2mms[22m[39m
+     [32m✓[39m Home / End 直到首行 / 末行[32m 24[2mms[22m[39m
+     [32m✓[39m Enter 打开当前行（真调用 onOpenFile）[32m 19[2mms[22m[39m
+     [32m✓[39m F2 进入改名；Delete 走既有确认条（非当前文档）[32m 32[2mms[22m[39m
+     [32m✓[39m ★负控 1：焦点在重命名输入框内，↑/↓ 不移动树焦点、Delete 不弹确认条[32m 22[2mms[22m[39m
+     [32m✓[39m 当前文档行有 aria-current=true 与「◀ 当前」标记（判据 = 完整路径）[32m 20[2mms[22m[39m
+     [32m✓[39m ★负控 2：两个同名不同目录的文件，只有真正打开的那一份高亮[32m 18[2mms[22m[39m
+     [32m✓[39m 状态行 role=status（保存态变化读屏可听）[32m 13[2mms[22m[39m
+     [32m✓[39m 工具条写明当前依据，默认「名称」[32m 12[2mms[22m[39m
+     [32m✓[39m 切到「最近修改」→ 行序按 ts 降序（真的重排）[32m 21[2mms[22m[39m
+     [32m✓[39m 「最近」视图不出现排序工具条（排序不动 openedAt，§3.3 / UD-2）[32m 26[2mms[22m[39m
+     [32m✓[39m 开关存在；树里出现灰显不可打开的分组与条目[32m 21[2mms[22m[39m
+[31m     [31m×[31m ★负控 6：点击不支持文件 → 提示而非静默、也不打开[39m[33m 1024[2mms[22m[39m
+     [32m✓[39m 标题命中出现在树里（消费索引既有 title，不新扫描）[32m 22[2mms[22m[39m
+     [32m✓[39m 搜索框文案明示范围（标题仅搜索已记录的文档）[32m 14[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m tests/file-manager-keyboard.test.tsx[2m > [22mP1-A ⑤ · 显示其他文件[2m > [22m★负控 6：点击不支持文件 → 提示而非静默、也不打开
+[31m[1mError[22m[39m: 找不到元素 [data-fm-tree-notice]
+
+Ignored nodes: comments, script, style
+[36m<html>[39m
+  [36m<head />[39m
+  [36m<body>[39m
+    [36m<div>[39m
+      [36m<div[39m
+        [33mdata-file-manager[39m=[32m"true"[39m
+        [33mdata-variant[39m=[32m"wide"[39m
+        [33mstyle[39m=[32m"width: 680px; max-height: 76vh; display: flex; flex-direction: column; background: rgb(16, 19, 24); border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 14px; box-shadow: 0 20px 60px rgba(0,0,0,.5); color: rgb(232, 234, 239); font-family: \"Segoe UI\", \"Microsoft YaHei\", \"PingFang SC\", sans-serif; font-size: 12px; overflow: hidden;"[39m
+      [36m>[39m
+        [36m<div[39m
+          [33mstyle[39m=[32m"display: flex; align-items: center; gap: 8px; padding: 12px 14px; border-bottom: 1px solid rgba(255, 255, 255, 0.14);"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mstyle[39m=[32m"font-weight: 600;"[39m
+          [36m>[39m
+            [0m文件工作台[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mstyle[39m=[32m"flex: 1 1 0%;"[39m
+          [36m/>[39m
+          [36m<button[39m
+            [33mdata-fm-new-folder[39m=[32m"true"[39m
+            [33mstyle[39m=[32m"display: inline-flex; align-items: center; justify-content: center; gap: 4px; background: none; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 9px; color: rgb(232, 234, 239); cursor: pointer; font-family: \"Segoe UI\", \"Microsoft YaHei\", \"PingFang SC\", sans-serif; font-size: 11px; padding: 4px 10px; white-space: nowrap;"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0m📁 新建文件夹[0m
+          [36m</button>[39m
+          [36m<button[39m
+            [33mdata-fm-new-doc[39m=[32m"true"[39m
+            [33mstyle[39m=[32m"display: inline-flex; align-items: center; justify-content: center; gap: 4px; background: none; border: 1px rgb(122, 233, 196); border-radius: 9px; color: rgb(122, 233, 196); cursor: pointer; font-family: \"Segoe UI\", \"Microsoft YaHei\", \"PingFang SC\", sans-serif; font-size: 11px; padding: 4px 10px; white-space: nowrap;"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0m＋ 新建导图[0m
+          [36m</button>[39m
+          [36m<button[39m
+            [33mdata-fm-close[39m=[32m"true"[39m
+            [33mstyle[39m=[32m"display: inline-flex; align-items: center; justify-content: center; gap: 4px; background: none; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 9px; color: rgb(232, 234, 239); cursor: pointer; font-family: \"Segoe UI\", \"Microsoft YaHei\", \"PingFang SC\", sans-serif; font-size: 11px; padding: 4px 10px; white-space: nowrap;"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0m关闭[0m
+          [36m</button>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mstyle[39m=[32m"display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.14); font-size: 11px; background: rgba(255, 255, 255, 0.02);"[39m
+        [36m>[39m
+          [36m<span[39m
+            [33mdata-ws-mounted[39m=[32m"true"[39m
+            [33mstyle[39m=[32m"color: rgb(122, 233, 196); display: inline-flex; align-items: center; gap: 4px; font-weight: 500;"[39m
+          [36m>[39m
+            [0m🟢 工作区已连接 · 📁 [0m
+            [0mMyNotes[0m
+          [36m</span>[39m
+          [36m<span[39m
+            [33mstyle[39m=[32m"flex: 1 1 0%;"[39m
+          [36m/>[39m
+          [36m<button[39m
+            [33mdata-assoc-open[39m=[32m"true"[39m
+            [33mstyle[39m=[32m"display: inline-flex; align-items: center; justify-content: center; gap: 4px; background: none; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 9px; color: rgb(232, 234, 239); cursor: pointer; font-family: \"Segoe UI\", \"Microsoft YaHei\", \"PingFang SC\", sans-serif; font-size: 11px; padding: 4px 10px; white-space: nowrap;"[39m
+            [33mtitle[39m=[32m"如果这个文件夹以前用过，可以从下面选一条记录关联，之后就不必每次重新选择。"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0m关联…[0m
+          [36m</button>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mdata-fm-tabs[39m=[32m"true"[39m
+          [33mstyle[39m=[32m"display: flex; gap: 6px; padding: 4px 12px 0px; border-bottom: 1px solid rgba(255, 255, 255, 0.14);"[39m
+        [36m>[39m
+          [36m<button[39m
+            [33mdata-tab[39m=[32m"tree"[39m
+            [33mstyle[39m=[32m"background: none; border-width: medium medium 2px; border-style: none none solid; border-color: currentcolor currentcolor rgb(122, 233, 196); border-image: none; color: rgb(232, 234, 239); cursor: pointer; padding: 6px 10px; font-size: 11px; font-family: \"Segoe UI\", \"Microsoft YaHei\", \"PingFang SC\", sans-serif; font-weight: 600;"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0m📂 全部目录[0m
+          [36m</button>[39m
+          [36m<button[39m
+            [33mdata-tab[39m=[32m"recent"[39m
+            [33mstyle[39m=[32m"background: none; border-width: medium medium 2px; border-style: none none solid; border-color: currentcolor currentcolor transparent; border-image: none; color: rgb(152, 162, 179); cursor: pointer; padding: 6px 10px; font-size: 11px; font-family: \"Segoe UI\", \"Microsoft YaHei\", \"PingFang SC\", sans-serif; font-weight: 400;"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0m🕒 最近打开[0m
+          [36m</button>[39m
+          [36m<button[39m
+            [33mdata-tab[39m=[32m"starred"[39m
+            [33mstyle[39m=[32m"background: none; border-width: medium medium 2px; border-style: none none solid; border-color: currentcolor currentcolor transparent; border-image: none; color: rgb(152, 162, 179); cursor: pointer; padding: 6px 10px; font-size: 11px; font-family: \"Segoe UI\", \"Microsoft YaHei\", \"PingFang SC\", sans-serif; font-weight: 400;"[39m
+            [33mtype[39m=[32m"button"[39m
+          [36m>[39m
+            [0m⭐ 收藏星标[0m
+          [36m</button>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mstyle[39m=[32m"padding: 8px 12px;"[39m
+        [36m>[39m
+          [36m<input[39m
+            [33maria-label[39m=[32m"搜索文件名、路径或标题"[39m
+            [33mdata-fm-search[39m=[32m"true"[39m
+            [33mplaceholder[39m=[32m"搜索文件名、路径或标题…（标题仅搜索已记录的文档）"[39m
+            [33mstyle[39m=[32m"flex: 1 1 0%; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 6px; color: rgb(232, 234, 239); padding: 4px 8px; font-family: \"Segoe UI\", \"Microsoft YaHei\", \"PingFang SC\", sans-serif; font-size: 11px; width: 100%; box-sizing: border-box;"[39m
+            [33mvalue[39m=[32m""[39m
+          [36m/>[39m
+        [36m</div>[39m
+        [36m<div[39m
+          [33mdata-fm-tree-tools[39m=[32m"true"[3...
+[36m [2m❯[22m must tests/file-manager-keyboard.test.tsx:[2m125:26[22m[39m
+    [90m123|[39m [35mconst[39m must [33m=[39m (c[33m:[39m [33mHTMLElement[39m[33m,[39m sel[33m:[39m string)[33m:[39m [33mHTMLElement[39m [33m=>[39m {
+    [90m124|[39m   [35mconst[39m el [33m=[39m c[33m.[39m[34mquerySelector[39m(sel)[33m;[39m
+    [90m125|[39m   [35mif[39m (el [33m===[39m [35mnull[39m) [35mthrow[39m [35mnew[39m [33mError[39m([32m`找不到元素 [39m[36m${[39msel[36m}[39m[32m`[39m)[33m;[39m
+    [90m   |[39m                          [31m^[39m
+    [90m126|[39m   [35mreturn[39m el [35mas[39m [33mHTMLElement[39m[33m;[39m
+    [90m127|[39m }[33m;[39m
+[90m [2m❯[22m tests/file-manager-keyboard.test.tsx:[2m524:40[22m[39m
+[90m [2m❯[22m runWithExpensiveErrorDiagnosticsDisabled ../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/config.js:[2m47:12[22m[39m
+[90m [2m❯[22m checkCallback ../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/wait-for.js:[2m124:77[22m[39m
+[90m [2m❯[22m Timeout.checkRealTimersCallback ../../node_modules/.pnpm/@testing-library+dom@10.4.1/node_modules/@testing-library/dom/dist/wait-for.js:[2m118:16[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m26 passed[39m[22m[90m (27)[39m
+[2m   Start at [22m 18:03:15
+[2m   Duration [22m 2.57s[2m (transform 553ms, setup 0ms, import 709ms, tests 1.45s, environment 341ms)[22m
+
