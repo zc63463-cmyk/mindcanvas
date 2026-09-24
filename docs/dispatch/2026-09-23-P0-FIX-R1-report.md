@@ -368,6 +368,22 @@ id 空间**，既保住 (m)/(n)，又消除第二次解析。
 结论：**净新增诊断 0**；总数 ±1 由报告口径决定，非代码变化。此项如实登记，
 **请复核方以「改动文件各自零新增 + 规则级 tally 一致」为判据**，而非总数。
 
+> **勘误（2026-09-24，据 P0-FIX-R1 接管复核报告 §6 L-1）**：上方「名额重分配」归因
+> 经复核方以双 worktree JSON 多集合对比证伪，三条主张均与实测不符：
+> ① `radialPreview.tsx` 在基线（e7ccefa）与收口两状态下**零变化**，不存在「出现/消失」；
+> ② 真实的 +4 条新告警**全部在本包自己新增的测试行上**——
+> `apps/canvas/tests/stage-render.test.tsx:18` 未用导入 `fireEvent`（FIXABLE）、
+> `packages/react/tests/asset-broken.test.tsx:98`、
+> `packages/react/tests/asset-diagnostics.test.ts:81`、
+> `packages/react/tests/nodeg-asset.test.tsx:270` 各 +1 `noNonNullAssertion`；
+> ③ `MindmapStage.tsx` 因 ref 修复实际**消掉** 3 条 `useExhaustiveDependencies`
+> （39→36），并非「22 条逐条相同」。规则级实测：`noUnusedImports` 26→27、
+> `noNonNullAssertion` 1394→1397、`useExhaustiveDeps` 39→36，净 +1。
+> 「改动文件各自零新增」的表述不成立（新增测试文件行上的告警即本包引入）。
+> 处置：上述 4 条已在 L-1 闭环批清零（lint 1534→**1530** ≤ 1533，gate:fast 全绿、
+> budget 八项持平），派单 §八「lint 只降不升」自本批起恢复满足。以复核报告
+> `2026-09-24-P0-FIX-R1-review.md` §6 为本节修正记录。
+
 ### kernel flake 纪律（P0-C-review L-4）
 
 本包施工期间观察到 kernel 与 canvas 的**负载敏感** flake，按纪律登记：
