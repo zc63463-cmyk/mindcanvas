@@ -267,7 +267,8 @@ describe('NodeG：五态解析（R1-2）', () => {
   /** 单节点资产布局：`kind` 决定实体类型，`id` 决定引用形态 */
   function singleAssetLayout(kind: 'img' | 'draw', id: string) {
     const root = makeTextNode('根', [makeEntityNode({ kind, id })]);
-    const editable = astToEditable(root)!;
+    const editable = astToEditable(root);
+    if (!editable) throw new Error('fixture broken: astToEditable returned null');
     const char = createCharMeasure({ family: 'sans-serif', size: 11 }, null);
     return { layout: layoutMindmap(editable, createNodeMeasure(char, new Map()), new Set()), char };
   }

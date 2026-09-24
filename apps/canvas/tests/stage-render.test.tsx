@@ -15,7 +15,7 @@
  *   ② 单个面板组件在 packages/react 里测
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render } from '@testing-library/react';
+import { act, cleanup, render } from '@testing-library/react';
 import MindmapStage from '../src/MindmapStage';
 
 describe('MindmapStage 整体渲染', () => {

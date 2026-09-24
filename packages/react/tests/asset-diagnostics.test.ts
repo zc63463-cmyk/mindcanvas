@@ -78,7 +78,7 @@ describe('R1-2：自包含引用（data:/builtin:）不产生缺失诊断', () =
     const gone: EntityRef = { kind: 'img', id: 'assets/never.png' };
     const diags = assetDiagnostics([dataRef, gone], LIST);
     expect(diags.length).toBe(1);
-    expect(diags[0]!.message).toContain('@img:assets/never.png');
+    expect(diags[0]?.message).toContain('@img:assets/never.png');
   });
 
   it('混合清单：data: 内联项在清单中（带着同样 id）时也不重复报（两路都静默）', () => {

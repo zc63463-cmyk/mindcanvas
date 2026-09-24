@@ -95,7 +95,9 @@ describe('资产缺失信号（R1-2：unresolved 保留 ✕，pending 不冒充�
       makeEntityNode({ kind: 'img', id: 'assets/gone.png' }),
       makeEntityNode({ kind: 'img', id: 'assets/loading.png' }),
     ]);
-    return layoutMindmap(astToEditable(root)!, createNodeMeasure(char, new Map()), new Set());
+    const editable = astToEditable(root);
+    if (!editable) throw new Error('fixture broken: astToEditable returned null');
+    return layoutMindmap(editable, createNodeMeasure(char, new Map()), new Set());
   }
 
   it('unresolved → 画 ✕ 且不渲染 <image>（不发必然 404 的请求）；pending → 两者都不出现', () => {
