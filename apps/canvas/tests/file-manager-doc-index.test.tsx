@@ -335,3 +335,131 @@ describe('FileManager · 工作区作用域身份（评审 R2 高风险项的回
     expect(doc?.docKey.startsWith('browser::')).toBe(false);
   });
 });
+
+/**
+ * P1-A rider-C：**历史池的关联目标只能由用户点选**（P0-D-report :405 的弱匹配债务）。
+ *
+ * 判别核心：`relinkEvidence` 是「用户确认这条旧记录属于这个工作区」的**唯一凭证位**
+ * （`docIndex.relink` 一旦写入就再也分不清对错）。因此：
+ *  - 旧实现「先 `fullPath === h.key`，再 `name === h.name`」的**弱匹配已移除**；
+ *  - 候选里**不再有** `exact` 之类的判定字段（它只用于排序提示，却极易被读成
+ *    「已判定」）；同名只是**排序提示**，选择权仍在用户；
+ *  - 未被点选的候选**不会**被写入任何证据。
+ *
+ * 这里不断言实现细节（不搜源码），而是断言**可观察结果**：
+ * 面板出现 → 用户点选某一条 → 只有那一条拿到证据。
+ */
+describe('P1-A rider-C · 历史池关联目标由用户点选', () => {
+  /**
+   * 挂一个**真实替身工作区**（而不是 `workspace: null`）：候选来自树里的文档，
+   * 兼容模式（DocLibrary 虚拟树）里没有这些条目 —— 那样候选恒为空，
+   * 用例会变成空转。两条同名的**不同目录**文档正是弱匹配出错的输入。
+   */
+  const wsFile = (path: string) => ({
+    kind: 'file' as const,
+    name: path.split('/').pop() ?? path,
+    path,
+    handle: {
+      name: path,
+      createWritable: async () => ({ write: async () => {}, close: async () => {} }),
+    },
+    ts: 0,
+    size: 0,
+  });
+
+  function setupHistory(relPaths: string[]) {
+    const index = new DocIndex({
+      ctx: () => ({
+        scopeId: 'ws:AAAA',
+        persisted: true,
+        hasHistoryEvidence: false, // legacy adoption 新生成的作用域 → 旧键进历史池
+        handleStoreAvailable: false,
+      }),
+    });
+    localStorage.setItem(
+      'mindcanvas.library.v1',
+      JSON.stringify([{ id: '笔记.mm.md', name: '笔记.mm.md', ts: 5, folder: '', tags: [] }]),
+    );
+    const workspace = {
+      mounted: true,
+      name: 'notes',
+      scopeId: 'ws:AAAA',
+      scopeState: { kind: 'disk', persisted: true },
+      scan: async () => relPaths.map(wsFile),
+      createFile: vi.fn(),
+      createDir: vi.fn(),
+      renameFile: vi.fn(),
+      removeFile: vi.fn(),
+      removeDir: vi.fn(),
+      moveFile: vi.fn(),
+    };
+    const { container } = render(
+      <FileManager
+        library={new DocLibrary()}
+        index={index}
+        workspace={workspace as never}
+        onOpenEntry={vi.fn()}
+        onOpenFile={vi.fn()}
+        onCreate={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    return { container, index };
+  }
+
+  it('候选里没有任何「同名 → 自动选中」的预设；默认选项是占位（未选择）', async () => {
+    const { container } = setupHistory(['研发/笔记.mm.md', '个人/笔记.mm.md']);
+    await waitFor(() => expect(container.querySelector('[data-fm-history]')).not.toBeNull());
+    fireEvent.click(container.querySelector('[data-fm-history-toggle]') as HTMLElement);
+    await waitFor(() => expect(container.querySelector('[data-fm-history-target]')).not.toBeNull());
+    const select = container.querySelector('[data-fm-history-target]') as HTMLSelectElement;
+    // 占位项（value=''）：未选择状态不得被任何「同名命中」短路
+    expect(select.value).toBe('');
+    const opts = Array.from(select.options).map((o) => o.value);
+    expect(opts[0]).toBe('');
+    // 两条同名候选都在（用户才能分辨要哪一条）
+    expect(opts.filter((v) => v.startsWith('ws:AAAA::'))).toHaveLength(2);
+  });
+
+  it('★用户点选哪一条，证据就只写到那一条（不落到同名的另一条）', async () => {
+    const { container, index } = setupHistory(['研发/笔记.mm.md', '个人/笔记.mm.md']);
+    await waitFor(() => expect(container.querySelector('[data-fm-history]')).not.toBeNull());
+    fireEvent.click(container.querySelector('[data-fm-history-toggle]') as HTMLElement);
+    await waitFor(() => expect(container.querySelector('[data-fm-history-target]')).not.toBeNull());
+    const select = container.querySelector('[data-fm-history-target]') as HTMLSelectElement;
+
+    // 明确选中「个人/笔记.mm.md」（不是文件名叫「笔记.mm.md」的那条 —— 两条都叫这个）
+    fireEvent.change(select, { target: { value: 'ws:AAAA::个人/笔记.mm.md' } });
+
+    await waitFor(() => {
+      const picked = index.getDoc('ws:AAAA::个人/笔记.mm.md');
+      expect(picked?.relinkEvidence?.via).toBe('user-confirmed');
+    });
+    // 同名的那一条**不得**被顺带绑定（弱匹配正是会在这里串到另一条）
+    expect(index.getDoc('ws:AAAA::研发/笔记.mm.md')?.relinkEvidence).toBeUndefined();
+  });
+
+  it('关联即刻生效：证据写入且该键被追加进目标的 legacyKeys（投影可认领）', async () => {
+    const { container, index } = setupHistory(['研发/笔记.mm.md']);
+    await waitFor(() => expect(container.querySelector('[data-fm-history]')).not.toBeNull());
+    fireEvent.click(container.querySelector('[data-fm-history-toggle]') as HTMLElement);
+    await waitFor(() => expect(container.querySelector('[data-fm-history-target]')).not.toBeNull());
+    fireEvent.change(container.querySelector('[data-fm-history-target]') as HTMLSelectElement, {
+      target: { value: 'ws:AAAA::研发/笔记.mm.md' },
+    });
+    await waitFor(() => {
+      const doc = index.getDoc('ws:AAAA::研发/笔记.mm.md');
+      expect(doc?.relinkEvidence?.via).toBe('user-confirmed');
+      // `relink` 同时把**历史池里的那个键**追加进 `legacyKeys`（只追加，不重排）——
+      // 这是「已被认领」的持久痕迹，降级投影据此不再把该旧行当孤儿。
+      // 键的形态就是 `HistoryPoolEntry.key`（此处 = 旧库行的 id），不是拼出来的前缀形态。
+      expect(doc?.legacyKeys).toContain('笔记.mm.md');
+    });
+    /*
+     * 注：旧键**可能**在下次迁移批次里再次进池（本例中旧库行的 `id` 是根层
+     * 「笔记.mm.md」，与已登记的「研发/笔记.mm.md」不同路径，本就不构成归属证据）。
+     * 这里**不**断言「历史池清空」——那会把「一次关联 = 永久结论」这条不成立的
+     * 期望钉进用例（§6-7：不得为让验收通过而修改正确期望）。
+     */
+  });
+});

@@ -29,6 +29,7 @@ import {
   type IndexStore,
   type MigrateContext,
 } from '../src/docIndex.js';
+import { firstHeadingOf } from '../src/docTitle.js';
 
 const HANDLES_DB_HINT = 'mindcanvas-handles';
 
@@ -1886,6 +1887,95 @@ describe('DS-10 · 旧库旧键逐行回收（判据 (b\')）', () => {
 
     // 双形态认领命中 → 「用户取消收藏」被认出 → 旧键不再残留
     expect(JSON.parse(localStorage.getItem(LEGACY_STARRED_KEY) ?? '[]')).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------- P1-A ②：内部标题
+
+describe('P1-A ② · 内部标题（首个 H1；registerDoc/saveDoc 接线）', () => {
+  it('registerDoc 带 title：打开（不推进任何时间戳）即登记标题，重跑幂等', () => {
+    const d = idx(adoptedCtx());
+    const key = wsDocKey('ws:adopted', '当前文档.mm.md');
+    d.openDoc({ docKey: key, relPath: '当前文档.mm.md', name: '当前文档.mm.md' }, 500);
+    // 载入已保存快照（打开路径，无 openedAt/savedAt 入参）→ 标题被登记且时间戳不动
+    d.registerDoc({
+      docKey: key,
+      relPath: '当前文档.mm.md',
+      name: '当前文档.mm.md',
+      title: '北极星目标',
+      scopeId: 'ws:adopted',
+      persisted: true,
+      sourceRef: { kind: 'disk-handle' },
+    });
+    const e = d.getDoc(key);
+    expect(e?.title).toBe('北极星目标');
+    expect(e?.openedAt).toBe(500); // 打开时间未被重推
+    expect(e?.savedAt).toBe(500);
+
+    // 同标题再登记：幂等（投影无多余写入也不报错）
+    d.registerDoc({
+      docKey: key,
+      relPath: '当前文档.mm.md',
+      name: '当前文档.mm.md',
+      title: '北极星目标',
+      scopeId: 'ws:adopted',
+      persisted: true,
+      sourceRef: { kind: 'disk-handle' },
+    });
+    expect(d.getDoc(key)?.title).toBe('北极星目标');
+  });
+
+  it('快照删掉 H1 → title 显式归 null（以快照为准，不残留旧标题）', () => {
+    const d = idx(adoptedCtx());
+    const key = wsDocKey('ws:adopted', 'a.mm.md');
+    d.openDoc({ docKey: key, relPath: 'a.mm.md', name: 'a.mm.md' }, 100);
+    d.registerDoc({
+      docKey: key,
+      relPath: 'a.mm.md',
+      name: 'a.mm.md',
+      title: '旧标题',
+      scopeId: 'ws:adopted',
+      persisted: true,
+      sourceRef: { kind: 'disk-handle' },
+    });
+    d.registerDoc({
+      docKey: key,
+      relPath: 'a.mm.md',
+      name: 'a.mm.md',
+      title: null,
+      scopeId: 'ws:adopted',
+      persisted: true,
+      sourceRef: { kind: 'disk-handle' },
+    });
+    expect(d.getDoc(key)?.title).toBeNull();
+  });
+
+  it('title 缺省（undefined）不覆盖既有标题（非文档标题路径的旧调用零变化）', () => {
+    const d = idx(adoptedCtx());
+    const key = wsDocKey('ws:adopted', 'a.mm.md');
+    d.openDoc({ docKey: key, relPath: 'a.mm.md', name: 'a.mm.md', title: '保留标题' }, 100);
+    d.registerDoc({
+      docKey: key,
+      relPath: 'a.mm.md',
+      name: 'a.mm.md',
+      scopeId: 'ws:adopted',
+      persisted: true,
+      sourceRef: { kind: 'disk-handle' },
+    });
+    expect(d.getDoc(key)?.title).toBe('保留标题');
+  });
+});
+
+describe('P1-A ② · firstHeadingOf（与 kernel RE_HEADING level-1 同规则；纯函数零 I/O）', () => {
+  it('取首个 H1；CRLF/空 H1/无 H1 各自边界', () => {
+    expect(firstHeadingOf('# 北极星目标\r\n\r\n- 一')).toBe('北极星目标');
+    expect(firstHeadingOf('前言\r\n# 真正标题\n## 二级')).toBe('真正标题');
+    expect(firstHeadingOf('#   带尾空白   \n')).toBe('带尾空白');
+    expect(firstHeadingOf('#\n')).toBeNull(); // 井号后必须有空白（解析器同规则）
+    expect(firstHeadingOf('#  \n')).toBeNull(); // 空 H1 → null（避免空标题匹配所有文档）
+    expect(firstHeadingOf('  # 缩进不是标题\n')).toBeNull();
+    expect(firstHeadingOf('## 二级才是第一个标题\n')).toBeNull();
+    expect(firstHeadingOf('无标题文档\n- 一')).toBeNull();
   });
 });
 
